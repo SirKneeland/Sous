@@ -10,4 +10,3 @@ v1 focus:
 - Checkable, stateful cooking steps
 - No past edits: completed steps are immutable
 
-This repo currently contains Milestone 1: the recipe canvas and cooking UX.
