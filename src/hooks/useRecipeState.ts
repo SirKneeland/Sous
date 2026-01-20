@@ -1,7 +1,9 @@
-import { useState, useEffect, useCallback } from 'react'
-import { Recipe } from '../types/recipe'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { Recipe, Patch, ChangeSet } from '../types/recipe'
+import { applyPatches, PatchResult } from '../utils/patches'
 
 const STORAGE_KEY = 'sous-recipe-state'
+const MAX_HISTORY_SIZE = 20
 
 export function useRecipeState(initialRecipe: Recipe) {
   const [recipe, setRecipe] = useState<Recipe>(() => {
@@ -18,6 +20,12 @@ export function useRecipeState(initialRecipe: Recipe) {
     }
     return initialRecipe
   })
+
+  // History stack for undo functionality
+  const historyRef = useRef<Recipe[]>([])
+
+  // Track pending changes awaiting review
+  const [pendingChangeSet, setPendingChangeSet] = useState<ChangeSet | null>(null)
 
   // Persist to localStorage on every change
   useEffect(() => {
@@ -74,14 +82,105 @@ export function useRecipeState(initialRecipe: Recipe) {
 
   const resetRecipe = useCallback(() => {
     setRecipe(initialRecipe)
+    historyRef.current = []
     localStorage.removeItem(STORAGE_KEY)
   }, [initialRecipe])
+
+  // Apply patches from LLM response
+  const applyRecipePatches = useCallback((patches: Patch[]): PatchResult => {
+    let result: PatchResult = {
+      recipe,
+      appliedPatches: [],
+      rejectedPatches: [],
+      changeSet: {
+        changedIngredientIds: [],
+        addedIngredientIds: [],
+        removedIngredientIds: [],
+        changedStepIds: [],
+        addedStepIds: [],
+        addedNoteIndices: [],
+        patches: [],
+        previousRecipe: recipe
+      }
+    }
+
+    setRecipe(prev => {
+      // Save current state to history for undo
+      historyRef.current = [prev, ...historyRef.current].slice(0, MAX_HISTORY_SIZE)
+
+      result = applyPatches(prev, patches)
+
+      // Set pending changeSet if any patches were applied
+      if (result.appliedPatches.length > 0) {
+        setPendingChangeSet(result.changeSet)
+      }
+
+      return result.recipe
+    })
+
+    return result
+  }, [recipe])
+
+  // Undo last patch application
+  const undo = useCallback((): boolean => {
+    if (historyRef.current.length === 0) {
+      return false
+    }
+
+    const [previousState, ...rest] = historyRef.current
+    historyRef.current = rest
+    setRecipe(previousState)
+    return true
+  }, [])
+
+  // Check if undo is available
+  const canUndo = historyRef.current.length > 0
+
+  // Approve pending changes - permanently removes soft-deleted ingredients and clears pending state
+  const approveChanges = useCallback(() => {
+    // Permanently remove soft-deleted ingredients
+    setRecipe(prev => ({
+      ...prev,
+      ingredients: prev.ingredients.filter(ing => !ing.removed)
+    }))
+    setPendingChangeSet(null)
+  }, [])
+
+  // Reject pending changes - reverts to previous recipe and returns the rejected changeSet
+  const rejectChanges = useCallback((): ChangeSet | null => {
+    if (!pendingChangeSet) return null
+
+    const rejectedChangeSet = pendingChangeSet
+
+    // Revert to the previous recipe state
+    setRecipe(pendingChangeSet.previousRecipe)
+
+    // Remove the most recent history entry since we're reverting
+    if (historyRef.current.length > 0) {
+      historyRef.current = historyRef.current.slice(1)
+    }
+
+    // Clear the pending state
+    setPendingChangeSet(null)
+
+    return rejectedChangeSet
+  }, [pendingChangeSet])
+
+  // Check if there are changes pending review
+  const hasPendingReview = pendingChangeSet !== null
 
   return {
     recipe,
     toggleIngredient,
     markStepDone,
     setCurrentStep,
-    resetRecipe
+    resetRecipe,
+    applyRecipePatches,
+    undo,
+    canUndo,
+    pendingChangeSet,
+    hasPendingReview,
+    approveChanges,
+    rejectChanges
   }
 }

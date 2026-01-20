@@ -284,12 +284,15 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  max-height: 200px;
+  max-height: 250px;
 }
 
 .chat-messages {
   flex: 1;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .chat-message {
@@ -297,6 +300,23 @@ html, body {
   background: var(--color-surface-light);
   border-radius: var(--radius-sm);
   font-size: 0.9375rem;
+  max-width: 90%;
+}
+
+.chat-message.assistant {
+  align-self: flex-start;
+  background: var(--color-surface-light);
+}
+
+.chat-message.user {
+  align-self: flex-end;
+  background: var(--color-primary);
+  color: white;
+}
+
+.chat-message.loading {
+  opacity: 0.7;
+  font-style: italic;
 }
 
 .chat-message p {
@@ -315,6 +335,7 @@ html, body {
 
 .chat-input-area {
   display: flex;
+  flex-direction: column;
   gap: 8px;
 }
 
@@ -328,6 +349,11 @@ html, body {
   font-size: 1rem;
 }
 
+.chat-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
 .chat-input:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -335,6 +361,55 @@ html, body {
 
 .chat-input::placeholder {
   color: var(--color-text-muted);
+}
+
+.chat-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.send-btn {
+  flex: 1;
+  padding: 12px 16px;
+  background: var(--color-primary);
+  border: none;
+  border-radius: var(--radius-sm);
+  color: white;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.send-btn:hover:not(:disabled) {
+  background: var(--color-primary-light);
+}
+
+.send-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.undo-btn {
+  padding: 12px 16px;
+  background: transparent;
+  border: 1px solid var(--color-success);
+  border-radius: var(--radius-sm);
+  color: var(--color-success);
+  font-size: 0.875rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.undo-btn:hover:not(:disabled) {
+  background: var(--color-success);
+  color: var(--color-bg);
+}
+
+.undo-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
 .reset-btn {
@@ -371,4 +446,109 @@ html, body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-surface-light);
+}
+
+/* Review Bar - sticky at top of recipe canvas */
+.review-bar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  margin: -16px -16px 16px -16px;
+  background: linear-gradient(135deg, #2d4a6f 0%, #1f3460 100%);
+  border-bottom: 2px solid var(--color-primary);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.review-bar-text {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.review-bar-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.approve-btn {
+  padding: 8px 16px;
+  background: rgba(245, 158, 11, 0.15);
+  border: 2px solid #f59e0b;
+  border-radius: var(--radius-sm);
+  color: #f59e0b;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.approve-btn:hover {
+  background: rgba(245, 158, 11, 0.25);
+  color: #fbbf24;
+  border-color: #fbbf24;
+}
+
+.reject-btn {
+  padding: 8px 16px;
+  background: transparent;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-sm);
+  color: var(--color-primary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.reject-btn:hover {
+  background: var(--color-primary);
+  color: white;
+  transform: scale(1.02);
+}
+
+/* Unified yellow highlight for all AI changes (added/changed/removed) */
+.highlight-changed,
+.highlight-added,
+.highlight-removed {
+  box-shadow: 0 0 0 2px #f59e0b;
+  background-color: rgba(245, 158, 11, 0.1);
+}
+
+/* Ingredient highlight adjustments */
+.ingredient-item.highlight-changed,
+.ingredient-item.highlight-added,
+.ingredient-item.highlight-removed {
+  border-radius: var(--radius-sm);
+}
+
+/* Removed ingredient styling (functional, not color) */
+.ingredient-item.removed {
+  opacity: 0.6;
+}
+
+.ingredient-item.removed span {
+  text-decoration: line-through;
+  color: var(--color-text-muted);
+}
+
+/* Step highlight adjustments */
+.step-item.highlight-changed,
+.step-item.highlight-added,
+.step-item.highlight-removed {
+  border-width: 2px;
+  border-color: #f59e0b;
+}
+
+/* Notes highlight */
+.notes-list li.highlight-added,
+.notes-list li.highlight-changed,
+.notes-list li.highlight-removed {
+  border-left-color: #f59e0b;
+  box-shadow: 0 0 0 1px #f59e0b;
+  background-color: rgba(245, 158, 11, 0.1);
 }

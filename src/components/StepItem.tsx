@@ -6,9 +6,19 @@ interface StepItemProps {
   isCurrent: boolean
   onMarkDone: (id: string) => void
   onSetCurrent: (id: string) => void
+  isHighlighted?: boolean
+  highlightType?: 'changed' | 'added'
 }
 
-export function StepItem({ step, stepNumber, isCurrent, onMarkDone, onSetCurrent }: StepItemProps) {
+export function StepItem({
+  step,
+  stepNumber,
+  isCurrent,
+  onMarkDone,
+  onSetCurrent,
+  isHighlighted = false,
+  highlightType
+}: StepItemProps) {
   const isDone = step.status === 'done'
 
   const handleClick = () => {
@@ -25,9 +35,15 @@ export function StepItem({ step, stepNumber, isCurrent, onMarkDone, onSetCurrent
     }
   }
 
+  const highlightClass = isHighlighted
+    ? highlightType === 'added'
+      ? 'highlight-added'
+      : 'highlight-changed'
+    : ''
+
   return (
     <div
-      className={`step-item ${isDone ? 'done' : ''} ${isCurrent ? 'current' : ''}`}
+      className={`step-item ${isDone ? 'done' : ''} ${isCurrent ? 'current' : ''} ${highlightClass}`}
       onClick={handleClick}
     >
       <div className="step-header">
