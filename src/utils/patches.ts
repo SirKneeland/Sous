@@ -12,6 +12,31 @@ export interface PatchResult {
  * Done steps cannot be modified.
  */
 export function applyPatches(recipe: Recipe, patches: Patch[]): PatchResult {
+  // Deep clone for safe snapshot - ensures Reject works correctly
+  const previousRecipe = structuredClone(recipe)
+
+  // Check for replace_recipe - handle specially (no per-item tracking)
+  const replaceRecipePatch = patches.find(p => p.op === 'replace_recipe')
+  if (replaceRecipePatch && replaceRecipePatch.op === 'replace_recipe') {
+    const newRecipe = applyReplaceRecipe(recipe, replaceRecipePatch)
+    return {
+      recipe: newRecipe,
+      appliedPatches: [replaceRecipePatch],
+      rejectedPatches: [],
+      changeSet: {
+        kind: 'replace_recipe',
+        changedIngredientIds: [],
+        addedIngredientIds: [],
+        removedIngredientIds: [],
+        changedStepIds: [],
+        addedStepIds: [],
+        addedNoteIndices: [],
+        patches: [replaceRecipePatch],
+        previousRecipe
+      }
+    }
+  }
+
   const appliedPatches: Patch[] = []
   const rejectedPatches: Array<{ patch: Patch; reason: string }> = []
 
@@ -24,8 +49,6 @@ export function applyPatches(recipe: Recipe, patches: Patch[]): PatchResult {
   const addedNoteIndices: number[] = []
 
   let newRecipe = { ...recipe }
-  // Deep clone for safe snapshot - ensures Reject works correctly
-  const previousRecipe = structuredClone(recipe)
 
   for (const patch of patches) {
     const result = applySinglePatch(newRecipe, patch)
@@ -67,6 +90,7 @@ export function applyPatches(recipe: Recipe, patches: Patch[]): PatchResult {
   }
 
   const changeSet: ChangeSet = {
+    kind: 'patches',
     changedIngredientIds,
     addedIngredientIds,
     removedIngredientIds,
@@ -222,5 +246,34 @@ function applyAddNote(
   return {
     success: true,
     recipe: { ...recipe, notes: [...recipe.notes, patch.text] }
+  }
+}
+
+function applyReplaceRecipe(
+  recipe: Recipe,
+  patch: { op: 'replace_recipe'; title: string; ingredients: string[]; steps: string[] }
+): Recipe {
+  const timestamp = Date.now()
+
+  const newIngredients = patch.ingredients.map((text, index) => ({
+    id: `ing-${timestamp}-${index}`,
+    text,
+    checked: false
+  }))
+
+  const newSteps = patch.steps.map((text, index) => ({
+    id: `step-${timestamp}-${index}`,
+    text,
+    status: 'todo' as const
+  }))
+
+  return {
+    id: recipe.id,
+    title: patch.title,
+    ingredients: newIngredients,
+    steps: newSteps,
+    notes: [],
+    currentStepId: newSteps.length > 0 ? newSteps[0].id : null,
+    version: recipe.version + 1
   }
 }

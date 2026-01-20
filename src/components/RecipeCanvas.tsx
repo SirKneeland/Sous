@@ -4,22 +4,34 @@ import { StepItem } from './StepItem'
 
 interface RecipeCanvasProps {
   recipe: Recipe
+  hasRecipe: boolean
   onToggleIngredient: (id: string) => void
   onMarkStepDone: (id: string) => void
   onSetCurrentStep: (id: string) => void
   pendingChangeSet?: ChangeSet | null
   onApproveChanges?: () => void
   onRejectChanges?: () => void
+  onSendMessage?: (message: string) => void
 }
+
+const STARTER_PROMPTS = [
+  'Quick weeknight pasta',
+  'Healthy chicken stir-fry',
+  'Easy vegetarian tacos',
+  'Simple tomato soup',
+  '30-minute salmon dinner'
+]
 
 export function RecipeCanvas({
   recipe,
+  hasRecipe,
   onToggleIngredient,
   onMarkStepDone,
   onSetCurrentStep,
   pendingChangeSet,
   onApproveChanges,
-  onRejectChanges
+  onRejectChanges,
+  onSendMessage
 }: RecipeCanvasProps) {
   const completedSteps = recipe.steps.filter(s => s.status === 'done').length
   const totalSteps = recipe.steps.length
@@ -66,6 +78,31 @@ export function RecipeCanvas({
   }
 
   const hasChanges = pendingChangeSet !== null
+
+  // Zero-state: no recipe yet
+  if (!hasRecipe) {
+    return (
+      <div className="recipe-canvas">
+        <div className="zero-state">
+          <h1 className="zero-state-title">No recipe yet</h1>
+          <p className="zero-state-subtitle">
+            Tell me what you'd like to cook, and I'll create a recipe for you.
+          </p>
+          <div className="starter-prompts">
+            {STARTER_PROMPTS.map((prompt, index) => (
+              <button
+                key={index}
+                className="starter-prompt-btn"
+                onClick={() => onSendMessage?.(`Make me a recipe for ${prompt.toLowerCase()}`)}
+              >
+                {prompt}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="recipe-canvas">

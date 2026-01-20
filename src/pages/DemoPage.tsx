@@ -4,11 +4,26 @@ import { demoRecipe } from '../data/demoRecipe'
 import { RecipeCanvas } from '../components/RecipeCanvas'
 import { ChatPane } from '../components/ChatPane'
 import { ChatMessage } from '../types/chat'
-import { getStubbedLLMResponse, sendRejectionEvent } from '../services/llm'
+import { sendRejectionEvent } from '../services/llm'
+import { LLMResponse } from '../types/recipe'
+
+interface ChatApiError {
+  error: {
+    message: string
+    retryable: boolean
+  }
+}
+
+type ChatApiResponse = LLMResponse | ChatApiError
+
+function isErrorResponse(response: ChatApiResponse): response is ChatApiError {
+  return 'error' in response
+}
 
 export function DemoPage() {
   const {
     recipe,
+    hasRecipe,
     toggleIngredient,
     markStepDone,
     setCurrentStep,
@@ -36,8 +51,26 @@ export function DemoPage() {
     setIsLoading(true)
 
     try {
-      // Get LLM response (stubbed for Milestone 2)
-      const response = await getStubbedLLMResponse(content, recipe)
+      // Call backend API
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userMessage: content, recipe, hasRecipe })
+      })
+
+      const response: ChatApiResponse = await res.json()
+
+      // Handle error response from server
+      if (isErrorResponse(response)) {
+        const errorMessage: ChatMessage = {
+          id: `msg-${Date.now()}-error`,
+          role: 'assistant',
+          content: response.error.message,
+          timestamp: Date.now()
+        }
+        setMessages(prev => [...prev, errorMessage])
+        return
+      }
 
       // Apply patches to recipe
       if (response.patches.length > 0) {
@@ -71,7 +104,7 @@ export function DemoPage() {
         setMessages(prev => [...prev, assistantMessage])
       }
     } catch (error) {
-      // Handle error
+      // Handle network/fetch error
       const errorMessage: ChatMessage = {
         id: `msg-${Date.now()}-error`,
         role: 'assistant',
@@ -82,7 +115,7 @@ export function DemoPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [recipe, applyRecipePatches])
+  }, [recipe, hasRecipe, applyRecipePatches])
 
   const handleReset = useCallback(() => {
     resetRecipe()
@@ -127,12 +160,14 @@ export function DemoPage() {
       <div className="canvas-pane">
         <RecipeCanvas
           recipe={recipe}
+          hasRecipe={hasRecipe}
           onToggleIngredient={toggleIngredient}
           onMarkStepDone={markStepDone}
           onSetCurrentStep={setCurrentStep}
           pendingChangeSet={pendingChangeSet}
           onApproveChanges={handleApproveChanges}
           onRejectChanges={handleRejectChanges}
+          onSendMessage={handleSendMessage}
         />
       </div>
       <div className="chat-pane-container">

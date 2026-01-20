@@ -29,6 +29,7 @@ export type Patch =
   | { op: 'add_ingredient'; text: string }
   | { op: 'remove_ingredient'; id: string }
   | { op: 'add_note'; text: string }
+  | { op: 'replace_recipe'; title: string; ingredients: string[]; steps: string[] }
 
 export interface LLMResponse {
   assistant_message: string
@@ -37,6 +38,7 @@ export interface LLMResponse {
 
 // Tracks which items were changed by a patch set
 export interface ChangeSet {
+  kind: 'patches' | 'replace_recipe'
   changedIngredientIds: string[]
   addedIngredientIds: string[]
   removedIngredientIds: string[]

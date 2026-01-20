@@ -5,20 +5,40 @@ import { applyPatches, PatchResult } from '../utils/patches'
 const STORAGE_KEY = 'sous-recipe-state'
 const MAX_HISTORY_SIZE = 20
 
+interface StoredState {
+  recipe: Recipe
+  hasRecipe: boolean
+}
+
 export function useRecipeState(initialRecipe: Recipe) {
   const [recipe, setRecipe] = useState<Recipe>(() => {
     const stored = localStorage.getItem(STORAGE_KEY)
     if (stored) {
       try {
-        const parsed = JSON.parse(stored)
-        if (parsed.id === initialRecipe.id) {
-          return parsed
+        const parsed: StoredState = JSON.parse(stored)
+        if (parsed.recipe?.id === initialRecipe.id && parsed.hasRecipe) {
+          return parsed.recipe
         }
       } catch {
         // Invalid JSON, use initial
       }
     }
     return initialRecipe
+  })
+
+  const [hasRecipe, setHasRecipe] = useState<boolean>(() => {
+    const stored = localStorage.getItem(STORAGE_KEY)
+    if (stored) {
+      try {
+        const parsed: StoredState = JSON.parse(stored)
+        if (parsed.recipe?.id === initialRecipe.id) {
+          return parsed.hasRecipe ?? false
+        }
+      } catch {
+        // Invalid JSON
+      }
+    }
+    return false
   })
 
   // History stack for undo functionality
@@ -29,8 +49,9 @@ export function useRecipeState(initialRecipe: Recipe) {
 
   // Persist to localStorage on every change
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(recipe))
-  }, [recipe])
+    const state: StoredState = { recipe, hasRecipe }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+  }, [recipe, hasRecipe])
 
   const toggleIngredient = useCallback((ingredientId: string) => {
     setRecipe(prev => ({
@@ -82,6 +103,7 @@ export function useRecipeState(initialRecipe: Recipe) {
 
   const resetRecipe = useCallback(() => {
     setRecipe(initialRecipe)
+    setHasRecipe(false)
     historyRef.current = []
     localStorage.removeItem(STORAGE_KEY)
   }, [initialRecipe])
@@ -93,6 +115,7 @@ export function useRecipeState(initialRecipe: Recipe) {
       appliedPatches: [],
       rejectedPatches: [],
       changeSet: {
+        kind: 'patches',
         changedIngredientIds: [],
         addedIngredientIds: [],
         removedIngredientIds: [],
@@ -110,9 +133,15 @@ export function useRecipeState(initialRecipe: Recipe) {
 
       result = applyPatches(prev, patches)
 
-      // Set pending changeSet if any patches were applied
+      // For replace_recipe: set hasRecipe=true, skip review flow
+      // For regular patches: set pendingChangeSet for review
       if (result.appliedPatches.length > 0) {
-        setPendingChangeSet(result.changeSet)
+        if (result.changeSet.kind === 'replace_recipe') {
+          setHasRecipe(true)
+          // No pendingChangeSet - skip review for fresh recipe creation
+        } else {
+          setPendingChangeSet(result.changeSet)
+        }
       }
 
       return result.recipe
@@ -171,6 +200,7 @@ export function useRecipeState(initialRecipe: Recipe) {
 
   return {
     recipe,
+    hasRecipe,
     toggleIngredient,
     markStepDone,
     setCurrentStep,

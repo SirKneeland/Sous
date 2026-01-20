@@ -4,6 +4,9 @@ node_modules/
 # Build output
 dist/
 
+# Mac bits and bobs
+.DS_Store
+
 # Environment variables / secrets
 .env
 
