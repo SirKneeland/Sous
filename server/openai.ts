@@ -41,7 +41,7 @@ const PatchSchema = z.discriminatedUnion('op', [
 const LLMResponseSchema = z.object({
   assistant_message: z.string(),
   patches: z.array(PatchSchema)
-})
+}).strict()
 
 export type LLMResponse = z.infer<typeof LLMResponseSchema>
 
@@ -57,7 +57,7 @@ export interface Recipe {
 
 export interface ChatRequest {
   userMessage: string
-  recipe: Recipe
+  recipe: Recipe | null
   hasRecipe: boolean
 }
 
@@ -75,7 +75,7 @@ export interface ChatErrorResponse {
 
 export type ChatResponse = ChatSuccessResponse | ChatErrorResponse
 
-function buildSystemPrompt(recipe: Recipe, hasRecipe: boolean): string {
+function buildSystemPrompt(recipe: Recipe | null, hasRecipe: boolean): string {
   // Base JSON format instruction
   const jsonFormat = `You must respond with ONLY valid JSON in this exact format:
 {
@@ -110,6 +110,11 @@ You MUST use this operation to create a new recipe:
   }
 
   // Recipe exists - editing mode
+  // Safety check: if hasRecipe but no recipe provided, fall back to creation mode
+  if (!recipe) {
+    return buildSystemPrompt(null, false)
+  }
+
   const doneStepIds = recipe.steps
     .filter(s => s.status === 'done')
     .map(s => s.id)
@@ -167,7 +172,7 @@ ONLY if user explicitly says "new recipe", "start over", or "replace this recipe
 - NEVER output anything except the JSON object`
 }
 
-function buildStricterSystemPrompt(recipe: Recipe, hasRecipe: boolean): string {
+function buildStricterSystemPrompt(recipe: Recipe | null, hasRecipe: boolean): string {
   return buildSystemPrompt(recipe, hasRecipe) + `
 
 ## IMPORTANT: PREVIOUS RESPONSE WAS INVALID
@@ -181,44 +186,132 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 })
 
+const MODEL_NAME = 'gpt-4o-mini'
+
+interface CallContext {
+  userMessage: string
+  hasRecipe: boolean
+  isRetry: boolean
+}
+
+function truncate(str: string, maxLen: number): string {
+  return str.length > maxLen ? str.slice(0, maxLen) + '...' : str
+}
+
+function extractOpenAIErrorDetails(err: unknown): Record<string, unknown> {
+  const details: Record<string, unknown> = {}
+
+  if (err && typeof err === 'object') {
+    const e = err as Record<string, unknown>
+    if ('status' in e) details.status = e.status
+    if ('code' in e) details.code = e.code
+    if ('type' in e) details.type = e.type
+    if ('error' in e) details.errorBody = e.error
+    if ('response' in e && e.response && typeof e.response === 'object') {
+      const resp = e.response as Record<string, unknown>
+      if ('status' in resp) details.responseStatus = resp.status
+      if ('statusText' in resp) details.responseStatusText = resp.statusText
+    }
+    if ('message' in e) details.message = e.message
+  } else if (err instanceof Error) {
+    details.message = err.message
+  } else {
+    details.message = String(err)
+  }
+
+  return details
+}
+
+function logCallFailure(
+  errorType: 'openai_api' | 'json_parse' | 'zod_validation',
+  error: unknown,
+  rawOutput: string | null,
+  context: CallContext
+): void {
+  const baseLog: Record<string, unknown> = {
+    errorType,
+    model: MODEL_NAME,
+    hasRecipe: context.hasRecipe,
+    isRetry: context.isRetry,
+    userMessage: truncate(context.userMessage, 120),
+  }
+
+  if (rawOutput !== null) {
+    baseLog.rawOutputPrefix = truncate(rawOutput, 800)
+  }
+
+  if (errorType === 'openai_api') {
+    baseLog.errorDetails = extractOpenAIErrorDetails(error)
+  } else if (errorType === 'zod_validation' && error && typeof error === 'object' && 'issues' in error) {
+    const zodErr = error as { issues: unknown[]; message: string }
+    baseLog.zodIssues = zodErr.issues
+    baseLog.zodMessage = zodErr.message
+  } else {
+    baseLog.error = error instanceof Error ? error.message : String(error)
+  }
+
+  console.error(`[OpenAI] ${errorType} failure:`, JSON.stringify(baseLog, null, 2))
+}
+
 async function callOpenAI(
   userMessage: string,
-  recipe: Recipe,
+  recipe: Recipe | null,
   hasRecipe: boolean,
   isRetry: boolean
 ): Promise<LLMResponse> {
-  const systemPrompt = isRetry
-    ? buildStricterSystemPrompt(recipe, hasRecipe)
-    : buildSystemPrompt(recipe, hasRecipe)
+  const context: CallContext = { userMessage, hasRecipe, isRetry }
+  let rawOutput: string | null = null
 
-  const completion = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userMessage }
-    ],
-    temperature: 0.7,
-    max_tokens: 1024
-  })
+  // Step 1: Call OpenAI API
+  let completion
+  try {
+    const systemPrompt = isRetry
+      ? buildStricterSystemPrompt(recipe, hasRecipe)
+      : buildSystemPrompt(recipe, hasRecipe)
 
-  const content = completion.choices[0]?.message?.content
-  if (!content) {
-    throw new Error('Empty response from OpenAI')
+    completion = await openai.chat.completions.create({
+      model: MODEL_NAME,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userMessage }
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.3,
+      max_tokens: 2048
+    })
+  } catch (apiError) {
+    logCallFailure('openai_api', apiError, null, context)
+    throw apiError
   }
 
-  // Try to extract JSON from the response (handle markdown code blocks)
-  let jsonString = content.trim()
-
-  // Remove markdown code blocks if present
-  const jsonMatch = jsonString.match(/```(?:json)?\s*([\s\S]*?)```/)
-  if (jsonMatch) {
-    jsonString = jsonMatch[1].trim()
+  // Step 2: Extract raw output
+  rawOutput = completion.choices[0]?.message?.content ?? ''
+  if (!rawOutput) {
+    const emptyError = new Error('Empty response from OpenAI')
+    logCallFailure('openai_api', emptyError, rawOutput, context)
+    throw emptyError
   }
 
-  const parsed = JSON.parse(jsonString)
-  const validated = LLMResponseSchema.parse(parsed)
+  // Log raw output immediately for debugging
+  console.error(`[OpenAI] Raw output received (${isRetry ? 'retry' : 'attempt 1'}):`, truncate(rawOutput, 800))
 
-  return validated
+  // Step 3: Parse JSON
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(rawOutput)
+  } catch (jsonError) {
+    logCallFailure('json_parse', jsonError, rawOutput, context)
+    throw jsonError
+  }
+
+  // Step 4: Validate with Zod (strict - no extra keys)
+  try {
+    const validated = LLMResponseSchema.parse(parsed)
+    return validated
+  } catch (zodError) {
+    logCallFailure('zod_validation', zodError, rawOutput, context)
+    throw zodError
+  }
 }
 
 export async function getChatResponse(request: ChatRequest): Promise<ChatResponse> {
@@ -226,23 +319,27 @@ export async function getChatResponse(request: ChatRequest): Promise<ChatRespons
 
   // First attempt
   try {
+    console.error('[OpenAI] Starting first attempt...')
     const response = await callOpenAI(userMessage, recipe, hasRecipe, false)
+    console.error('[OpenAI] First attempt succeeded')
     return {
       assistant_message: response.assistant_message,
       patches: response.patches
     }
   } catch (firstError) {
-    console.error('[OpenAI] First attempt failed:', firstError)
+    console.error('[OpenAI] First attempt failed, will retry with stricter prompt')
 
     // Retry with stricter prompt
     try {
+      console.error('[OpenAI] Starting retry attempt...')
       const response = await callOpenAI(userMessage, recipe, hasRecipe, true)
+      console.error('[OpenAI] Retry attempt succeeded')
       return {
         assistant_message: response.assistant_message,
         patches: response.patches
       }
     } catch (retryError) {
-      console.error('[OpenAI] Retry attempt failed:', retryError)
+      console.error('[OpenAI] Retry attempt also failed - giving up')
 
       // Determine if error is retryable
       const isRateLimitOrNetwork =
