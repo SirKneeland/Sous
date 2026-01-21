@@ -5,18 +5,39 @@ import { getChatResponse, ChatRequest } from './openai'
 const app = express()
 const PORT = 8787
 
-app.use(express.json())
+app.use(express.json({ limit: '10mb' }))
 
 app.post('/api/chat', async (req, res) => {
   try {
-    const body = (req.body ?? {}) as Partial<ChatRequest>
-    const { userMessage, recipe, hasRecipe } = body
+    const body = (req.body ?? {}) as Partial<ChatRequest & { image?: unknown; contextMessages?: unknown }>
+    const { userMessage, recipe, hasRecipe, image } = body
     const userMessageText =
       typeof userMessage === 'string'
         ? userMessage
         : userMessage && typeof userMessage === 'object' && 'content' in userMessage
           ? String((userMessage as any).content ?? '')
           : String(userMessage ?? '')
+
+    // Normalize image: must be a data URL string or undefined
+    const imageDataUrl = typeof image === 'string' && image.startsWith('data:image/')
+      ? image
+      : undefined
+
+    // Validate and sanitize contextMessages
+    const N = 6
+    const rawContext = body.contextMessages
+    const contextMessages = Array.isArray(rawContext)
+      ? rawContext
+          .filter((m): m is { role: 'user' | 'assistant'; content?: unknown; text?: unknown } =>
+            m && typeof m === 'object' &&
+            (m.role === 'user' || m.role === 'assistant')
+          )
+          .map(m => ({
+            role: m.role as 'user' | 'assistant',
+            content: String(m.content ?? m.text ?? '').slice(0, 800) + (String(m.content ?? m.text ?? '').length > 800 ? '...' : '')
+          }))
+          .slice(-N)
+      : undefined
 
     if (!userMessageText) {
       return res.status(400).json({
@@ -41,13 +62,15 @@ app.post('/api/chat', async (req, res) => {
     }
 
     console.error(
-      `[Sous API] Incoming request: hasRecipe=${Boolean(hasRecipe)}, userMessage="${userMessageText.slice(0, 80)}${userMessageText.length > 80 ? '...' : ''}"`
+      `[Sous API] Incoming request: hasRecipe=${Boolean(hasRecipe)}, hasImage=${Boolean(imageDataUrl)}, contextCount=${contextMessages?.length ?? 0}, userMessage="${userMessageText.slice(0, 80)}${userMessageText.length > 80 ? '...' : ''}"`
     )
 
     const response = await getChatResponse({
       userMessage: userMessageText,
       recipe: recipe ?? null,
       hasRecipe: Boolean(hasRecipe),
+      image: imageDataUrl,
+      contextMessages,
     })
 
     res.json(response)

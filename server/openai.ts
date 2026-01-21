@@ -1,5 +1,6 @@
 import OpenAI from 'openai'
 import { z } from 'zod'
+import type { ChatCompletionContentPart } from 'openai/resources/chat/completions'
 
 // Zod schemas for validating LLM response
 const PatchSchema = z.discriminatedUnion('op', [
@@ -38,12 +39,22 @@ const PatchSchema = z.discriminatedUnion('op', [
   })
 ])
 
+// Suggestion schema for photo-based proposals
+const SuggestionSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  rationale: z.string().optional(),
+  patches: z.array(PatchSchema)
+})
+
 const LLMResponseSchema = z.object({
   assistant_message: z.string(),
-  patches: z.array(PatchSchema)
+  patches: z.array(PatchSchema),
+  suggestions: z.array(SuggestionSchema).optional()
 }).strict()
 
 export type LLMResponse = z.infer<typeof LLMResponseSchema>
+export type Suggestion = z.infer<typeof SuggestionSchema>
 
 export interface Recipe {
   id: string
@@ -59,11 +70,14 @@ export interface ChatRequest {
   userMessage: string
   recipe: Recipe | null
   hasRecipe: boolean
+  image?: string // data URL format: "data:image/jpeg;base64,..."
+  contextMessages?: Array<{ role: 'user' | 'assistant'; content: string }>
 }
 
 export interface ChatSuccessResponse {
   assistant_message: string
   patches: LLMResponse['patches']
+  suggestions?: LLMResponse['suggestions']
 }
 
 export interface ChatErrorResponse {
@@ -75,7 +89,7 @@ export interface ChatErrorResponse {
 
 export type ChatResponse = ChatSuccessResponse | ChatErrorResponse
 
-function buildSystemPrompt(recipe: Recipe | null, hasRecipe: boolean): string {
+function buildSystemPrompt(recipe: Recipe | null, hasRecipe: boolean, hasImage: boolean = false): string {
   // Base JSON format instruction
   const jsonFormat = `You must respond with ONLY valid JSON in this exact format:
 {
@@ -157,7 +171,26 @@ ONLY if user explicitly says "new recipe", "start over", or "replace this recipe
 1. IMMUTABILITY: Done steps are IMMUTABLE. You must NEVER use update_step on these step IDs: ${doneStepIds.length > 0 ? doneStepIds.join(', ') : '(none yet)'}
    - If a change requires modifying a completed step, add a RECOVERY step or note instead.
 
-2. CONSERVATIVE REPLACE: Do NOT use replace_recipe unless the user EXPLICITLY asks for a new/different recipe.
+2. ELLIPSIS / PRONOUN RESOLUTION:
+   If the user's message is short or referential (e.g. "double it", "that", "do it again", "more"), resolve what "it/that" refers to using the last 1–2 conversation turns (if provided).
+   - If the previous turn discussed a specific ingredient or step, treat the referent as that ingredient/step.
+   - Example: after "Garlic is already included…", "DOUBLE IT" refers to garlic (the ingredient), not doubling the whole recipe.
+   - If the referent could reasonably mean either "the whole recipe" or "a specific ingredient/step", ask ONE clarifying question (e.g. "Do you mean double the garlic, or double the whole recipe?") and return patches: [].
+   Do not guess when ambiguous.
+
+3. INGREDIENT HISTORY:
+- Do NOT use remove_ingredient for ingredients already used in completed steps.
+- An ingredient is considered “already used” if it appears in the text of any step with status === "done".
+- In this case, do NOT attempt to rewrite history.
+- Instead, add a note explaining the situation and suggest forward-looking adjustments.
+
+When handling this situation, prefer these patch types:
+- add_note (to explain that the ingredient was already used)
+- add_step (a recovery or adjustment step going forward)
+- update_ingredient (optional wording clarification only)
+NEVER use remove_ingredient in this case.
+
+4. CONSERVATIVE REPLACE: Do NOT use replace_recipe unless the user EXPLICITLY asks for a new/different recipe.
    - "I forgot onions" → use patches, NOT replace_recipe
    - "Make it spicier" → use patches, NOT replace_recipe
    - "Give me a new recipe for tacos" → use replace_recipe
@@ -169,11 +202,31 @@ ONLY if user explicitly says "new recipe", "start over", or "replace this recipe
 - Only include patches when changes are needed
 - Use an empty patches array [] if no recipe changes are needed
 - Reference ingredient and step IDs exactly as shown above
-- NEVER output anything except the JSON object`
+- NEVER output anything except the JSON object${hasImage ? `
+
+## PHOTO ANALYSIS MODE (ACTIVE)
+
+The user has attached a photo. The user's question is the primary intent; use the image as supporting context.
+
+Respond with:
+1. assistant_message: Your assessment and advice (ephemeral, no recipe change)
+2. patches: MUST be empty [] - do NOT auto-apply changes from photos
+3. suggestions: Array of proposed changes the user can choose to apply
+
+Suggestion format:
+{
+  "id": "sug-<unique>",
+  "title": "Short label (e.g. 'Thin the sauce')",
+  "rationale": "1-2 sentences explaining why (optional)",
+  "patches": [<normal patch operations that would implement this suggestion>]
 }
 
-function buildStricterSystemPrompt(recipe: Recipe | null, hasRecipe: boolean): string {
-  return buildSystemPrompt(recipe, hasRecipe) + `
+CRITICAL: For photo responses, patches MUST be empty. Put all proposed changes in suggestions.
+Only if user explicitly says "apply" or "do it" should you put patches directly (not from photos).` : ''}`
+}
+
+function buildStricterSystemPrompt(recipe: Recipe | null, hasRecipe: boolean, hasImage: boolean = false): string {
+  return buildSystemPrompt(recipe, hasRecipe, hasImage) + `
 
 ## IMPORTANT: PREVIOUS RESPONSE WAS INVALID
 
@@ -191,6 +244,7 @@ const MODEL_NAME = 'gpt-4o-mini'
 interface CallContext {
   userMessage: string
   hasRecipe: boolean
+  hasImage: boolean
   isRetry: boolean
 }
 
@@ -257,24 +311,43 @@ async function callOpenAI(
   userMessage: string,
   recipe: Recipe | null,
   hasRecipe: boolean,
-  isRetry: boolean
+  isRetry: boolean,
+  image?: string,
+  contextMessages?: Array<{ role: 'user' | 'assistant'; content: string }>
 ): Promise<LLMResponse> {
-  const context: CallContext = { userMessage, hasRecipe, isRetry }
+  const hasImage = Boolean(image)
+  const context: CallContext = { userMessage, hasRecipe, hasImage, isRetry }
   let rawOutput: string | null = null
 
   // Step 1: Call OpenAI API
   let completion
   try {
     const systemPrompt = isRetry
-      ? buildStricterSystemPrompt(recipe, hasRecipe)
-      : buildSystemPrompt(recipe, hasRecipe)
+      ? buildStricterSystemPrompt(recipe, hasRecipe, hasImage)
+      : buildSystemPrompt(recipe, hasRecipe, hasImage)
+
+    // Build user message content - text only or multimodal
+    let userContent: string | ChatCompletionContentPart[]
+    if (image) {
+      // Multimodal: text + image
+      userContent = [
+        { type: 'text', text: userMessage },
+        { type: 'image_url', image_url: { url: image } }
+      ]
+    } else {
+      userContent = userMessage
+    }
+
+    // Build messages array: system + context (text-only) + latest user (multimodal if image)
+    const messagesArray: Array<{ role: 'system' | 'user' | 'assistant'; content: string | ChatCompletionContentPart[] }> = [
+      { role: 'system', content: systemPrompt },
+      ...(contextMessages ?? []).map(m => ({ role: m.role, content: m.content })),
+      { role: 'user', content: userContent }
+    ]
 
     completion = await openai.chat.completions.create({
       model: MODEL_NAME,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userMessage }
-      ],
+      messages: messagesArray,
       response_format: { type: 'json_object' },
       temperature: 0.3,
       max_tokens: 2048
@@ -315,16 +388,27 @@ async function callOpenAI(
 }
 
 export async function getChatResponse(request: ChatRequest): Promise<ChatResponse> {
-  const { userMessage, recipe, hasRecipe } = request
+  const { userMessage, recipe, hasRecipe, image, contextMessages } = request
+
+  const hasImage = Boolean(image)
 
   // First attempt
   try {
     console.error('[OpenAI] Starting first attempt...')
-    const response = await callOpenAI(userMessage, recipe, hasRecipe, false)
+    const response = await callOpenAI(userMessage, recipe, hasRecipe, false, image, contextMessages)
     console.error('[OpenAI] First attempt succeeded')
+
+    // Safety guardrail: photo mode must never mutate recipe directly
+    let patches = response.patches
+    if (hasImage && patches.length > 0) {
+      console.error('[OpenAI] WARNING: Model returned patches in photo mode - dropping them')
+      patches = []
+    }
+
     return {
       assistant_message: response.assistant_message,
-      patches: response.patches
+      patches,
+      suggestions: response.suggestions
     }
   } catch (firstError) {
     console.error('[OpenAI] First attempt failed, will retry with stricter prompt')
@@ -332,11 +416,20 @@ export async function getChatResponse(request: ChatRequest): Promise<ChatRespons
     // Retry with stricter prompt
     try {
       console.error('[OpenAI] Starting retry attempt...')
-      const response = await callOpenAI(userMessage, recipe, hasRecipe, true)
+      const response = await callOpenAI(userMessage, recipe, hasRecipe, true, image, contextMessages)
       console.error('[OpenAI] Retry attempt succeeded')
+
+      // Safety guardrail: photo mode must never mutate recipe directly
+      let patches = response.patches
+      if (hasImage && patches.length > 0) {
+        console.error('[OpenAI] WARNING: Model returned patches in photo mode (retry) - dropping them')
+        patches = []
+      }
+
       return {
         assistant_message: response.assistant_message,
-        patches: response.patches
+        patches,
+        suggestions: response.suggestions
       }
     } catch (retryError) {
       console.error('[OpenAI] Retry attempt also failed - giving up')

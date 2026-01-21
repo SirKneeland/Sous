@@ -81,6 +81,18 @@ export function applyPatches(recipe: Recipe, patches: Patch[]): PatchResult {
       }
     } else {
       rejectedPatches.push({ patch, reason: result.reason })
+
+      // Apply alternative patch if provided (e.g., add_note when remove_ingredient blocked)
+      if (result.alternativePatch) {
+        const altResult = applySinglePatch(newRecipe, result.alternativePatch)
+        if (altResult.success) {
+          newRecipe = altResult.recipe
+          appliedPatches.push(result.alternativePatch)
+          if (result.alternativePatch.op === 'add_note') {
+            addedNoteIndices.push(newRecipe.notes.length - 1)
+          }
+        }
+      }
     }
   }
 
@@ -106,7 +118,7 @@ export function applyPatches(recipe: Recipe, patches: Patch[]): PatchResult {
 
 type SinglePatchResult =
   | { success: true; recipe: Recipe; addedStepId?: string; addedIngredientId?: string }
-  | { success: false; reason: string }
+  | { success: false; reason: string; alternativePatch?: Patch }
 
 function applySinglePatch(recipe: Recipe, patch: Patch): SinglePatchResult {
   switch (patch.op) {
@@ -225,6 +237,25 @@ function applyRemoveIngredient(
 
   if (!ingredient) {
     return { success: false, reason: `Ingredient ${patch.id} not found` }
+  }
+
+  // Check if ingredient is referenced in any done step
+  const ingredientTextLower = ingredient.text.toLowerCase()
+  const doneStepWithIngredient = recipe.steps.find(
+    step => step.status === 'done' && step.text.toLowerCase().includes(ingredientTextLower)
+  )
+
+  if (doneStepWithIngredient) {
+    // Extract a short name from ingredient text (first few words, no quantity)
+    const shortName = ingredient.text.replace(/^[\d\s\/½¼¾⅓⅔]+/, '').split(',')[0].trim()
+    return {
+      success: false,
+      reason: `Cannot remove ingredient already used in completed step`,
+      alternativePatch: {
+        op: 'add_note',
+        text: `${shortName} was already used. If you already added it, proceed; otherwise skip it in future steps.`
+      }
+    }
   }
 
   // Soft-delete: mark as removed instead of filtering out
