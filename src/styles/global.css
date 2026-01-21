@@ -17,6 +17,8 @@
   --color-border: #2d4a6f;
   --radius: 12px;
   --radius-sm: 8px;
+  /* Mobile keyboard offset - set by JS if needed */
+  --keyboard-offset: 0px;
 }
 
 html, body {
@@ -786,4 +788,146 @@ html, body {
   background: var(--color-surface);
   border-color: var(--color-primary);
   color: var(--color-text);
+}
+
+/* ===========================================
+   MOBILE-ONLY STYLES (max-width: 768px)
+   All mobile-specific classes and styles below.
+   Desktop layout is unchanged.
+   =========================================== */
+
+@media (max-width: 768px) {
+  /* Mobile app container - use min-height with dvh, fallback to vh */
+  .app-container {
+    min-height: 100vh;
+    min-height: 100dvh;
+    padding-bottom: 72px; /* Space for bottom bar */
+    padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Canvas pane - ensure content isn't hidden behind bottom bar */
+  .canvas-pane {
+    padding-bottom: 16px;
+  }
+
+  /* ---- Mobile Bottom Action Bar ---- */
+  .mobile-bottom-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    background: var(--color-surface);
+    border-top: 1px solid var(--color-border);
+    z-index: 200;
+  }
+
+  .mobile-bottom-bar-input {
+    flex: 1;
+    padding: 12px 16px;
+    background: var(--color-surface-light);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    color: var(--color-text-muted);
+    font-size: 1rem;
+    text-align: left;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .mobile-bottom-bar-input:active {
+    background: var(--color-surface);
+    border-color: var(--color-primary);
+  }
+
+  .mobile-bottom-bar-photo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    background: var(--color-surface-light);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: 1.25rem;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .mobile-bottom-bar-photo:active {
+    background: var(--color-surface);
+    border-color: var(--color-primary);
+  }
+
+  /* ---- Chat Pane Container - Mobile States ---- */
+  .chat-pane-container {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--color-surface);
+    border-top: 1px solid var(--color-border);
+    z-index: 300;
+    transition: transform 0.25s ease-out;
+  }
+
+  /* Cooking mode: chat pane hidden below viewport */
+  .chat-pane-container.cooking {
+    transform: translateY(100%);
+    pointer-events: none;
+  }
+
+  /* Editing mode: chat pane slides up */
+  .chat-pane-container.editing {
+    transform: translateY(0);
+    bottom: var(--keyboard-offset, 0px);
+    max-height: 70vh;
+    max-height: 70dvh;
+    display: flex;
+    flex-direction: column;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  /* Chat pane in editing mode */
+  .chat-pane-container.editing .chat-pane {
+    max-height: none;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .chat-pane-container.editing .chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    max-height: none;
+  }
+
+  /* ---- Collapse Button ---- */
+  .chat-collapse-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    padding: 8px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+  }
+
+  .chat-collapse-handle {
+    width: 40px;
+    height: 4px;
+    background: var(--color-border);
+    border-radius: 2px;
+  }
+
+  .chat-collapse-btn:active .chat-collapse-handle {
+    background: var(--color-text-muted);
+  }
 }

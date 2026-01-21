@@ -1,11 +1,14 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { useRecipeState } from '../hooks/useRecipeState'
+import { useIsMobile } from '../hooks/useIsMobile'
 import { demoRecipe } from '../data/demoRecipe'
 import { RecipeCanvas } from '../components/RecipeCanvas'
 import { ChatPane } from '../components/ChatPane'
 import { ChatMessage, Suggestion } from '../types/chat'
 import { sendRejectionEvent } from '../services/llm'
 import { LLMResponse } from '../types/recipe'
+
+type UIFocus = 'cooking' | 'editing'
 
 interface ChatApiError {
   error: {
@@ -57,6 +60,27 @@ export function DemoPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [suggestions, setSuggestions] = useState<Suggestion[]>([])
   const [isLoading, setIsLoading] = useState(false)
+
+  // Mobile UI focus state (ephemeral, not persisted)
+  const [uiFocus, setUiFocus] = useState<UIFocus>('cooking')
+  // Shared input draft state - persists text across mode switches
+  const [inputDraft, setInputDraft] = useState('')
+  // Ref for focusing chat input after expansion
+  const chatInputRef = useRef<HTMLInputElement>(null)
+  const isMobile = useIsMobile()
+
+  // Expand chat (cooking -> editing) with delayed focus to avoid iOS keyboard race
+  const handleExpandChat = useCallback(() => {
+    setUiFocus('editing')
+    requestAnimationFrame(() => {
+      chatInputRef.current?.focus()
+    })
+  }, [])
+
+  // Collapse chat (editing -> cooking)
+  const handleCollapseChat = useCallback(() => {
+    setUiFocus('cooking')
+  }, [])
 
   const handleSendMessage = useCallback(async (content: string, image?: string) => {
     // Capture stable snapshot before any state changes
@@ -238,6 +262,33 @@ export function DemoPage() {
     }
   }, [rejectChanges])
 
+  // Handle photo selection from mobile bottom bar
+  const mobileFileInputRef = useRef<HTMLInputElement>(null)
+  const [mobileSelectedImage, setMobileSelectedImage] = useState<string | null>(null)
+
+  const handleMobilePhotoClick = useCallback(() => {
+    mobileFileInputRef.current?.click()
+  }, [])
+
+  const handleMobileFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !file.type.startsWith('image/')) return
+
+    const reader = new FileReader()
+    reader.onload = () => {
+      setMobileSelectedImage(reader.result as string)
+      handleExpandChat()
+    }
+    reader.readAsDataURL(file)
+    e.target.value = ''
+  }, [handleExpandChat])
+
+  // Clear mobile selected image after sending
+  const handleMobileSendMessage = useCallback((content: string, image?: string) => {
+    handleSendMessage(content, image)
+    setMobileSelectedImage(null)
+  }, [handleSendMessage])
+
   return (
     <div className="app-container">
       <div className="canvas-pane">
@@ -253,10 +304,39 @@ export function DemoPage() {
           onSendMessage={handleSendMessage}
         />
       </div>
-      <div className="chat-pane-container">
+
+      {/* Mobile bottom action bar - visible in cooking mode only */}
+      {isMobile && uiFocus === 'cooking' && (
+        <div className="mobile-bottom-bar">
+          <input
+            type="file"
+            ref={mobileFileInputRef}
+            onChange={handleMobileFileSelect}
+            accept="image/*"
+            style={{ display: 'none' }}
+          />
+          <button
+            type="button"
+            className="mobile-bottom-bar-input"
+            onClick={handleExpandChat}
+          >
+            {inputDraft || 'Ask Sous...'}
+          </button>
+          <button
+            type="button"
+            className="mobile-bottom-bar-photo"
+            onClick={handleMobilePhotoClick}
+            aria-label="Take photo"
+          >
+            📷
+          </button>
+        </div>
+      )}
+
+      <div className={`chat-pane-container ${isMobile ? uiFocus : ''}`}>
         <ChatPane
           messages={messages}
-          onSendMessage={handleSendMessage}
+          onSendMessage={handleMobileSendMessage}
           onUndo={undo}
           onReset={handleReset}
           canUndo={canUndo}
@@ -264,6 +344,14 @@ export function DemoPage() {
           suggestions={suggestions}
           onApplySuggestion={handleApplySuggestion}
           onDismissSuggestion={handleDismissSuggestion}
+          uiFocus={uiFocus}
+          onCollapse={handleCollapseChat}
+          isMobile={isMobile}
+          inputDraft={inputDraft}
+          setInputDraft={setInputDraft}
+          inputRef={chatInputRef}
+          pendingImage={mobileSelectedImage}
+          onClearPendingImage={() => setMobileSelectedImage(null)}
         />
       </div>
     </div>

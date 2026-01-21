@@ -1,6 +1,8 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, RefObject } from 'react'
 import { ChatMessage, Suggestion } from '../types/chat'
 import { SuggestionTray } from './SuggestionTray'
+
+type UIFocus = 'cooking' | 'editing'
 
 interface ChatPaneProps {
   messages: ChatMessage[]
@@ -12,6 +14,15 @@ interface ChatPaneProps {
   suggestions?: Suggestion[]
   onApplySuggestion?: (suggestion: Suggestion) => void
   onDismissSuggestion?: (suggestionId: string) => void
+  // Mobile UI props
+  uiFocus?: UIFocus
+  onCollapse?: () => void
+  isMobile?: boolean
+  inputDraft?: string
+  setInputDraft?: (value: string) => void
+  inputRef?: RefObject<HTMLInputElement>
+  pendingImage?: string | null
+  onClearPendingImage?: () => void
 }
 
 export function ChatPane({
@@ -23,12 +34,38 @@ export function ChatPane({
   isLoading,
   suggestions = [],
   onApplySuggestion,
-  onDismissSuggestion
+  onDismissSuggestion,
+  uiFocus = 'editing',
+  onCollapse,
+  isMobile = false,
+  inputDraft,
+  setInputDraft,
+  inputRef,
+  pendingImage,
+  onClearPendingImage
 }: ChatPaneProps) {
-  const [input, setInput] = useState('')
-  const [selectedImage, setSelectedImage] = useState<string | null>(null)
+  // Use shared draft state if provided (mobile), otherwise local state (desktop)
+  const [localInput, setLocalInput] = useState('')
+  const input = inputDraft !== undefined ? inputDraft : localInput
+  const setInput = setInputDraft !== undefined ? setInputDraft : setLocalInput
+
+  // Use external ref if provided (mobile), otherwise internal ref
+  const internalInputRef = useRef<HTMLInputElement>(null)
+  const actualInputRef = inputRef || internalInputRef
+
+  // Use pending image from parent if provided (mobile), otherwise local state
+  const [localSelectedImage, setLocalSelectedImage] = useState<string | null>(null)
+  const selectedImage = pendingImage !== undefined ? pendingImage : localSelectedImage
+  const setSelectedImage = onClearPendingImage
+    ? (img: string | null) => img === null ? onClearPendingImage() : setLocalSelectedImage(img)
+    : setLocalSelectedImage
+
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Determine if we should show chat history
+  // Desktop: always show; Mobile: only show in editing mode
+  const showHistory = !isMobile || uiFocus === 'editing'
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -42,7 +79,11 @@ export function ChatPane({
 
     onSendMessage(trimmed, selectedImage ?? undefined)
     setInput('')
-    setSelectedImage(null)
+    if (onClearPendingImage) {
+      onClearPendingImage()
+    } else {
+      setLocalSelectedImage(null)
+    }
   }
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -75,42 +116,57 @@ export function ChatPane({
   }
 
   return (
-    <div className="chat-pane">
-      <div className="chat-messages">
-        {messages.length === 0 && (
-          <div className="chat-message assistant">
-            <p>I'm Sous, your cooking companion! I'll help you through this recipe.</p>
-            <p className="chat-hint">Try saying: "I forgot the onions", "I burned the garlic", or "make it spicier"</p>
-          </div>
-        )}
-        {messages.map((msg, index) => {
-          // Find if this is the last assistant message (for inline suggestions)
-          const isLastAssistantMessage =
-            msg.role === 'assistant' &&
-            !messages.slice(index + 1).some(m => m.role === 'assistant')
+    <div className={`chat-pane ${isMobile ? uiFocus : ''}`}>
+      {/* Collapse button - mobile + editing only */}
+      {isMobile && uiFocus === 'editing' && onCollapse && (
+        <button
+          type="button"
+          className="chat-collapse-btn"
+          onClick={onCollapse}
+          aria-label="Collapse chat"
+        >
+          <span className="chat-collapse-handle" />
+        </button>
+      )}
 
-          return (
-            <div key={msg.id}>
-              <div className={`chat-message ${msg.role}`}>
-                <p>{msg.content}</p>
-              </div>
-              {isLastAssistantMessage && suggestions.length > 0 && onApplySuggestion && onDismissSuggestion && (
-                <SuggestionTray
-                  suggestions={suggestions}
-                  onApply={onApplySuggestion}
-                  onDismiss={onDismissSuggestion}
-                />
-              )}
+      {/* Chat history - conditionally rendered */}
+      {showHistory && (
+        <div className="chat-messages">
+          {messages.length === 0 && (
+            <div className="chat-message assistant">
+              <p>I'm Sous, your cooking companion! I'll help you through this recipe.</p>
+              <p className="chat-hint">Try saying: "I forgot the onions", "I burned the garlic", or "make it spicier"</p>
             </div>
-          )
-        })}
-        {isLoading && (
-          <div className="chat-message assistant loading">
-            <p>Thinking...</p>
-          </div>
-        )}
-        <div ref={messagesEndRef} />
-      </div>
+          )}
+          {messages.map((msg, index) => {
+            // Find if this is the last assistant message (for inline suggestions)
+            const isLastAssistantMessage =
+              msg.role === 'assistant' &&
+              !messages.slice(index + 1).some(m => m.role === 'assistant')
+
+            return (
+              <div key={msg.id}>
+                <div className={`chat-message ${msg.role}`}>
+                  <p>{msg.content}</p>
+                </div>
+                {isLastAssistantMessage && suggestions.length > 0 && onApplySuggestion && onDismissSuggestion && (
+                  <SuggestionTray
+                    suggestions={suggestions}
+                    onApply={onApplySuggestion}
+                    onDismiss={onDismissSuggestion}
+                  />
+                )}
+              </div>
+            )
+          })}
+          {isLoading && (
+            <div className="chat-message assistant loading">
+              <p>Thinking...</p>
+            </div>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+      )}
       <form className="chat-input-area" onSubmit={handleSubmit}>
         {selectedImage && (
           <div className="image-preview">
@@ -147,6 +203,7 @@ export function ChatPane({
             </svg>
           </button>
           <input
+            ref={actualInputRef}
             type="text"
             className="chat-input"
             placeholder={selectedImage ? "Ask about this photo..." : "Tell me what's happening..."}
