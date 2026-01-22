@@ -1,6 +1,7 @@
 import 'dotenv/config'
 import express from 'express'
 import { getChatResponse, ChatRequest } from './openai'
+import { intentRouter } from './intentRouter'
 
 const app = express()
 const PORT = 8787
@@ -61,14 +62,23 @@ app.post('/api/chat', async (req, res) => {
       })
     }
 
+    // Route the intent based on message and canvas state
+    const routedIntent = intentRouter({
+      messageText: userMessageText,
+      hasCanvas: Boolean(hasRecipe),
+      selectedOptionId: null, // UI can pass this for button taps
+    })
+
     console.error(
-      `[Sous API] Incoming request: hasRecipe=${Boolean(hasRecipe)}, hasImage=${Boolean(imageDataUrl)}, contextCount=${contextMessages?.length ?? 0}, userMessage="${userMessageText.slice(0, 80)}${userMessageText.length > 80 ? '...' : ''}"`
+      `[Sous API] Incoming request: hasRecipe=${Boolean(hasRecipe)}, hasImage=${Boolean(imageDataUrl)}, intent=${routedIntent.intent}, contextCount=${contextMessages?.length ?? 0}, userMessage="${userMessageText.slice(0, 80)}${userMessageText.length > 80 ? '...' : ''}"`
     )
+    console.error(`[Sous API] Intent reason: ${routedIntent.reason}`)
 
     const response = await getChatResponse({
       userMessage: userMessageText,
       recipe: recipe ?? null,
       hasRecipe: Boolean(hasRecipe),
+      intent: routedIntent.intent,
       image: imageDataUrl,
       contextMessages,
     })

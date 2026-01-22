@@ -1,8 +1,21 @@
 # User Stories
 
+### US-00: Explore What to Cook (No Canvas Yet)
+- Given the user has no active recipe canvas
+- When the user asks a vague or preference-based question (e.g. “what’s something with a lot of garlic?”)
+- Then the assistant asks 1–2 clarifying questions (max)
+- And proposes 3–5 concrete dish options with short blurbs
+- And does not create a recipe canvas yet
+
+### US-00b: Commit to an Option (Create Canvas)
+- Given the user has no active recipe canvas
+- When the user explicitly commits to a specific option (e.g. “Option 2”, “Make the French one”, “Generate that one”)
+- Then a full recipe appears in the canvas
+- And chat does not contain the recipe body
+
 ### US-01: Generate Recipe
-- Given a prompt (“cozy chili”)
-- When the user submits it
+- Given a prompt or selected option
+- When the user submits it as an explicit commit to generate
 - Then a full recipe appears in the canvas
 - And chat does not contain the recipe body
 

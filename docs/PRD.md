@@ -78,6 +78,57 @@ AI responds with:
 
 The AI never outputs a full recipe in chat.
 
+ ## Interaction Model
+
+ The AI never outputs a full recipe in chat.
+ 
+## Conversation State and Recipe Creation Gate
+
+Sous has two high-level modes:
+
+1. **Creation mode** (no recipe canvas yet)
+2. **Cooking/Edit mode** (a recipe canvas exists)
+
+Creation mode is split into two phases:
+
+- **Exploration phase (default):** the assistant helps the user *decide what to cook* by asking 1–2 targeted questions and proposing a small menu of options. **No recipe canvas is created in this phase.**
+- **Commit phase:** only after the user explicitly commits to an option (e.g., “Let’s do option 2”, “Generate that one”, or tapping an option card) may the assistant create the recipe canvas.
+
+**Hard rule:** The assistant must never create a recipe canvas (or output a full recipe) unless the user has explicitly committed.
+
+### Commit signals
+
+Examples that count as commit:
+
+- “Let’s do that / this one”
+- “Make the French one”
+- “Option 2”
+- “Generate the recipe”
+- A UI action like tapping a specific option card or a “Generate recipe” button
+
+If the user is vague (“sure”, “ok”), the assistant should confirm which option they mean *without* generating the recipe yet.
+
+### Exploration response shape
+
+In Exploration phase, the assistant response should:
+
+1. Reflect the request in one sentence.
+2. Ask **1–2 branching questions** (max).
+3. Provide **3–5 options** with short “why it fits” blurbs.
+4. Invite the user to pick one or refine.
+
+### Routing (implementation note)
+
+Determine:
+
+- `has_canvas`: whether a recipe canvas exists
+- `intent`: explore | commit_to_option | edit_existing_recipe | cooking_help
+
+Routing rules:
+
+- If `has_canvas=false` and `intent=explore` → Exploration response shape (no canvas)
+- If `has_canvas=false` and `intent=commit_to_option` → Generate recipe canvas (US-01)
+- If `has_canvas=true` → Patch-based edits + “no past edits” rule
 ---
 
 ## MVP Feature Set

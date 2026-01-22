@@ -1,6 +1,7 @@
 import OpenAI from 'openai'
 import { z } from 'zod'
 import type { ChatCompletionContentPart } from 'openai/resources/chat/completions'
+import type { Intent } from './intentRouter'
 
 // Zod schemas for validating LLM response
 const PatchSchema = z.discriminatedUnion('op', [
@@ -70,6 +71,7 @@ export interface ChatRequest {
   userMessage: string
   recipe: Recipe | null
   hasRecipe: boolean
+  intent: Intent
   image?: string // data URL format: "data:image/jpeg;base64,..."
   contextMessages?: Array<{ role: 'user' | 'assistant'; content: string }>
 }
@@ -89,7 +91,198 @@ export interface ChatErrorResponse {
 
 export type ChatResponse = ChatSuccessResponse | ChatErrorResponse
 
-function buildSystemPrompt(recipe: Recipe | null, hasRecipe: boolean, hasImage: boolean = false): string {
+/**
+ * Normalize patch IDs by stripping surrounding brackets if present.
+ * Logs a warning when normalization occurs.
+ * Does not silently swallow other invalid ID formats.
+ */
+export function normalizePatchIds(patches: LLMResponse['patches']): LLMResponse['patches'] {
+  const stripBrackets = (id: string, fieldName: string, patchOp: string): string => {
+    // Check for surrounding brackets: [some-id]
+    const match = id.match(/^\[(.+)\]$/)
+    if (match) {
+      console.error(`[OpenAI] WARNING: Normalizing bracketed ${fieldName} in ${patchOp} patch: "${id}" → "${match[1]}"`)
+      return match[1]
+    }
+    return id
+  }
+
+  return patches.map(patch => {
+    switch (patch.op) {
+      case 'add_step':
+        if (patch.after_step_id) {
+          return {
+            ...patch,
+            after_step_id: stripBrackets(patch.after_step_id, 'after_step_id', 'add_step')
+          }
+        }
+        return patch
+
+      case 'update_step':
+        return {
+          ...patch,
+          step_id: stripBrackets(patch.step_id, 'step_id', 'update_step')
+        }
+
+      case 'update_ingredient':
+        return {
+          ...patch,
+          id: stripBrackets(patch.id, 'id', 'update_ingredient')
+        }
+
+      case 'remove_ingredient':
+        return {
+          ...patch,
+          id: stripBrackets(patch.id, 'id', 'remove_ingredient')
+        }
+
+      default:
+        return patch
+    }
+  })
+}
+
+/**
+ * Check if assistant message is asking for confirmation before applying changes.
+ * Returns true if the message contains confirmation-seeking language.
+ *
+ * Heuristics:
+ * - Contains explicit confirmation phrases: "would you like", "want me to", "should I", "okay if I", "do you want me to"
+ * - OR (ends with "?" AND contains confirmation/permission verbs: want, would, should, okay, apply, update)
+ */
+export function isConfirmationQuestion(assistantMessage: string): boolean {
+  const lower = assistantMessage.toLowerCase()
+
+  // Explicit confirmation phrases
+  const confirmationPhrases = [
+    'would you like',
+    'want me to',
+    'should i',
+    'okay if i',
+    'do you want me to',
+    'shall i',
+    'would you prefer',
+    'do you want to',
+  ]
+
+  for (const phrase of confirmationPhrases) {
+    if (lower.includes(phrase)) {
+      return true
+    }
+  }
+
+  // Check for question with confirmation/permission verbs
+  if (assistantMessage.trim().endsWith('?')) {
+    const confirmationVerbs = /\b(want|would|should|okay|apply|update)\b/i
+    if (confirmationVerbs.test(lower)) {
+      return true
+    }
+  }
+
+  return false
+}
+
+/**
+ * Apply confirmation guard: if assistant is asking for confirmation but also returning patches,
+ * move the patches to suggestions and return empty patches.
+ *
+ * This prevents the UX bug where the assistant asks "Would you like me to..." while simultaneously
+ * applying the changes.
+ */
+export function applyConfirmationGuard(response: LLMResponse): LLMResponse {
+  if (!isConfirmationQuestion(response.assistant_message)) {
+    return response
+  }
+
+  if (response.patches.length === 0) {
+    return response
+  }
+
+  // Log warning about the violation
+  console.error(
+    `[OpenAI] WARNING: Confirmation question detected with ${response.patches.length} patches - moving patches to suggestions`
+  )
+
+  // Create a suggestion from the patches
+  const patchSuggestion: Suggestion = {
+    id: `sug-confirmation-${Date.now()}`,
+    title: 'Apply these updates',
+    rationale: 'Changes proposed pending your confirmation',
+    patches: response.patches,
+  }
+
+  // Append to existing suggestions (don't overwrite)
+  const existingSuggestions = response.suggestions ?? []
+
+  return {
+    ...response,
+    patches: [],
+    suggestions: [...existingSuggestions, patchSuggestion],
+  }
+}
+
+/**
+ * Build system prompt for EXPLORATION mode (no recipe, no commit)
+ *
+ * In this mode, the assistant helps the user decide what to cook by:
+ * - Asking 1-2 clarifying questions
+ * - Proposing 3-5 concrete dish options
+ * - NEVER creating a recipe or outputting ingredients/steps
+ */
+function buildExplorationPrompt(): string {
+  return `You are Sous, a helpful cooking assistant. The user is exploring what to cook but has NOT committed to a specific recipe yet.
+
+You must respond with ONLY valid JSON in this exact format:
+{
+  "assistant_message": "Your response with questions and options",
+  "patches": []
+}
+
+## EXPLORATION MODE (ACTIVE)
+
+Your job is to help the user DECIDE what to cook. You are NOT creating a recipe yet.
+
+## HARD RULES
+
+1. patches MUST be an empty array: []
+2. You must NOT include:
+   - Any ingredient lists
+   - Any cooking steps
+   - Any replace_recipe operations
+   - Any full recipes
+3. You MUST include in assistant_message:
+   - A brief acknowledgment of their request (1 sentence)
+   - 1-2 clarifying questions to narrow down options (e.g., time, cuisine, dietary needs)
+   - 3-5 concrete dish options with short "why it fits" blurbs
+
+## RESPONSE FORMAT
+
+Your assistant_message should be structured like:
+
+"[Brief acknowledgment]. [1-2 questions]
+
+Here are some options:
+1. **[Dish Name]** - [1-2 sentence description of why it fits]
+2. **[Dish Name]** - [1-2 sentence description]
+3. **[Dish Name]** - [1-2 sentence description]
+...
+
+Which sounds good, or would you like different options?"
+
+## COMMIT DETECTION
+
+The user has NOT committed yet. They will commit by saying things like:
+- "Option 2" / "#2"
+- "Let's do that one"
+- "Make the [dish name]"
+- "Generate the recipe"
+
+Until they commit, stay in exploration mode and keep patches empty.
+
+NEVER output anything except the JSON object.`
+}
+
+function buildSystemPrompt(recipe: Recipe | null, hasRecipe: boolean, intent: Intent, hasImage: boolean = false): string {
   // Base JSON format instruction
   const jsonFormat = `You must respond with ONLY valid JSON in this exact format:
 {
@@ -97,15 +290,22 @@ function buildSystemPrompt(recipe: Recipe | null, hasRecipe: boolean, hasImage: 
   "patches": [...]
 }`
 
-  // If no recipe exists, prompt for recipe creation
-  if (!hasRecipe) {
-    return `You are Sous, a helpful cooking assistant. The user does not have a recipe yet and needs you to create one.
+  // DEFENSIVE GATE: If no recipe and not a commit intent, we should never be here
+  // This is a safety check - the real gate is in getChatResponse
+  if (!hasRecipe && intent !== 'commit_to_option') {
+    console.error(`[OpenAI] VIOLATION: buildSystemPrompt called with hasRecipe=false and intent=${intent}. Falling back to exploration prompt.`)
+    return buildExplorationPrompt()
+  }
+
+  // If no recipe exists but user has committed, prompt for recipe creation
+  if (!hasRecipe && intent === 'commit_to_option') {
+    return `You are Sous, a helpful cooking assistant. The user has committed to a recipe and needs you to create it.
 
 ${jsonFormat}
 
 ## RECIPE CREATION MODE
 
-The user needs a new recipe. You MUST use the replace_recipe operation to create a complete recipe from scratch.
+The user has explicitly asked for a recipe. You MUST use the replace_recipe operation to create a complete recipe from scratch.
 
 ## Patch Operations
 
@@ -124,9 +324,10 @@ You MUST use this operation to create a new recipe:
   }
 
   // Recipe exists - editing mode
-  // Safety check: if hasRecipe but no recipe provided, fall back to creation mode
+  // Safety check: if hasRecipe but no recipe provided, this is an error state
   if (!recipe) {
-    return buildSystemPrompt(null, false)
+    console.error('[OpenAI] VIOLATION: hasRecipe=true but recipe is null. This should not happen.')
+    return buildExplorationPrompt()
   }
 
   const doneStepIds = recipe.steps
@@ -142,10 +343,10 @@ ${jsonFormat}
 Title: ${recipe.title}
 
 Ingredients:
-${recipe.ingredients.filter(i => !i.removed).map(i => `- [${i.id}] ${i.text}`).join('\n')}
+${recipe.ingredients.filter(i => !i.removed).map(i => `- id=${i.id} | ${i.text}`).join('\n')}
 
 Steps:
-${recipe.steps.map(s => `- [${s.id}] (${s.status}) ${s.text}`).join('\n')}
+${recipe.steps.map(s => `- id=${s.id} | status=${s.status} | ${s.text}`).join('\n')}
 
 Current step: ${recipe.currentStepId || 'none'}
 
@@ -196,12 +397,16 @@ NEVER use remove_ingredient in this case.
    - "Give me a new recipe for tacos" → use replace_recipe
    - "Start over" → use replace_recipe
 
+5. CONFIRMATION GATE: If you ask a question to confirm/clarify (e.g. "would you like…", "want me to…", "should I…"), you MUST return patches: [].
+   - If you want to propose specific changes pending confirmation, put them in suggestions instead (same format as photo mode suggestions).
+   - Only apply patches directly when the user's request is unambiguous and requires no clarification.
+
 ## Response Guidelines
 
 - Keep assistant_message short and friendly (1-2 sentences)
 - Only include patches when changes are needed
 - Use an empty patches array [] if no recipe changes are needed
-- Reference ingredient and step IDs exactly as shown above
+- Reference ingredient and step IDs exactly as shown above. IDs are the raw tokens after id= with no punctuation (no brackets, quotes, or extra characters).
 - NEVER output anything except the JSON object${hasImage ? `
 
 ## PHOTO ANALYSIS MODE (ACTIVE)
@@ -225,8 +430,8 @@ CRITICAL: For photo responses, patches MUST be empty. Put all proposed changes i
 Only if user explicitly says "apply" or "do it" should you put patches directly (not from photos).` : ''}`
 }
 
-function buildStricterSystemPrompt(recipe: Recipe | null, hasRecipe: boolean, hasImage: boolean = false): string {
-  return buildSystemPrompt(recipe, hasRecipe, hasImage) + `
+function buildStricterSystemPrompt(recipe: Recipe | null, hasRecipe: boolean, intent: Intent, hasImage: boolean = false): string {
+  return buildSystemPrompt(recipe, hasRecipe, intent, hasImage) + `
 
 ## IMPORTANT: PREVIOUS RESPONSE WAS INVALID
 
@@ -311,6 +516,7 @@ async function callOpenAI(
   userMessage: string,
   recipe: Recipe | null,
   hasRecipe: boolean,
+  intent: Intent,
   isRetry: boolean,
   image?: string,
   contextMessages?: Array<{ role: 'user' | 'assistant'; content: string }>
@@ -323,8 +529,8 @@ async function callOpenAI(
   let completion
   try {
     const systemPrompt = isRetry
-      ? buildStricterSystemPrompt(recipe, hasRecipe, hasImage)
-      : buildSystemPrompt(recipe, hasRecipe, hasImage)
+      ? buildStricterSystemPrompt(recipe, hasRecipe, intent, hasImage)
+      : buildSystemPrompt(recipe, hasRecipe, intent, hasImage)
 
     // Build user message content - text only or multimodal
     let userContent: string | ChatCompletionContentPart[]
@@ -380,7 +586,14 @@ async function callOpenAI(
   // Step 4: Validate with Zod (strict - no extra keys)
   try {
     const validated = LLMResponseSchema.parse(parsed)
-    return validated
+
+    // Step 5: Normalize patch IDs (strip brackets if model included them)
+    const normalizedPatches = normalizePatchIds(validated.patches)
+
+    return {
+      ...validated,
+      patches: normalizedPatches
+    }
   } catch (zodError) {
     logCallFailure('zod_validation', zodError, rawOutput, context)
     throw zodError
@@ -388,27 +601,36 @@ async function callOpenAI(
 }
 
 export async function getChatResponse(request: ChatRequest): Promise<ChatResponse> {
-  const { userMessage, recipe, hasRecipe, image, contextMessages } = request
+  const { userMessage, recipe, hasRecipe, intent, image, contextMessages } = request
 
   const hasImage = Boolean(image)
+
+  // HARD GATE: If no recipe and intent is not commit_to_option, use exploration mode
+  // This is the primary enforcement point for the Exploration → Commit → Cooking state machine
+  if (!hasRecipe && intent !== 'commit_to_option') {
+    console.error(`[OpenAI] Exploration mode: hasRecipe=${hasRecipe}, intent=${intent} - recipe generation blocked`)
+  }
 
   // First attempt
   try {
     console.error('[OpenAI] Starting first attempt...')
-    const response = await callOpenAI(userMessage, recipe, hasRecipe, false, image, contextMessages)
+    const response = await callOpenAI(userMessage, recipe, hasRecipe, intent, false, image, contextMessages)
     console.error('[OpenAI] First attempt succeeded')
 
+    // Apply confirmation guard: if asking for confirmation, move patches to suggestions
+    const guarded = applyConfirmationGuard(response)
+
     // Safety guardrail: photo mode must never mutate recipe directly
-    let patches = response.patches
+    let patches = guarded.patches
     if (hasImage && patches.length > 0) {
       console.error('[OpenAI] WARNING: Model returned patches in photo mode - dropping them')
       patches = []
     }
 
     return {
-      assistant_message: response.assistant_message,
+      assistant_message: guarded.assistant_message,
       patches,
-      suggestions: response.suggestions
+      suggestions: guarded.suggestions
     }
   } catch (firstError) {
     console.error('[OpenAI] First attempt failed, will retry with stricter prompt')
@@ -416,20 +638,23 @@ export async function getChatResponse(request: ChatRequest): Promise<ChatRespons
     // Retry with stricter prompt
     try {
       console.error('[OpenAI] Starting retry attempt...')
-      const response = await callOpenAI(userMessage, recipe, hasRecipe, true, image, contextMessages)
+      const response = await callOpenAI(userMessage, recipe, hasRecipe, intent, true, image, contextMessages)
       console.error('[OpenAI] Retry attempt succeeded')
 
+      // Apply confirmation guard: if asking for confirmation, move patches to suggestions
+      const guarded = applyConfirmationGuard(response)
+
       // Safety guardrail: photo mode must never mutate recipe directly
-      let patches = response.patches
+      let patches = guarded.patches
       if (hasImage && patches.length > 0) {
         console.error('[OpenAI] WARNING: Model returned patches in photo mode (retry) - dropping them')
         patches = []
       }
 
       return {
-        assistant_message: response.assistant_message,
+        assistant_message: guarded.assistant_message,
         patches,
-        suggestions: response.suggestions
+        suggestions: guarded.suggestions
       }
     } catch (retryError) {
       console.error('[OpenAI] Retry attempt also failed - giving up')
