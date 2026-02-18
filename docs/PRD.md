@@ -34,18 +34,53 @@ They are trying to get dinner on the table without friction.
 4. Never lose place or context.
 5. Track progress through steps.
 6. Recover gracefully from mistakes.
+7. Avoid restating known constraints every time.
 
 ---
 
 ## UX Model
 
-Dual-pane, phone-first layout:
+Phone-first, mode-based layout (not a true dual-pane split view).
 
-- Top: **Recipe Canvas** (persistent living document)
-- Bottom: **Chat / Input Pane**
+Sous has three explicit UI modes:
 
-The recipe canvas is the *single source of truth*.  
-Chat never reprints the full recipe.
+1. **Cook Mode (default)**
+2. **Chat Mode**
+3. **Patch Review Mode**
+
+The recipe canvas is always the single source of truth and the primary surface.
+Chat is a temporary interaction mode layered on top of the recipe.
+
+### Cook Mode
+
+- Full recipe canvas visible and scrollable.
+- Bottom composer collapsed ("Ask Sous…" + camera).
+- No chat transcript visible.
+- No scrim.
+
+### Chat Mode
+
+- Chat appears as a bottom sheet overlay.
+- Recipe is dimmed using a scrim (semi-transparent black overlay).
+- Recipe is not interactive while scrim is active.
+- Only chat scrolls; recipe does not scroll in this mode.
+- Chat sheet supports detents (collapsed / medium / large).
+
+The scrim ensures clear hierarchy and prevents dual-surface scroll conflicts.
+
+### Patch Review Mode
+
+Patch Review Mode is a blocking decision state entered when the user taps “Review Changes.”
+
+- Chat sheet collapses.
+- Scrim disappears.
+- Recipe becomes primary surface again.
+- All proposed changes are rendered visually in-place (see Interaction Model).
+- A fixed bottom action bar appears with two equal CTAs:
+  - **Reject**
+  - **Accept Changes**
+
+The user must explicitly choose one.
 
 ---
 
@@ -74,14 +109,71 @@ User speaks naturally:
 
 AI responds with:
 1. A short conversational reply.
-2. Structured patches that mutate the recipe canvas.
+2. A structured `patchSet` (if mutation is appropriate).
 
-The AI never outputs a full recipe in chat.
+The AI must never emit a full recipe once a canvas exists.
 
- ## Interaction Model
+### Patch Lifecycle
 
- The AI never outputs a full recipe in chat.
- 
+When the assistant proposes changes:
+
+1. The response includes a `patchSet`.
+2. The app stores it as `pendingPatchSet`.
+3. The user remains in Chat Mode.
+4. A visible “Review Changes” affordance appears.
+5. Only one `patchSet` may be pending at a time; any new proposal must invalidate or replace the existing pending `patchSet`.
+
+The user must explicitly enter Patch Review Mode.
+
+Only one PatchSet may exist in a pending state at any time. The system must never queue multiple concurrent PatchSets. If a new PatchSet is generated while one is pending review, the existing PatchSet must be marked `expired` or explicitly replaced before the new one becomes active.
+
+### Patch Review Rendering Requirements
+
+Patch Review Mode must render full diff coverage for both Ingredients and Steps.
+
+For each section:
+
+- **Added items** → highlighted as new.
+- **Modified items** → rendered in final proposed state with an “Edited” indicator.
+- **Removed items** → rendered in original position as ghost/struck entries.
+
+The user must see the complete end-state if accepted.
+
+The recipe must not mutate until acceptance.
+
+### Accept / Reject Behavior
+
+**Accept Changes**
+- Apply entire PatchSet atomically.
+- Increment recipe version.
+- Clear highlights.
+- Exit to Cook Mode.
+
+**Reject**
+- Discard entire PatchSet.
+- Clear highlights.
+- Return to Chat Mode.
+
+The rejection must be recorded in session state.
+
+### Hidden Rejection Context
+
+When a PatchSet is accepted or rejected, the decision must be recorded as a `PatchDecision` in session state.
+
+On the next LLM request, the app must include structured metadata:
+
+```ts
+context: {
+  llm?: {
+    lastPatchDecision?: {
+      patchSetId: string
+      decision: "accepted" | "rejected"
+      summary?: PatchSet["summary"]
+    }
+  }
+}
+```
+
 ## Conversation State and Recipe Creation Gate
 
 Sous has two high-level modes:
@@ -131,9 +223,34 @@ Routing rules:
 - If `has_canvas=true` → Patch-based edits + “no past edits” rule
 ---
 
+## Cooking Defaults (User-Declared Invariants)
+
+Sous supports a small set of explicit, persistent user-declared defaults that are applied automatically to recipe creation.
+
+Cooking Defaults are:
+- Explicitly set by the user (never inferred)
+- Persisted across sessions
+- Applied silently to all new recipes
+- Overridable per recipe only by explicit user instruction
+
+### v1 Cooking Defaults
+
+- **Portions** — total number of portions to cook (purely quantitative)
+- **Hard-avoid ingredients or food categories** — must never appear unless explicitly overridden
+
+These defaults are treated as **hard constraints**, not preferences.
+
+### Override semantics
+
+- Overrides apply only to the current recipe unless the user explicitly updates their defaults
+- The assistant must never violate a hard-avoid without asking first
+- Defaults must never retroactively modify completed recipe steps
+
+---
+
 ## MVP Feature Set
 
-- Dual-pane UI
+- Mode-based bottom-sheet UI (Cook / Chat / Patch Review)
 - AI-generated recipe
 - Persistent recipe canvas
 - Checkable steps
@@ -145,6 +262,8 @@ Routing rules:
 - Voice input (optional in v1)
 - Cooking mode (single-step focus)
 - Simple undo
+
+Future versions of Sous may allow users to calibrate response tone and formatting, but such style preferences must never override recipe correctness or state safety.
 
 ---
 
@@ -159,6 +278,7 @@ Out of scope for v1:
 - Multi-canvas workspaces
 - Collaboration with other users
 - Monetization or paywalls
+- Preference inference or long-term taste learning
 
 > Monetization is a future goal (e.g. “Sous Pro”) and may unlock:
 > - Voice-first cooking mode  

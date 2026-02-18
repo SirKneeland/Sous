@@ -53,3 +53,39 @@
 - Given a patch is applied
 - When user taps undo
 - Then the recipe reverts one version
+
+### US-08: Set Cooking Defaults (First Run)
+- Given the user has an account and no Cooking Defaults set
+- When the user opens the app for the first time
+- Then the user is prompted to set:
+  - Default portion count
+  - Hard-avoid ingredients or food categories
+- And the user may skip this step
+- And defaults are persisted if provided
+
+### US-09: Apply Cooking Defaults on Recipe Creation
+- Given the user has Cooking Defaults set
+- When a new recipe canvas is created
+- Then the recipe is scaled to the default portion count
+- And hard-avoid ingredients do not appear
+- And the assistant does not explicitly mention applying defaults
+
+### US-10: Override Cooking Defaults for One Recipe
+- Given the user has Cooking Defaults set
+- When the user explicitly requests a conflicting change (e.g. "make it for 6", "fish is fine tonight")
+- Then the assistant asks for confirmation if required
+- And applies the override only to the current recipe
+- And does not update the user’s stored defaults
+
+### US-11: Update Cooking Defaults
+- Given the user has Cooking Defaults set
+- When the user explicitly asks to update their defaults (e.g. "update my defaults to 2 portions")
+- Then the stored Cooking Defaults are updated
+- And future recipes use the new defaults
+- And the current recipe is not retroactively modified
+
+### US-12: Ask Before Proposing Changes
+- Given a recipe canvas exists
+- When the user asks an exploratory or ambiguous question (e.g. "should I add more garlic?")
+- Then the assistant asks a clarifying question
+- And does not propose any recipe patches yet

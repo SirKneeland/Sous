@@ -12,3 +12,24 @@ dist/
 
 # Claude local config
 .claude/settings.local.json
+
+
+# =========================
+# iOS / Swift
+# =========================
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Xcode
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcworkspace
+
+# Simulator
+*.simruntime
+
+# Claude
+.claude/
