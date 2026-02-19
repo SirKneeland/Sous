@@ -135,6 +135,48 @@ struct PatchApplierTests {
         #expect(step?.text == "Mix all ingredients thoroughly")
     }
 
+    // MARK: - removeStep
+
+    @Test("removeStep deletes a todo step from the list")
+    func removeStep() throws {
+        let recipe = SeedRecipes.sample()
+        let patchSet = PatchSet(
+            baseRecipeId: recipe.id,
+            baseRecipeVersion: 1,
+            patches: [.removeStep(id: SeedRecipes.stepMixId)]
+        )
+        let updated = try PatchApplier.apply(patchSet: patchSet, to: recipe)
+        #expect(updated.steps.count == 2)
+        #expect(!updated.steps.contains { $0.id == SeedRecipes.stepMixId })
+    }
+
+    @Test("removeStep with unknown ID throws")
+    func removeStepUnknownIdThrows() {
+        let recipe = SeedRecipes.sample()
+        let badId = UUID()
+        let patchSet = PatchSet(
+            baseRecipeId: recipe.id,
+            baseRecipeVersion: 1,
+            patches: [.removeStep(id: badId)]
+        )
+        #expect(throws: PatchApplierError.self) {
+            try PatchApplier.apply(patchSet: patchSet, to: recipe)
+        }
+    }
+
+    @Test("removeStep on done step throws")
+    func removeStepDoneThrows() {
+        let recipe = SeedRecipes.sample()
+        let patchSet = PatchSet(
+            baseRecipeId: recipe.id,
+            baseRecipeVersion: 1,
+            patches: [.removeStep(id: SeedRecipes.stepDoneId)]
+        )
+        #expect(throws: PatchApplierError.self) {
+            try PatchApplier.apply(patchSet: patchSet, to: recipe)
+        }
+    }
+
     // MARK: - addNote
 
     @Test("addNote appends to notes array")

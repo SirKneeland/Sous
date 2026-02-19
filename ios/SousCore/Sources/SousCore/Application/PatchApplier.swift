@@ -52,6 +52,9 @@ public enum PatchApplier {
                     throw PatchApplierError.validationFailed([.invalidStepId(id)])
                 }
                 steps[idx].text = text
+                
+            case .removeStep(let id):
+                steps.removeAll { $0.id == id }
 
             case .addNote(let text):
                 notes.append(text)

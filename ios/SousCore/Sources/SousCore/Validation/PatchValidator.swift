@@ -50,6 +50,7 @@ public enum PatchValidator {
 
         // Track IDs that will be removed mid-set to catch internal conflicts
         var removedIngredientIds: Set<UUID> = []
+        var removedStepIds: Set<UUID> = []
 
         for patch in patchSet.patches {
             switch patch {
@@ -80,19 +81,38 @@ public enum PatchValidator {
 
             case .addStep(_, let afterStepId):
                 if let afterStepId = afterStepId {
-                    if !recipe.steps.contains(where: { $0.id == afterStepId }) {
+                    let existsInRecipe = recipe.steps.contains { $0.id == afterStepId }
+                    let alreadyRemoved = removedStepIds.contains(afterStepId)
+                    if !existsInRecipe || alreadyRemoved {
                         errors.append(.invalidStepId(afterStepId))
                     }
                 }
 
             case .updateStep(let id, _):
-                guard let step = recipe.steps.first(where: { $0.id == id }) else {
+                let alreadyRemoved = removedStepIds.contains(id)
+                guard let step = recipe.steps.first(where: { $0.id == id }), !alreadyRemoved else {
                     errors.append(.invalidStepId(id))
                     break
                 }
                 if step.status == .done {
                     errors.append(.stepDoneImmutable(id))
                 }
+                
+            case .removeStep(let id):
+                let existsInRecipe = recipe.steps.contains { $0.id == id }
+                let alreadyRemoved = removedStepIds.contains(id)
+                if !existsInRecipe || alreadyRemoved {
+                    errors.append(.invalidStepId(id))
+                    break
+                }
+
+                // done steps are immutable
+                if let step = recipe.steps.first(where: { $0.id == id }), step.status == .done {
+                    errors.append(.stepDoneImmutable(id))
+                    break
+                }
+
+                removedStepIds.insert(id)
 
             case .addNote:
                 break

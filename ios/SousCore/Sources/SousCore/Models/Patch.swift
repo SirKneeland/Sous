@@ -6,5 +6,6 @@ public enum Patch: Equatable, Sendable {
     case removeIngredient(id: UUID)
     case addStep(text: String, afterStepId: UUID?)
     case updateStep(id: UUID, text: String)
+    case removeStep(id: UUID)
     case addNote(text: String)
 }

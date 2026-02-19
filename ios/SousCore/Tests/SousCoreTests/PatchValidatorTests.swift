@@ -159,6 +159,59 @@ struct PatchValidatorTests {
         #expect(errors.contains(.stepDoneImmutable(SeedRecipes.stepDoneId)))
     }
 
+    // MARK: - removeStep validation
+
+    @Test("Rejects removeStep with unknown ID")
+    func invalidStepIdOnRemove() {
+        let recipe = SeedRecipes.sample()
+        let badId = UUID()
+        let patchSet = PatchSet(
+            baseRecipeId: recipe.id,
+            baseRecipeVersion: 1,
+            patches: [.removeStep(id: badId)]
+        )
+        let result = PatchValidator.validate(patchSet: patchSet, recipe: recipe)
+        #expect(result == .invalid([.invalidStepId(badId)]))
+    }
+
+    @Test("Rejects removeStep on a done step")
+    func removeStepDoneImmutable() {
+        let recipe = SeedRecipes.sample()
+        let patchSet = PatchSet(
+            baseRecipeId: recipe.id,
+            baseRecipeVersion: 1,
+            patches: [.removeStep(id: SeedRecipes.stepDoneId)]
+        )
+        let result = PatchValidator.validate(patchSet: patchSet, recipe: recipe)
+        #expect(result == .invalid([.stepDoneImmutable(SeedRecipes.stepDoneId)]))
+    }
+
+    @Test("Accepts removeStep on a todo step")
+    func removeStepTodoValid() {
+        let recipe = SeedRecipes.sample()
+        let patchSet = PatchSet(
+            baseRecipeId: recipe.id,
+            baseRecipeVersion: 1,
+            patches: [.removeStep(id: SeedRecipes.stepMixId)]
+        )
+        #expect(PatchValidator.validate(patchSet: patchSet, recipe: recipe) == .valid)
+    }
+
+    @Test("Detects internal conflict: update after removeStep in same patchSet")
+    func internalConflictRemoveStepThenUpdate() {
+        let recipe = SeedRecipes.sample()
+        let patchSet = PatchSet(
+            baseRecipeId: recipe.id,
+            baseRecipeVersion: 1,
+            patches: [
+                .removeStep(id: SeedRecipes.stepMixId),
+                .updateStep(id: SeedRecipes.stepMixId, text: "Should fail"),
+            ]
+        )
+        let result = PatchValidator.validate(patchSet: patchSet, recipe: recipe)
+        #expect(result != .valid)
+    }
+
     // MARK: - Internal conflict (remove then use)
 
     @Test("Detects internal conflict: update after remove in same patchSet")

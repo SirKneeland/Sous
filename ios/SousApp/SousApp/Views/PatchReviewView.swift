@@ -64,6 +64,7 @@ struct PatchReviewView: View {
         case .removeIngredient:              return "Remove ingredient"
         case .addStep(let text, _):          return "Add step: \(text)"
         case .updateStep(_, let text):       return "Update step: \(text)"
+        case .removeStep:                    return "Remove step"
         case .addNote(let text):             return "Add note: \(text)"
         }
     }

@@ -1,0 +1,123 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2867
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fnil\fcharset0 Menlo-Regular;\f1\fnil\fcharset0 .SFNS-Regular;}
+{\colortbl;\red255\green255\blue255;\red193\green193\blue193;\red24\green24\blue24;\red194\green126\blue101;
+\red238\green46\blue56;\red14\green14\blue14;}
+{\*\expandedcolortbl;;\cssrgb\c80000\c80000\c80000;\cssrgb\c12157\c12157\c12157;\cssrgb\c80784\c56863\c47059;
+\cssrgb\c95686\c27843\c27843;\cssrgb\c6700\c6700\c6700;}
+\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\deftab720
+\pard\pardeftab720\partightenfactor0
+
+\f0\fs24 \cf2 \cb3 \expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 ---\cb1 \
+\
+\pard\pardeftab720\partightenfactor0
+\cf4 \cb3 \strokec4 You are working in the Sous repository.\cf2 \cb1 \strokec2 \
+\
+\cf4 \cb3 \strokec4 Sous is a phone-first cooking app built around a **Living Recipe Canvas** with AI-assisted structured edits.\cf2 \cb1 \strokec2 \
+\
+\cf4 \cb3 \strokec4 The recipe is the single source of truth.\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4 Chat is a temporary interaction surface layered on top.\cf2 \cb1 \strokec2 \
+\
+\cf4 \cb3 \strokec4 Non-negotiable core principles\cf5 \strokec5 :\cf2 \cb1 \strokec2 \
+\
+\cf4 \cb3 \strokec4 1. The recipe is a persistent structured canvas.\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4 2. Once a canvas exists, the assistant must never emit a full recipe in chat.\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4 3. The assistant proposes recipe mutations only via a structured `patchSet`.\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4 4. No recipe mutation may occur without explicit user acceptance.\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4 5. Completed (`done`) steps are immutable.\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4 6. Only one pending `patchSet` may exist at a time.\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4 7. Patch accept/reject decisions must be recorded and included as hidden context in the next LLM request.\cf2 \cb1 \strokec2 \
+\
+\cf4 \cb3 \strokec4 Read these docs before making changes\cf5 \strokec5 :\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4 - docs/PRD.md\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4 - docs/UserStories.md\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4 - docs/StateModel.md\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4 - docs/PatchingRules.md\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4 - docs/Milestones.md\cf2 \cb1 \strokec2 \
+\
+\cf4 \cb3 \strokec4 Architecture constraints\cf5 \strokec5 :\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4 - Treat `SousCore` (or equivalent core module) as the canonical authority for state rules.\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4 - Keep state logic separate from UI (core module must not depend on UI frameworks).\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4 - Recipe state must be versioned.\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4 - PatchSets must target a specific `recipeVersion`.\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4 - Validation must reject\cf5 \strokec5 :\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4   - Version mismatches\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4   - Invalid IDs\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4   - Any attempt to modify a `done` step\cf2 \cb1 \strokec2 \
+\
+\cf4 \cb3 \strokec4 Testing requirements\cf5 \strokec5 :\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4 - Prefer test-first development for core state/patch logic.\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4 - Maintain comprehensive unit tests for\cf5 \strokec5 :\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4   - Patch validation\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4   - Atomic patch application (all-or-nothing)\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4   - Immutability of `done` steps\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4   - Version mismatch rejection\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4   - Invalid ID rejection\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4   - Single pending `patchSet` invariant\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4 - Use `xcodebuild test` (or the repo\'92s test runner) to run tests.\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4 - Do not consider work complete until tests pass.\cf2 \cb1 \strokec2 \
+\
+\cf4 \cb3 \strokec4 Output requirements for every task\cf5 \strokec5 :\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4 1. Before coding\cf5 \strokec5 :\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4    - List the exact files you will create or modify.\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4 2. After coding\cf5 \strokec5 :\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4    - Provide a manual test checklist proving the acceptance criteria.\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4    - Provide the exact test command(s) to verify correctness.\cf2 \cb1 \strokec2 \
+\
+\cf4 \cb3 \strokec4 Never\cf5 \strokec5 :\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4 - Rewrite the entire recipe once a canvas exists.\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4 - Mutate recipe state outside `patchSet` application.\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4 - Apply patches silently.\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4 - Introduce hidden state mutations.\cf2 \cb1 \strokec2 \
+\cf4 \cb3 \strokec4 - Implement future milestones prematurely without an explicit request.\cf2 \cb1 \strokec2 \
+\
+\cf4 \cb3 \strokec4 You are building deterministic state machinery first. The UI is a thin projection layer.\cf2 \cb1 \strokec2 \
+\
+\pard\pardeftab720\partightenfactor0
+\cf2 \cb3 ---\cb1 \
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f1\fs26 \cf6 Read and strictly follow CLAUDE.md.\
+\
+Task: Improve ChatSheet UI polish and add dummy chat content. No LLM/networking yet.\
+\
+Constraints:\
+- Do NOT change SousCore.\
+- Do NOT change UIStateMachine logic (only UI + store/local dummy chat state).\
+- Keep changes minimal and reversible.\
+- All code under ios/SousApp/**\
+\
+Requirements:\
+\
+1) Add a simple in-memory chat transcript model in the app layer (not SousCore).\
+- Define ChatMessage \{ id, role: user|assistant|system, text, timestamp \}\
+- Store it in AppStore (or a small ChatStore owned by AppStore).\
+- On app launch, seed 2-3 dummy assistant/system messages so chat isn\'92t blank.\
+\
+2) ChatSheetView layout:\
+- Top bar: title \'93Chat\'94 + Close button (as now).\
+- Main area: ScrollView with chat bubbles (simple left/right alignment).\
+- Bottom composer: compact TextEditor (1\'963 lines) + Send button.\
+- Send button:\
+  - appends user message to transcript\
+  - clears composer\
+  - appends a canned assistant reply like: \'93Got it. I can propose edits \'97 use Debug to simulate a patch for now.\'94\
+  - (No patch generated automatically yet.)\
+\
+3) Debug area:\
+- Collapse debug controls under a DisclosureGroup titled \'93Debug\'94.\
+- Buttons remain:\
+  - Simulate Receive Valid Patch\
+  - Simulate Receive Invalid Patch\
+- Use nicer button styles (bordered, smaller).\
+\
+4) UX details:\
+- Auto-scroll to newest message when transcript updates.\
+- Keyboard-safe bottom padding.\
+- Keep scrim + sheet behavior unchanged.\
+\
+Output:\
+- Short plan + files to modify\
+- STOP and wait for \'93Proceed\'94}
