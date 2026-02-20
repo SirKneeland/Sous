@@ -100,7 +100,16 @@ final class AppStore: ObservableObject {
         let patchSet = PatchSet(
             baseRecipeId: recipe.id,
             baseRecipeVersion: recipe.version,
-            patches: [.addNote(text: "Add a pinch of yeast for better rise")]
+            patches: [
+                .addIngredient(text: "1 tsp yeast", afterId: Self.ingredientFlourId),
+                .updateIngredient(id: Self.ingredientSaltId, text: "2 tsp salt"),
+                .removeIngredient(id: Self.ingredientWaterId),
+
+                .addStep(text: "Knead dough for 5 minutes", afterStepId: Self.stepMixId),
+                .updateStep(id: Self.stepBakeId, text: "Bake at 350°F for 30 min"),
+
+                .addNote(text: "From UI"),
+            ]
         )
         send(.patchReceived(patchSet))
     }

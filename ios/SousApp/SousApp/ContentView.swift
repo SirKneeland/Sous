@@ -26,8 +26,8 @@ struct ContentView: View {
     @ViewBuilder
     private var sheetContent: some View {
         switch store.uiState {
-        case .patchReview(_, let patchSet, let validation, _):
-            PatchReviewView(patchSet: patchSet, validation: validation, store: store)
+        case .patchReview(let recipe, let patchSet, let validation, _):
+            PatchReviewView(recipe: recipe, patchSet: patchSet, validation: validation, store: store)
         default:
             ChatSheetView(store: store)
         }
