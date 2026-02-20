@@ -6,30 +6,25 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            RecipeCanvasView(recipe: store.uiState.recipe, onOpenChat: { store.send(.openChat) })
+            if case .patchReview(let recipe, let patchSet, let validation, _) = store.uiState {
+                PatchReviewView(recipe: recipe, patchSet: patchSet, validation: validation, store: store)
+            } else {
+                RecipeCanvasView(recipe: store.uiState.recipe, onOpenChat: { store.send(.openChat) })
+            }
 
-            if store.uiState.isSheetPresented {
+            if store.uiState.isSheetPresented && !store.uiState.isPatchReview {
                 Color.black.opacity(0.4).ignoresSafeArea()
+                    .transition(.opacity)
             }
         }
         .sheet(isPresented: Binding(
-            get: { store.uiState.isSheetPresented },
+            get: { store.uiState.isSheetPresented && !store.uiState.isPatchReview },
             set: { isPresented in
                 if !isPresented { store.send(.closeChat) }
             }
         )) {
-            sheetContent
-                .interactiveDismissDisabled(store.uiState.isPatchProposed || store.uiState.isPatchReview)
-        }
-    }
-
-    @ViewBuilder
-    private var sheetContent: some View {
-        switch store.uiState {
-        case .patchReview(let recipe, let patchSet, let validation, _):
-            PatchReviewView(recipe: recipe, patchSet: patchSet, validation: validation, store: store)
-        default:
             ChatSheetView(store: store)
+                .interactiveDismissDisabled(store.uiState.isPatchProposed)
         }
     }
 }

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import SousCore
 
 struct PatchReviewView: View {
@@ -70,7 +71,10 @@ DisclosureGroup("Debug") {
                 Spacer()
 
                 Button("Accept") {
-                    store.send(.acceptPatch)
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        store.send(.acceptPatch)
+                    }
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(!isValid)
