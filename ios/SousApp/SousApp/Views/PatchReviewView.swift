@@ -112,7 +112,7 @@ DisclosureGroup("Debug") {
                     .foregroundStyle(.gray)
                     .font(.body)
                 Text(newText)
-                    .foregroundStyle(.green)
+                    .foregroundStyle(.blue)
                     .font(.body)
             }
 
