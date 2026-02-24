@@ -38,14 +38,15 @@ final class AppStore: ObservableObject {
     @Published var chatTranscript: [ChatMessage] = []
 
     private let maxMessages = 200
+    private let proposer: any PatchProposer = MockPatchProposer()
 
-    private static let recipeId          = UUID(uuidString: "00000000-0000-0000-FFFF-000000000001")!
-    private static let ingredientFlourId = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
-    private static let ingredientSaltId  = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
-    private static let ingredientWaterId = UUID(uuidString: "00000000-0000-0000-0000-000000000003")!
-    private static let stepMixId         = UUID(uuidString: "00000000-0000-0000-0001-000000000001")!
-    private static let stepBakeId        = UUID(uuidString: "00000000-0000-0000-0001-000000000002")!
-    private static let stepDoneId        = UUID(uuidString: "00000000-0000-0000-0001-000000000003")!
+    static let recipeId          = UUID(uuidString: "00000000-0000-0000-FFFF-000000000001")!
+    static let ingredientFlourId = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+    static let ingredientSaltId  = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
+    static let ingredientWaterId = UUID(uuidString: "00000000-0000-0000-0000-000000000003")!
+    static let stepMixId         = UUID(uuidString: "00000000-0000-0000-0001-000000000001")!
+    static let stepBakeId        = UUID(uuidString: "00000000-0000-0000-0001-000000000002")!
+    static let stepDoneId        = UUID(uuidString: "00000000-0000-0000-0001-000000000003")!
 
     init() {
         let recipe = Recipe(
@@ -79,7 +80,9 @@ final class AppStore: ObservableObject {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         append(ChatMessage(role: .user, text: trimmed))
-        append(ChatMessage(role: .assistant, text: "Got it. I can propose edits — use Debug to simulate a patch for now."))
+        let patchSet = proposer.propose(userText: trimmed, recipe: uiState.recipe)
+        send(.patchReceived(patchSet))
+        append(ChatMessage(role: .assistant, text: "Proposed changes are ready — review them on the recipe."))
     }
 
     private func append(_ message: ChatMessage) {
