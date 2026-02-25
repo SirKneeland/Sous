@@ -9,7 +9,7 @@ struct ContentView: View {
             if case .patchReview(let recipe, let patchSet, let validation, _) = store.uiState {
                 PatchReviewView(recipe: recipe, patchSet: patchSet, validation: validation, store: store)
             } else {
-                RecipeCanvasView(recipe: store.uiState.recipe, onOpenChat: { store.send(.openChat) })
+                RecipeCanvasView(recipe: store.uiState.recipe, onOpenChat: { store.send(.openChat) }, llmDebugStatus: store.llmDebugStatus)
             }
 
             if store.uiState.isSheetPresented && !store.uiState.isPatchReview {

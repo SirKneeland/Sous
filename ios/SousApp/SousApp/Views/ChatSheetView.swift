@@ -82,6 +82,19 @@ struct ChatSheetView: View {
                         .font(.caption)
                 }
                 .padding(.top, 4)
+#if DEBUG
+                if let status = store.llmDebugStatus {
+                    Text(status)
+                        .font(.footnote)
+                        .foregroundStyle(
+                            status.contains("missing") || status.contains("failed")
+                                ? Color.red
+                                : Color.secondary
+                        )
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 4)
+                }
+#endif
             }
             .font(.caption)
             .foregroundStyle(.secondary)

@@ -4,6 +4,7 @@ import SousCore
 struct RecipeCanvasView: View {
     let recipe: Recipe
     let onOpenChat: () -> Void
+    var llmDebugStatus: String? = nil
 
     var body: some View {
         ScrollView {
@@ -50,6 +51,18 @@ struct RecipeCanvasView: View {
                 .padding(.top, 8)
             }
             .padding()
+        }
+        .safeAreaInset(edge: .bottom) {
+#if DEBUG
+            if let status = llmDebugStatus {
+                Text(status)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal)
+                    .padding(.bottom, 6)
+            }
+#endif
         }
     }
 }

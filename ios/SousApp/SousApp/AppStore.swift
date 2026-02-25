@@ -36,9 +36,13 @@ extension UIState {
 final class AppStore: ObservableObject {
     @Published var uiState: UIState
     @Published var chatTranscript: [ChatMessage] = []
+    @Published var llmDebugStatus: String? = nil
+
+    var useLiveLLM = true
 
     private let maxMessages = 200
     private let proposer: any PatchProposer = MockPatchProposer()
+    private let llmProposer = LLMPatchProposer()
 
     static let recipeId          = UUID(uuidString: "00000000-0000-0000-FFFF-000000000001")!
     static let ingredientFlourId = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
@@ -80,9 +84,29 @@ final class AppStore: ObservableObject {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         append(ChatMessage(role: .user, text: trimmed))
-        let patchSet = proposer.propose(userText: trimmed, recipe: uiState.recipe)
-        send(.patchReceived(patchSet))
-        append(ChatMessage(role: .assistant, text: "Proposed changes are ready — review them on the recipe."))
+        if useLiveLLM {
+            Task { await sendWithLLM(trimmed) }
+        } else {
+            let patchSet = proposer.propose(userText: trimmed, recipe: uiState.recipe)
+            send(.patchReceived(patchSet))
+            append(ChatMessage(role: .assistant, text: "Proposed changes are ready — review them on the recipe."))
+        }
+    }
+
+    private func sendWithLLM(_ userText: String) async {
+        llmDebugStatus = nil
+        let recipe = uiState.recipe
+        let result = await llmProposer.propose(
+            userText: userText,
+            recipe: recipe,
+            onStatus: { [weak self] status in self?.llmDebugStatus = status }
+        )
+        if let patchSet = result {
+            send(.patchReceived(patchSet))
+            append(ChatMessage(role: .assistant, text: "Proposed changes are ready — review them on the recipe."))
+        } else {
+            append(ChatMessage(role: .assistant, text: "I couldn't safely apply those changes. Can you clarify what you'd like modified?"))
+        }
     }
 
     private func append(_ message: ChatMessage) {
