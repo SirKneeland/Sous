@@ -35,17 +35,22 @@ public enum LLMResponseFormat: Equatable, Sendable {
 public struct LLMClientRequest: Sendable {
     /// Caller-supplied correlation ID. If nil, the client generates one.
     public let requestId: String?
+    /// Model identifier forwarded verbatim to the API (e.g. "gpt-4o-mini", "gpt-4o").
+    /// Set by the caller (orchestrator or bootstrap); the client never hard-codes a default.
+    public let model: String
     public let messages: [LLMMessage]
     public let responseFormat: LLMResponseFormat
     public let timeout: TimeInterval
 
     public init(
         requestId: String? = nil,
+        model: String,
         messages: [LLMMessage],
         responseFormat: LLMResponseFormat,
         timeout: TimeInterval
     ) {
         self.requestId = requestId
+        self.model = model
         self.messages = messages
         self.responseFormat = responseFormat
         self.timeout = timeout
