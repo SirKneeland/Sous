@@ -1,0 +1,83 @@
+import Foundation
+
+// MARK: - LLMUserPrefs
+
+/// Value-type snapshot of the user preferences the LLM prompt needs.
+/// Minimal: only fields actually used in prompt construction today.
+/// The adapter that reads Foundation.UserDefaults → LLMUserPrefs lives at call-site in SousApp.
+public struct LLMUserPrefs: Equatable, Sendable {
+    /// Hard dietary constraints. The LLM must never propose patches that introduce these.
+    public let hardAvoids: [String]
+
+    public init(hardAvoids: [String]) {
+        self.hardAvoids = hardAvoids
+    }
+}
+
+// MARK: - PatchDecision
+
+/// Records the user's explicit decision on a PatchSet, carried forward as LLM context.
+public struct PatchDecision: Equatable, Sendable {
+    public enum Decision: String, Equatable, Sendable {
+        case accepted
+        case rejected
+    }
+
+    public let patchSetId: String
+    public let decision: Decision
+    public let decidedAtMs: Int
+
+    public init(patchSetId: String, decision: Decision, decidedAtMs: Int) {
+        self.patchSetId = patchSetId
+        self.decision = decision
+        self.decidedAtMs = decidedAtMs
+    }
+}
+
+// MARK: - NextLLMContext
+
+/// One-shot context attached to the next LLM request, then cleared.
+/// Prevents the model from re-proposing a rejected plan.
+public struct NextLLMContext: Equatable, Sendable {
+    public let lastPatchDecision: PatchDecision?
+
+    public init(lastPatchDecision: PatchDecision?) {
+        self.lastPatchDecision = lastPatchDecision
+    }
+}
+
+// MARK: - LLMRequest
+
+/// Immutable inputs passed to LLMClient / LLMOrchestrator.
+/// Plain Sendable — all stored properties are value types. Recipe is Sendable.
+public struct LLMRequest: Sendable {
+    /// Explicit recipe ID, even though Recipe carries it, to make the boundary unambiguous.
+    public let recipeId: String
+    public let recipeVersion: Int
+    /// True when a recipe canvas already exists in the session.
+    public let hasCanvas: Bool
+    public let userMessage: String
+    /// Full recipe snapshot for prompt construction. Treated as read-only by the LLM layer.
+    public let recipeSnapshotForPrompt: Recipe
+    public let userPrefs: LLMUserPrefs
+    /// Included exactly once with this request, then cleared by the caller.
+    public let nextLLMContext: NextLLMContext?
+
+    public init(
+        recipeId: String,
+        recipeVersion: Int,
+        hasCanvas: Bool,
+        userMessage: String,
+        recipeSnapshotForPrompt: Recipe,
+        userPrefs: LLMUserPrefs,
+        nextLLMContext: NextLLMContext? = nil
+    ) {
+        self.recipeId = recipeId
+        self.recipeVersion = recipeVersion
+        self.hasCanvas = hasCanvas
+        self.userMessage = userMessage
+        self.recipeSnapshotForPrompt = recipeSnapshotForPrompt
+        self.userPrefs = userPrefs
+        self.nextLLMContext = nextLLMContext
+    }
+}

@@ -1,0 +1,120 @@
+import Foundation
+
+// MARK: - LLMDebugStatus
+
+public enum LLMDebugStatus: String, Equatable, Sendable {
+    case idle
+    case calling
+    case repairing
+    case retrying
+    case succeeded
+    case failed
+}
+
+// MARK: - LLMDebugBundle
+
+/// Diagnostic bundle attached to every LLMResult for surfacing debug info in chat.
+/// Not shown to the user in production; drives the debug status indicator in DEBUG builds.
+public struct LLMDebugBundle: Equatable, Sendable {
+    public let status: LLMDebugStatus
+    public let attemptCount: Int
+    public let maxAttempts: Int
+    public let requestId: String
+    public let extractionUsed: Bool
+    public let repairUsed: Bool
+    public let timingTotalMs: Int
+    public let timingNetworkMs: Int?
+    public let timingDecodeMs: Int?
+    public let timingValidateMs: Int?
+    /// Coarse error category matching LLMError buckets; nil on success.
+    public let lastErrorCategory: LLMError?
+    /// Unknown JSON keys seen during decode, if any.
+    public let unknownKeysSeen: [String]?
+
+    public init(
+        status: LLMDebugStatus,
+        attemptCount: Int,
+        maxAttempts: Int,
+        requestId: String,
+        extractionUsed: Bool,
+        repairUsed: Bool,
+        timingTotalMs: Int,
+        timingNetworkMs: Int? = nil,
+        timingDecodeMs: Int? = nil,
+        timingValidateMs: Int? = nil,
+        lastErrorCategory: LLMError? = nil,
+        unknownKeysSeen: [String]? = nil
+    ) {
+        self.status = status
+        self.attemptCount = attemptCount
+        self.maxAttempts = maxAttempts
+        self.requestId = requestId
+        self.extractionUsed = extractionUsed
+        self.repairUsed = repairUsed
+        self.timingTotalMs = timingTotalMs
+        self.timingNetworkMs = timingNetworkMs
+        self.timingDecodeMs = timingDecodeMs
+        self.timingValidateMs = timingValidateMs
+        self.lastErrorCategory = lastErrorCategory
+        self.unknownKeysSeen = unknownKeysSeen
+    }
+}
+
+// MARK: - LLMError
+
+public enum LLMError: Error, Equatable, Sendable {
+    /// No API key found in the environment.
+    case missingAPIKey
+    /// Network-level failure (no response received).
+    case network
+    /// Request exceeded the timeout threshold.
+    case timeout
+    /// Request was cancelled by the caller.
+    case cancelled
+    /// Response body was not JSON at all.
+    case decodeNonJSON
+    /// Response was JSON but did not match the expected schema shape.
+    case decodeInvalidJSON
+    /// Schema shape matched but required fields were missing or wrong type.
+    case schemaInvalid
+    /// PatchSet failed validation but the error is repairable (retry allowed).
+    case validationRecoverable
+    /// PatchSet targets a stale recipe version; must be discarded and regenerated.
+    case validationExpired
+    /// PatchSet failed validation fatally (e.g. attempted to mutate a done step).
+    case validationFatal
+    /// The patchSet.baseRecipeId does not match the current recipe ID; reject immediately.
+    case recipeIdMismatchFatal
+}
+
+// MARK: - LLMResult
+
+/// Structured result returned by LLMOrchestrator.
+/// By construction, at most one PatchSet is ever present across all cases,
+/// enforcing the "only one pending PatchSet" invariant at the type level.
+public enum LLMResult: Sendable {
+    /// The LLM returned a valid, validated PatchSet ready for user review.
+    case valid(
+        patchSet: PatchSet,
+        assistantMessage: String,
+        raw: LLMRawResponse?,
+        debug: LLMDebugBundle
+    )
+
+    /// The LLM responded conversationally with no patch proposal.
+    case noPatches(
+        assistantMessage: String,
+        raw: LLMRawResponse?,
+        debug: LLMDebugBundle
+    )
+
+    /// All attempts failed. A fallback PatchSet may be present for DEBUG surfacing only;
+    /// callers must not enter patch review with a failure result.
+    case failure(
+        fallbackPatchSet: PatchSet?,
+        assistantMessage: String,
+        raw: LLMRawResponse?,
+        debug: LLMDebugBundle,
+        error: LLMError
+    )
+}
