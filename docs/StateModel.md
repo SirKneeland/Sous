@@ -18,11 +18,11 @@ Sous maintains multiple layers of state. These layers have different responsibil
    - Must never retroactively mutate Recipe State.
    - Can be overridden per recipe only by explicit user instruction.
 
-3. **Proposed Change State (ephemeral)**
+3. **Proposed PatchSet State (ephemeral)**
    - AI-suggested changes that have not yet been approved by the user.
    - Represents intent (what the AI proposes), not fact (what the recipe is).
-   - Applying proposed changes mutates Recipe State; rejecting them leaves Recipe State unchanged.
-   - Proposed changes may reference User Defaults when generating patches, but approving a ChangeSet must never mutate User Defaults unless explicitly requested.
+   - Applying a validated PatchSet mutates Recipe State; rejecting it leaves Recipe State unchanged.
+   - Proposed PatchSets may reference User Defaults when generating patches, but approving a PatchSet must never mutate User Defaults unless explicitly requested.
 
 4. **Session/UI State (ephemeral)**
    - Chat messages and interaction context.
@@ -73,11 +73,9 @@ Rules:
 - UserDefaults must never alter completed recipe steps.
 - Violations of hardAvoids require explicit user confirmation.
 
-## Proposed Change State
+## Proposed PatchSet State
 
-Proposed changes are tracked separately from the recipe so the user can explicitly approve or reject them.
-
-A ChangeSet (now referred to as a PatchSet in the native app) represents a single, atomic batch of AI-proposed edits.
+A PatchSet represents a single, atomic batch of AI-proposed edits. It is intent-only until explicitly accepted by the user.
 
 ```ts
 type PatchSetStatus =
@@ -116,6 +114,7 @@ PatchSet {
   // Optional full snapshot to correctly render removed elements
   baseRecipeSnapshot?: Recipe
 
+  // Validation result produced by client-side deterministic validator
   validation: {
     isValid: boolean
     errors?: string[]
@@ -135,18 +134,19 @@ It may be persisted locally to survive reloads, but Recipe State remains the aut
 ```ts
 SessionState {
   recipe: Recipe
-  recipeVersion: number
+  // Recipe.version is the single authoritative version source (do not duplicate it elsewhere).
 
   chatMessages: ChatMessage[]
 
   // At most one active PatchSet may be pending review at a time.
   pendingPatchSet: PatchSet | null
 
-  // Historical record of user decisions on patch sets (bounded list).
+  // Historical record of user decisions on patch sets (bounded list, e.g. last 10).
   patchHistory: PatchDecision[]
 
   // Hidden context to attach to the next LLM request.
   nextLLMContext?: {
+    // Included exactly once with the next LLM request, then cleared.
     lastPatchDecision?: PatchDecision
   }
 
@@ -175,3 +175,14 @@ PatchDecision {
   summary?: PatchSet["summary"]
 }
 ```
+
+---
+
+## Determinism Rules
+
+- Recipe State is mutated only by applying a validated PatchSet after explicit user acceptance.
+- PatchSet application is atomic: fully applied or fully rejected.
+- Rejecting a PatchSet leaves Recipe State unchanged.
+- Completed steps (`status === "done"`) are immutable.
+- nextLLMContext is included in exactly one subsequent LLM request and must then be cleared.
+- Session/UI State must never be treated as authoritative for recipe data.
