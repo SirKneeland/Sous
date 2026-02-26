@@ -74,7 +74,7 @@ Core capabilities:
 ---
 
 ## Milestone 5 — Native iOS Migration: App Skeleton + Sous Core  
-**Status:** CURRENT
+**Status:** DONE
 
 **Goal:** Start the native iOS app with a rock-solid core state model (recipe canvas + patch rules) so we can build a zero-jank UX without changing Sous’s behavioral contract.
 
@@ -123,15 +123,14 @@ Explicit non-goals:
 ---
 
 ## Milestone 7 — Native iOS Migration: Patch Review + User Control  
-**Status:** PLANNED
+**Status:** CURRENT
 
 **Goal:** Preserve Sous’s defining interaction model in native: AI proposes changes; user approves or rejects; the recipe canvas updates safely.
 
 Core capabilities:
-- “Proposed changes” UI for patch sets
+- “Proposed changes” UI integrated directly into the recipe canvas (no separate review sheet)
 - Apply / Reject at the patch-set level
-- Visual highlighting of proposed changes in the recipe canvas
-- Undo support for applied patch sets (bounded)
+- Visual highlighting of proposed changes in the recipe canvas (add/update/remove styling)
 - Guardrails:
   - No rewriting completed steps
   - No silent patch application
@@ -158,6 +157,7 @@ Core capabilities:
 - Clear separation of:
   - Assistant conversational messages
   - Structured patches for the recipe
+- Quiet debug telemetry for LLM retries, validation failures, and missing API key states (development-only)
 
 Explicit non-goals:
 - On-device model execution

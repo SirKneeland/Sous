@@ -18,6 +18,7 @@ A response that modifies the recipe must include:
 ```ts
 patchSet: {
   patchSetId: string
+  baseRecipeVersion: number
   patches: Patch[]
   summary?: {
     title?: string
@@ -38,8 +39,26 @@ Rules:
 
 - A PatchSet is atomic. It is either fully applied or fully rejected.
 - Only one PatchSet may be pending review at a time.
-- A PatchSet must target the current `recipeVersion`.
-- If the recipe has changed since generation, the PatchSet must be treated as invalid or expired.
+- A PatchSet must target the current `recipeVersion` via `baseRecipeVersion`.
+- If `patchSet` is present, it must contain at least one patch.
+- If the recipe has changed since generation, the PatchSet must be treated as expired.
+
+---
+
+## Sequential Evaluation Semantics
+
+Patches are evaluated in the order provided.
+
+Validation must simulate sequential application of patches against a copy of the current Recipe State.
+
+Rules:
+
+- Later patches may depend on earlier patches.
+- Each patch must be valid relative to the simulated state at that point.
+- If any patch invalidates a subsequent patch, the PatchSet is invalid.
+- Validation decisions must be based on the simulated end-state.
+
+This guarantees deterministic, order-safe behavior.
 
 ---
 
@@ -54,9 +73,23 @@ Rules:
 
 Additional constraints:
 
-- Step IDs and ingredient IDs must refer to existing entities.
+- Step IDs and ingredient IDs must refer to existing entities at the time of execution.
 - Operations must be deterministic and order-safe.
 - No operation may implicitly rewrite unrelated parts of the recipe.
+- A patch must not create duplicate logical entities unless explicitly requested.
+
+---
+
+## Internal PatchSet Consistency Rules
+
+Within a PatchSet:
+
+- A patch may not reference an entity removed earlier in the same PatchSet.
+- A patch may not update an entity that is removed later in the same PatchSet.
+- Conflicting operations on the same entity within one PatchSet are invalid.
+- The PatchSet must represent a valid state transition when applied sequentially.
+
+If these conditions are not met, the PatchSet is invalid.
 
 ---
 
@@ -67,18 +100,45 @@ Client-side validation is mandatory before entering Patch Review Mode.
 Validation must ensure:
 
 - No patch modifies a step with status `done`.
-- Ingredient IDs must exist.
+- Ingredient IDs must exist (after sequential simulation).
 - Removed ingredients are either:
   - No longer referenced in future steps, OR
   - Accompanied by updated steps (without touching done steps), OR
   - Accompanied by a note explaining the adjustment.
 - Patches do not conflict internally.
 
-If validation fails:
+Validation must classify failures into one of the following categories:
+
+### 1. Recoverable (Repairable)
+
+Examples:
+
+- Non-existent IDs that can be resolved
+- Duplicate adds
+- No-op updates
+- Ordering inconsistencies
+
+The system may attempt automatic repair and retry the LLM.
+
+### 2. Expired
+
+- `baseRecipeVersion` does not match current recipe version
+- Recipe changed after PatchSet generation
+
+Expired PatchSets must be discarded and regenerated. No repair attempt.
+
+### 3. Fatal (Non-repairable)
+
+- Modifying a `done` step
+- Implicit rewrite of unrelated state
+- Internal cyclic or contradictory operations
+
+Fatal PatchSets must be rejected immediately.
+
+If validation fails fatally or expires:
 
 - The PatchSet must be rejected automatically.
 - The user must not enter Patch Review Mode.
-- The failure may be logged for telemetry.
 
 ---
 
@@ -89,7 +149,7 @@ Patch Review Mode must visually represent **all state transitions**:
 For both Ingredients and Steps:
 
 - Added → visibly highlighted as new
-- Modified → visibly marked as edited
+- Modified → visibly marked as edited (inline when possible)
 - Removed → rendered as ghost/struck items in original position
 
 The user must see the full end-state if accepted.
@@ -112,7 +172,7 @@ The assistant must:
 - Ask a clarifying question
 - Return `patchSet: null` (or omit it)
 
-No speculative patches.
+Empty PatchSets are not allowed.
 
 ---
 

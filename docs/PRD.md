@@ -111,7 +111,13 @@ AI responds with:
 1. A short conversational reply.
 2. A structured `patchSet` (if mutation is appropriate).
 
+
 The AI must never emit a full recipe once a canvas exists.
+
+If the AI proposes recipe mutations, the user reviews them directly on the recipe canvas and must explicitly Accept or Reject before Recipe State changes.
+
+- Accept applies the PatchSet atomically and removes diff artifacts.
+- Reject discards the PatchSet and returns the user to Chat Mode.
 
 ### Patch Lifecycle
 
@@ -154,7 +160,29 @@ The recipe must not mutate until acceptance.
 - Clear highlights.
 - Return to Chat Mode.
 
+
 The rejection must be recorded in session state.
+
+---
+
+## Safety + Determinism
+
+- All model outputs that modify the recipe must be represented as structured PatchSets.
+- Client-side validation is mandatory before showing a proposal.
+- A PatchSet is atomic: fully applied or fully rejected.
+- Completed steps are immutable (never edited).
+- Session/UI state must never be treated as authoritative recipe data.
+- When a proposal is rejected, the next model request includes one-shot metadata indicating the rejection (not user-visible text).
+
+---
+
+## LLM Integration Principles (v1)
+
+- Provider: OpenAI (for now).
+- Prefer structured JSON output; tolerate malformed output via limited self-repair and bounded retries.
+- Try hard to avoid dead-end "sorry, can’t do that" responses; ask targeted clarifying questions instead.
+- Never crash due to model output.
+- Debug builds show quiet telemetry for retries, validation failures, and missing API key states.
 
 ### Hidden Rejection Context
 
