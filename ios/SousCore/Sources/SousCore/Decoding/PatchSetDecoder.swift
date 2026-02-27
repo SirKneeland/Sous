@@ -12,6 +12,10 @@ enum SchemaFailureReason: String, Equatable, CaseIterable, Sendable {
     case patchesMissing             // patchSet.patches key absent
     case patchesEmpty               // patchSet.patches present but []
     case patchElementNotObject      // patches contains a non-object element
+    case patchOpMissingType         // a patch object has no "type" key
+    case patchOpTypeNotString       // a patch object's "type" value is not a String
+    case patchOpUnknownType         // a patch object has a "type" value that is not a known op
+    case patchOpMissingField        // a required field for the identified op type is absent or wrong type
 }
 
 // MARK: - DecodeFailure
@@ -188,12 +192,43 @@ struct PatchSetDecoder: Sendable {
         guard !patchesArr.isEmpty else {
             return .schemaInvalid(.patchesEmpty)
         }
+        var patches: [LLMPatchOpDTO] = []
         for element in patchesArr {
-            guard element is [String: Any] else {
+            guard let obj = element as? [String: Any] else {
                 return .schemaInvalid(.patchElementNotObject)
             }
+            guard let typeRaw = obj["type"] else {
+                return .schemaInvalid(.patchOpMissingType)
+            }
+            guard let typeStr = typeRaw as? String else {
+                return .schemaInvalid(.patchOpTypeNotString)
+            }
+            switch typeStr {
+            case "add_ingredient":
+                guard let text = obj["text"] as? String else { return .schemaInvalid(.patchOpMissingField) }
+                patches.append(.addIngredient(text: text, afterId: obj["after_id"] as? String))
+            case "update_ingredient":
+                guard let id = obj["id"] as? String, let text = obj["text"] as? String else { return .schemaInvalid(.patchOpMissingField) }
+                patches.append(.updateIngredient(id: id, text: text))
+            case "remove_ingredient":
+                guard let id = obj["id"] as? String else { return .schemaInvalid(.patchOpMissingField) }
+                patches.append(.removeIngredient(id: id))
+            case "add_step":
+                guard let text = obj["text"] as? String else { return .schemaInvalid(.patchOpMissingField) }
+                patches.append(.addStep(text: text, afterStepId: obj["after_step_id"] as? String))
+            case "update_step":
+                guard let id = obj["id"] as? String, let text = obj["text"] as? String else { return .schemaInvalid(.patchOpMissingField) }
+                patches.append(.updateStep(id: id, text: text))
+            case "remove_step":
+                guard let id = obj["id"] as? String else { return .schemaInvalid(.patchOpMissingField) }
+                patches.append(.removeStep(id: id))
+            case "add_note":
+                guard let text = obj["text"] as? String else { return .schemaInvalid(.patchOpMissingField) }
+                patches.append(.addNote(text: text))
+            default:
+                return .schemaInvalid(.patchOpUnknownType)
+            }
         }
-        let patches = Array(repeating: LLMPatchOpDTO(), count: patchesArr.count)
 
         // summary: optional; wrong type is silently ignored (not a required field)
         var summary: LLMSummaryDTO? = nil

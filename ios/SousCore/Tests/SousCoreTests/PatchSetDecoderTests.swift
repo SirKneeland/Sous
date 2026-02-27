@@ -42,7 +42,7 @@ struct PatchSetDecoderTests {
         patchSetId: String = "ps-1",
         baseRecipeId: String = "r-1",
         baseRecipeVersion: Int = 1,
-        patches: String = #"[{"type":"addNote","text":"Extra seasoning"}]"#
+        patches: String = #"[{"type":"add_note","text":"Extra seasoning"}]"#
     ) -> String {
         """
         {
@@ -64,7 +64,7 @@ struct PatchSetDecoderTests {
                 "patchSetId": "ps-1",
                 "baseRecipeId": "r-1",
                 "baseRecipeVersion": 3,
-                "patches": [{"type": "addNote", "text": "Extra seasoning"}],
+                "patches": [{"type": "add_note", "text": "Extra seasoning"}],
                 "unknownPatchSetKey": "ignored"
             },
             "topLevelExtra": 42
@@ -92,7 +92,7 @@ struct PatchSetDecoderTests {
     @Test func jsonWithTrailingCommentary() {
         // Raw string: valid JSON object immediately followed by prose (not valid JSON overall)
         let raw =
-            #"{"assistant_message":"Done","patchSet":{"patchSetId":"p1","baseRecipeId":"r1","baseRecipeVersion":1,"patches":[{"type":"addNote","text":"hi"}]}}"# +
+            #"{"assistant_message":"Done","patchSet":{"patchSetId":"p1","baseRecipeId":"r1","baseRecipeVersion":1,"patches":[{"type":"add_note","text":"hi"}]}}"# +
             "\nNote: I simplified the recipe as requested."
 
         let result = decoder.decode(raw)
@@ -119,7 +119,7 @@ struct PatchSetDecoderTests {
             "patchSet": {
                 "patchSetId": "p1",
                 "baseRecipeVersion": 2,
-                "patches": [{"type": "addNote", "text": "hi"}]
+                "patches": [{"type": "add_note", "text": "hi"}]
             }
         }
         """
@@ -135,7 +135,7 @@ struct PatchSetDecoderTests {
             "patchSet": {
                 "patchSetId": "p1",
                 "baseRecipeId": "r1",
-                "patches": [{"type": "addNote", "text": "hi"}]
+                "patches": [{"type": "add_note", "text": "hi"}]
             }
         }
         """
@@ -201,7 +201,7 @@ struct PatchSetDecoderTests {
             "patchSet": {
                 "baseRecipeId": "r1",
                 "baseRecipeVersion": 1,
-                "patches": [{"type": "addNote", "text": "hi"}]
+                "patches": [{"type": "add_note", "text": "hi"}]
             }
         }
         """
@@ -223,5 +223,74 @@ struct PatchSetDecoderTests {
         }
         """
         expectFailure(decoder.decode(json), .schemaInvalid(.patchElementNotObject))
+    }
+
+    // MARK: Test 12: Patch op present but required field absent
+
+    @Test func patchOpMissingField() {
+        let json = """
+        {
+            "assistant_message": "Here",
+            "patchSet": {
+                "patchSetId": "p1",
+                "baseRecipeId": "r1",
+                "baseRecipeVersion": 1,
+                "patches": [{"type": "update_step", "text": "new text"}]
+            }
+        }
+        """
+        // update_step requires both "id" and "text"; "id" is missing
+        expectFailure(decoder.decode(json), .schemaInvalid(.patchOpMissingField))
+    }
+
+    // MARK: Test 14: Patch object missing "type" key
+
+    @Test func patchOpMissingType() {
+        let json = """
+        {
+            "assistant_message": "Here",
+            "patchSet": {
+                "patchSetId": "p1",
+                "baseRecipeId": "r1",
+                "baseRecipeVersion": 1,
+                "patches": [{"text": "Extra seasoning"}]
+            }
+        }
+        """
+        expectFailure(decoder.decode(json), .schemaInvalid(.patchOpMissingType))
+    }
+
+    // MARK: Test 15: Patch object "type" value is not a String
+
+    @Test func patchOpTypeNotString() {
+        let json = """
+        {
+            "assistant_message": "Here",
+            "patchSet": {
+                "patchSetId": "p1",
+                "baseRecipeId": "r1",
+                "baseRecipeVersion": 1,
+                "patches": [{"type": 42, "text": "hi"}]
+            }
+        }
+        """
+        expectFailure(decoder.decode(json), .schemaInvalid(.patchOpTypeNotString))
+    }
+
+    // MARK: Test 16: Patch object "type" is a String but not a known op
+
+    @Test func patchOpUnknownType() {
+        let json = """
+        {
+            "assistant_message": "Here",
+            "patchSet": {
+                "patchSetId": "p1",
+                "baseRecipeId": "r1",
+                "baseRecipeVersion": 1,
+                "patches": [{"type": "edit_step", "id": "s1", "text": "hi"}]
+            }
+        }
+        """
+        expectFailure(decoder.decode(json), .schemaInvalid(.patchOpUnknownType))
     }
 }

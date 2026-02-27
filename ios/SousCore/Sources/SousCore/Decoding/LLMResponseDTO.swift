@@ -28,10 +28,17 @@ struct LLMPatchSetDTO: Equatable, Sendable {
 
 // MARK: - LLMPatchOpDTO
 
-/// Placeholder for a single patch operation.
-/// PatchSetDecoder verifies each element is a JSON object and the array is non-empty.
-/// Field-level typing (operation type, target IDs) is handled by the SousApp conversion layer.
-struct LLMPatchOpDTO: Equatable, Sendable {}
+/// A fully decoded patch operation. IDs are raw strings; UUID parsing happens at the
+/// orchestrator boundary when converting to the canonical Patch enum.
+enum LLMPatchOpDTO: Equatable, Sendable {
+    case addIngredient(text: String, afterId: String?)
+    case updateIngredient(id: String, text: String)
+    case removeIngredient(id: String)
+    case addStep(text: String, afterStepId: String?)
+    case updateStep(id: String, text: String)
+    case removeStep(id: String)
+    case addNote(text: String)
+}
 
 // MARK: - LLMSummaryDTO
 
