@@ -41,8 +41,21 @@ final class AppStore: ObservableObject {
     var useLiveLLM = true
 
     private let maxMessages = 200
+    private let liveLLMModel = "gpt-4o-mini"
     private let proposer: any PatchProposer = MockPatchProposer()
-    private let llmProposer = LLMPatchProposer()
+    private var nextLLMContext: NextLLMContext? = nil
+
+    private var hasPendingPatch: Bool {
+        switch uiState {
+        case .patchProposed, .patchReview: return true
+        default: return false
+        }
+    }
+
+    private func resolvedAPIKey() -> String? {
+        let key = ProcessInfo.processInfo.environment["OPENAI_API_KEY"]
+        return (key?.isEmpty == false) ? key : nil
+    }
 
     static let recipeId          = UUID(uuidString: "00000000-0000-0000-FFFF-000000000001")!
     static let ingredientFlourId = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
@@ -83,6 +96,7 @@ final class AppStore: ObservableObject {
     func sendUserMessage(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        guard !hasPendingPatch else { return }
         append(ChatMessage(role: .user, text: trimmed))
         if useLiveLLM {
             Task { await sendWithLLM(trimmed) }
@@ -94,18 +108,46 @@ final class AppStore: ObservableObject {
     }
 
     private func sendWithLLM(_ userText: String) async {
-        llmDebugStatus = nil
+        llmDebugStatus = "calling"
         let recipe = uiState.recipe
-        let result = await llmProposer.propose(
-            userText: userText,
-            recipe: recipe,
-            onStatus: { [weak self] status in self?.llmDebugStatus = status }
+        let hidden: HiddenContext
+        if case .chatOpen(_, _, let h) = uiState { hidden = h } else { hidden = HiddenContext() }
+
+        let request = LLMRequest(
+            recipeId: recipe.id.uuidString,
+            recipeVersion: recipe.version,
+            hasCanvas: true,
+            userMessage: LLMContextComposer.composeUserMessage(userText: userText, hidden: hidden),
+            recipeSnapshotForPrompt: recipe,
+            // TODO: wire real user prefs (Prompt 8)
+            userPrefs: LLMUserPrefs(hardAvoids: ["cilantro"]),
+            nextLLMContext: nextLLMContext
         )
-        if let patchSet = result {
+
+        let orchestrator = OpenAILLMOrchestrator(
+            client: OpenAIClient(apiKey: resolvedAPIKey()),
+            model: liveLLMModel
+        )
+        let result = await orchestrator.run(request)
+
+        switch result {
+        case .valid(let patchSet, let assistantMessage, _, _):
+            nextLLMContext = nil
             send(.patchReceived(patchSet))
-            append(ChatMessage(role: .assistant, text: "Proposed changes are ready — review them on the recipe."))
-        } else {
-            append(ChatMessage(role: .assistant, text: "I couldn't safely apply those changes. Can you clarify what you'd like modified?"))
+            append(ChatMessage(role: .assistant, text: assistantMessage))
+            llmDebugStatus = "succeeded"
+
+        case .noPatches(let assistantMessage, _, _):
+            nextLLMContext = nil
+            append(ChatMessage(role: .assistant, text: assistantMessage))
+            llmDebugStatus = "succeeded"
+
+        case .failure(let fallbackPatchSet, let assistantMessage, _, _, _):
+            if let fallback = fallbackPatchSet {
+                send(.patchReceived(fallback))
+            }
+            append(ChatMessage(role: .assistant, text: assistantMessage))
+            llmDebugStatus = "failed"
         }
     }
 
@@ -117,7 +159,29 @@ final class AppStore: ObservableObject {
     }
 
     func send(_ event: UIEvent) {
+        let prev = uiState
         uiState = UIStateMachine.reduce(uiState, event)
+        // Record patch decision only after the transition succeeds.
+        switch event {
+        case .acceptPatch:
+            if case .patchReview(_, let ps, _, _) = prev, case .recipeOnly = uiState {
+                nextLLMContext = NextLLMContext(lastPatchDecision: PatchDecision(
+                    patchSetId: ps.patchSetId.uuidString,
+                    decision: .accepted,
+                    decidedAtMs: Int(Date().timeIntervalSinceReferenceDate * 1000)
+                ))
+            }
+        case .rejectPatch:
+            if case .patchReview(_, let ps, _, _) = prev, case .chatOpen = uiState {
+                nextLLMContext = NextLLMContext(lastPatchDecision: PatchDecision(
+                    patchSetId: ps.patchSetId.uuidString,
+                    decision: .rejected,
+                    decidedAtMs: Int(Date().timeIntervalSinceReferenceDate * 1000)
+                ))
+            }
+        default:
+            break
+        }
     }
 
     // MARK: - Debug simulation
