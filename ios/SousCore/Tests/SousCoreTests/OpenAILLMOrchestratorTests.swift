@@ -166,4 +166,46 @@ struct OpenAILLMOrchestratorTests {
         }
         #expect(mock.callCount == 2)
     }
+
+    @Test("debug bundle carries stable eval fields: model, promptVersion, outcome, failureCategory, attemptCount")
+    func debugBundle_stableEvalFields() async {
+        // 1. valid result: model/promptVersion set, outcome="valid", failureCategory=nil
+        let (orch1, _) = orchestrator([.success(validJSON())])
+        let r1 = await orch1.run(request())
+        guard case .valid(_, _, _, let d1) = r1 else { Issue.record("Expected .valid"); return }
+        #expect(d1.model == "gpt-4o-mini")
+        #expect(d1.promptVersion == "v1")
+        #expect(d1.outcome == "valid")
+        #expect(d1.failureCategory == nil)
+        #expect(d1.attemptCount == 1)
+
+        // 2. repair path: attemptCount=2, outcome="valid", repairUsed=true
+        let (orch2, _) = orchestrator([.success(badStepIdJSON()), .success(validJSON())])
+        let r2 = await orch2.run(request())
+        guard case .valid(_, _, _, let d2) = r2 else { Issue.record("Expected .valid after repair"); return }
+        #expect(d2.attemptCount == 2)
+        #expect(d2.outcome == "valid")
+        #expect(d2.repairUsed == true)
+
+        // 3. noPatches: outcome="noPatches", failureCategory=nil
+        let (orch3, _) = orchestrator([.success(nullPatchSetJSON())])
+        let r3 = await orch3.run(request())
+        guard case .noPatches(_, _, let d3) = r3 else { Issue.record("Expected .noPatches"); return }
+        #expect(d3.outcome == "noPatches")
+        #expect(d3.failureCategory == nil)
+
+        // 4. network failure: outcome="failure", failureCategory="network" (stable string)
+        struct FakeNetworkError: Error {}
+        let (orch4, _) = orchestrator([.failure(FakeNetworkError())])
+        let r4 = await orch4.run(request())
+        guard case .failure(_, _, _, let d4, _) = r4 else { Issue.record("Expected .failure"); return }
+        #expect(d4.outcome == "failure")
+        #expect(d4.failureCategory == "network")
+
+        // 5. validationFatal: failureCategory="validationFatal"
+        let (orch5, _) = orchestrator([.success(doneStepMutationJSON())])
+        let r5 = await orch5.run(request())
+        guard case .failure(_, _, _, let d5, _) = r5 else { Issue.record("Expected .failure"); return }
+        #expect(d5.failureCategory == "validationFatal")
+    }
 }

@@ -11,6 +11,8 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
     public let model: String
     public let timeout: TimeInterval
 
+    private static let promptVersion = "v1"
+
     public init(client: LLMClient, model: String, timeout: TimeInterval = 30) {
         self.client = client
         self.model = model
@@ -24,7 +26,9 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
         let startMs = nowMs()
 
         let raw: LLMRawResponse
+        let networkMs: Int
         do {
+            let netStart = nowMs()
             raw = try await client.send(LLMClientRequest(
                 requestId: requestId,
                 model: model,
@@ -32,19 +36,20 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                 responseFormat: .jsonObject,
                 timeout: timeout
             ))
+            networkMs = nowMs() - netStart
         } catch {
             return .failure(
                 fallbackPatchSet: nil,
                 assistantMessage: "Network error. Please try again.",
                 raw: nil,
-                debug: makeDebug(.failed, attempts: 1, id: requestId, elapsed: nowMs() - startMs, error: .network),
+                debug: makeDebug(.failed, outcome: "failure", attempts: 1, id: requestId, elapsed: nowMs() - startMs, error: .network),
                 error: .network
             )
         }
 
         return await decodeAndValidate(
             raw: raw, request: request,
-            requestId: requestId, startMs: startMs, isRepair: false
+            requestId: requestId, startMs: startMs, isRepair: false, networkMs: networkMs
         )
     }
 
@@ -55,7 +60,8 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
         request: LLMRequest,
         requestId: String,
         startMs: Int,
-        isRepair: Bool
+        isRepair: Bool,
+        networkMs: Int? = nil
     ) async -> LLMResult {
 
         let attempts = isRepair ? 2 : 1
@@ -68,7 +74,8 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                     fallbackPatchSet: nil,
                     assistantMessage: "I had trouble formatting my response. Please try rephrasing.",
                     raw: raw,
-                    debug: makeDebug(.failed, attempts: attempts, id: requestId, elapsed: nowMs() - startMs,
+                    debug: makeDebug(.failed, outcome: "failure", attempts: attempts, id: requestId,
+                                    elapsed: nowMs() - startMs, networkMs: networkMs,
                                     repairUsed: true, error: mapDecode(df)),
                     error: mapDecode(df)
                 )
@@ -83,9 +90,9 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                 return .noPatches(
                     assistantMessage: dto.assistantMessage,
                     raw: raw,
-                    debug: makeDebug(.succeeded, attempts: attempts, id: requestId,
-                                    elapsed: nowMs() - startMs, extractionUsed: extractionUsed,
-                                    repairUsed: isRepair, unknownKeys: unknownKeys)
+                    debug: makeDebug(.succeeded, outcome: "noPatches", attempts: attempts, id: requestId,
+                                    elapsed: nowMs() - startMs, networkMs: networkMs,
+                                    extractionUsed: extractionUsed, repairUsed: isRepair, unknownKeys: unknownKeys)
                 )
             }
 
@@ -95,7 +102,8 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                     fallbackPatchSet: nil,
                     assistantMessage: "This response doesn't match the current recipe. Please try again.",
                     raw: raw,
-                    debug: makeDebug(.failed, attempts: attempts, id: requestId, elapsed: nowMs() - startMs,
+                    debug: makeDebug(.failed, outcome: "failure", attempts: attempts, id: requestId,
+                                    elapsed: nowMs() - startMs, networkMs: networkMs,
                                     repairUsed: isRepair, error: .recipeIdMismatchFatal),
                     error: .recipeIdMismatchFatal
                 )
@@ -107,7 +115,8 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                     fallbackPatchSet: nil,
                     assistantMessage: "The recipe changed while I was thinking — please resend your message.",
                     raw: raw,
-                    debug: makeDebug(.failed, attempts: attempts, id: requestId, elapsed: nowMs() - startMs,
+                    debug: makeDebug(.failed, outcome: "failure", attempts: attempts, id: requestId,
+                                    elapsed: nowMs() - startMs, networkMs: networkMs,
                                     repairUsed: isRepair, error: .validationExpired),
                     error: .validationExpired
                 )
@@ -123,7 +132,8 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                         fallbackPatchSet: nil,
                         assistantMessage: "I referenced an ID that doesn't exist. Try rephrasing.",
                         raw: raw,
-                        debug: makeDebug(.failed, attempts: attempts, id: requestId, elapsed: nowMs() - startMs,
+                        debug: makeDebug(.failed, outcome: "failure", attempts: attempts, id: requestId,
+                                        elapsed: nowMs() - startMs, networkMs: networkMs,
                                         repairUsed: true, error: .validationRecoverable),
                         error: .validationRecoverable
                     )
@@ -149,9 +159,9 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                     patchSet: patchSet,
                     assistantMessage: dto.assistantMessage,
                     raw: raw,
-                    debug: makeDebug(.succeeded, attempts: attempts, id: requestId,
-                                    elapsed: nowMs() - startMs, extractionUsed: extractionUsed,
-                                    repairUsed: isRepair, unknownKeys: unknownKeys)
+                    debug: makeDebug(.succeeded, outcome: "valid", attempts: attempts, id: requestId,
+                                    elapsed: nowMs() - startMs, networkMs: networkMs,
+                                    extractionUsed: extractionUsed, repairUsed: isRepair, unknownKeys: unknownKeys)
                 )
             case .invalid(let validationErrors):
                 let classified = classify(validationErrors)
@@ -161,7 +171,8 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                         fallbackPatchSet: patchSet,
                         assistantMessage: "I can't modify steps you've already completed. Let me know how you'd like to proceed.",
                         raw: raw,
-                        debug: makeDebug(.failed, attempts: attempts, id: requestId, elapsed: nowMs() - startMs,
+                        debug: makeDebug(.failed, outcome: "failure", attempts: attempts, id: requestId,
+                                        elapsed: nowMs() - startMs, networkMs: networkMs,
                                         repairUsed: isRepair, error: .validationFatal),
                         error: .validationFatal
                     )
@@ -170,7 +181,8 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                         fallbackPatchSet: nil,
                         assistantMessage: "The recipe changed while I was thinking — please resend your message.",
                         raw: raw,
-                        debug: makeDebug(.failed, attempts: attempts, id: requestId, elapsed: nowMs() - startMs,
+                        debug: makeDebug(.failed, outcome: "failure", attempts: attempts, id: requestId,
+                                        elapsed: nowMs() - startMs, networkMs: networkMs,
                                         repairUsed: isRepair, error: .validationExpired),
                         error: .validationExpired
                     )
@@ -180,7 +192,8 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                             fallbackPatchSet: nil,
                             assistantMessage: "Something went wrong with my suggested changes. Try rephrasing your request.",
                             raw: raw,
-                            debug: makeDebug(.failed, attempts: attempts, id: requestId, elapsed: nowMs() - startMs,
+                            debug: makeDebug(.failed, outcome: "failure", attempts: attempts, id: requestId,
+                                            elapsed: nowMs() - startMs, networkMs: networkMs,
                                             repairUsed: true, error: .validationRecoverable),
                             error: .validationRecoverable
                         )
@@ -205,7 +218,9 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
         startMs: Int
     ) async -> LLMResult {
         let repairRaw: LLMRawResponse
+        let repairNetworkMs: Int
         do {
+            let netStart = nowMs()
             repairRaw = try await client.send(LLMClientRequest(
                 requestId: requestId + "-r",
                 model: model,
@@ -213,19 +228,20 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                 responseFormat: .jsonObject,
                 timeout: timeout
             ))
+            repairNetworkMs = nowMs() - netStart
         } catch {
             return .failure(
                 fallbackPatchSet: nil,
                 assistantMessage: "Network error. Please try again.",
                 raw: nil,
-                debug: makeDebug(.failed, attempts: 2, id: requestId, elapsed: nowMs() - startMs,
-                                 repairUsed: true, error: .network),
+                debug: makeDebug(.failed, outcome: "failure", attempts: 2, id: requestId,
+                                 elapsed: nowMs() - startMs, repairUsed: true, error: .network),
                 error: .network
             )
         }
         return await decodeAndValidate(
             raw: repairRaw, request: request,
-            requestId: requestId, startMs: startMs, isRepair: true
+            requestId: requestId, startMs: startMs, isRepair: true, networkMs: repairNetworkMs
         )
     }
 
@@ -404,9 +420,11 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
 
     private func makeDebug(
         _ status: LLMDebugStatus,
+        outcome: String,
         attempts: Int,
         id: String,
         elapsed: Int,
+        networkMs: Int? = nil,
         extractionUsed: Bool = false,
         repairUsed: Bool = false,
         error: LLMError? = nil,
@@ -420,8 +438,26 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             extractionUsed: extractionUsed,
             repairUsed: repairUsed,
             timingTotalMs: elapsed,
+            timingNetworkMs: networkMs,
             lastErrorCategory: error,
-            unknownKeysSeen: unknownKeys.isEmpty ? nil : unknownKeys
+            unknownKeysSeen: unknownKeys.isEmpty ? nil : unknownKeys,
+            model: self.model,
+            promptVersion: Self.promptVersion,
+            outcome: outcome,
+            failureCategory: failureCategoryString(error)
         )
+    }
+
+    private func failureCategoryString(_ error: LLMError?) -> String? {
+        guard let error else { return nil }
+        switch error {
+        case .missingAPIKey:                             return "missingAPIKey"
+        case .network, .timeout, .cancelled:             return "network"
+        case .decodeNonJSON, .decodeInvalidJSON:         return "decode"
+        case .schemaInvalid:                             return "schema"
+        case .validationFatal, .recipeIdMismatchFatal:   return "validationFatal"
+        case .validationExpired:                         return "validationExpired"
+        case .validationRecoverable:                     return "validationRecoverable"
+        }
     }
 }

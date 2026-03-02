@@ -30,6 +30,14 @@ public struct LLMDebugBundle: Equatable, Sendable {
     public let lastErrorCategory: LLMError?
     /// Unknown JSON keys seen during decode, if any.
     public let unknownKeysSeen: [String]?
+    /// Model identifier used for the LLM call (e.g. "gpt-4o-mini").
+    public let model: String
+    /// Prompt schema version constant (e.g. "v1"). Stable across builds for eval comparison.
+    public let promptVersion: String
+    /// Coarse result outcome: "valid" | "noPatches" | "failure".
+    public let outcome: String
+    /// Stable failure bucket string; nil on success. See LLMError mapping in orchestrator.
+    public let failureCategory: String?
 
     public init(
         status: LLMDebugStatus,
@@ -43,7 +51,11 @@ public struct LLMDebugBundle: Equatable, Sendable {
         timingDecodeMs: Int? = nil,
         timingValidateMs: Int? = nil,
         lastErrorCategory: LLMError? = nil,
-        unknownKeysSeen: [String]? = nil
+        unknownKeysSeen: [String]? = nil,
+        model: String = "unknown",
+        promptVersion: String = "unknown",
+        outcome: String = "unknown",
+        failureCategory: String? = nil
     ) {
         self.status = status
         self.attemptCount = attemptCount
@@ -57,6 +69,10 @@ public struct LLMDebugBundle: Equatable, Sendable {
         self.timingValidateMs = timingValidateMs
         self.lastErrorCategory = lastErrorCategory
         self.unknownKeysSeen = unknownKeysSeen
+        self.model = model
+        self.promptVersion = promptVersion
+        self.outcome = outcome
+        self.failureCategory = failureCategory
     }
 }
 

@@ -23,7 +23,10 @@ struct LLMTypesTests {
             requestId: "req-1",
             extractionUsed: false,
             repairUsed: false,
-            timingTotalMs: 200
+            timingTotalMs: 200,
+            model: "gpt-4o-mini",
+            promptVersion: "v1",
+            outcome: "valid"
         )
 
         let results: [LLMResult] = [
