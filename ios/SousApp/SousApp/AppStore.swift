@@ -38,12 +38,23 @@ final class AppStore: ObservableObject {
     @Published var chatTranscript: [ChatMessage] = []
     @Published var llmDebugStatus: String? = nil
 
-    var useLiveLLM = true
+    /// Toggle via setUseLiveLLM(_:) so cancellation side-effects are applied correctly.
+    private(set) var useLiveLLM = true
 
     private let maxMessages = 200
     private let liveLLMModel = "gpt-4o-mini"
     private let proposer: any PatchProposer = MockPatchProposer()
     private var nextLLMContext: NextLLMContext? = nil
+
+    // MARK: - In-flight tracking
+
+    /// Injected at init for testing; nil means use the live OpenAI orchestrator.
+    private let testOrchestrator: (any LLMOrchestrator)?
+    /// The active LLM Task. Non-nil while a call is in flight.
+    private var llmTask: Task<Void, Never>?
+    /// Monotonically incremented per send. Used by the deferred cleanup to avoid
+    /// clearing a newer task's reference when an old (cancelled) task finishes.
+    private var llmGeneration = 0
 
     private var hasPendingPatch: Bool {
         switch uiState {
@@ -65,7 +76,8 @@ final class AppStore: ObservableObject {
     static let stepBakeId        = UUID(uuidString: "00000000-0000-0000-0001-000000000002")!
     static let stepDoneId        = UUID(uuidString: "00000000-0000-0000-0001-000000000003")!
 
-    init() {
+    init(testOrchestrator: (any LLMOrchestrator)? = nil) {
+        self.testOrchestrator = testOrchestrator
         let recipe = Recipe(
             id: Self.recipeId,
             version: 1,
@@ -91,15 +103,43 @@ final class AppStore: ObservableObject {
         ]
     }
 
+    deinit {
+        llmTask?.cancel()
+    }
+
+    // MARK: - Live LLM toggle
+
+    /// Canonical way to toggle useLiveLLM. Cancels any in-flight request when turning off.
+    func setUseLiveLLM(_ enabled: Bool) {
+        if useLiveLLM && !enabled { cancelLiveLLM() }
+        useLiveLLM = enabled
+    }
+
+    /// Cancels the in-flight LLM Task (if any) and clears the task reference immediately.
+    /// The Task body checks Task.isCancelled after the orchestrator returns and discards
+    /// the result without mutating state.
+    func cancelLiveLLM() {
+        llmTask?.cancel()
+        llmTask = nil
+    }
+
     // MARK: - Chat
 
     func sendUserMessage(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         guard !hasPendingPatch else { return }
+        // Single-flight: block (not cancel) if a live LLM call is already in flight.
+        // User bubble is intentionally NOT appended when blocked.
+        if useLiveLLM && llmTask != nil {
+            llmDebugStatus = "blocked_inflight_llm"
+            return
+        }
         append(ChatMessage(role: .user, text: trimmed))
         if useLiveLLM {
-            Task { await sendWithLLM(trimmed) }
+            llmGeneration += 1
+            let gen = llmGeneration
+            llmTask = Task { await self.sendWithLLM(trimmed, generation: gen) }
         } else {
             let patchSet = proposer.propose(userText: trimmed, recipe: uiState.recipe)
             send(.patchReceived(patchSet))
@@ -107,7 +147,10 @@ final class AppStore: ObservableObject {
         }
     }
 
-    private func sendWithLLM(_ userText: String) async {
+    private func sendWithLLM(_ userText: String, generation: Int) async {
+        // Clear llmTask when this generation's call ends (natural or cancelled).
+        // The generation guard prevents an old cancelled task from clearing a newer task's ref.
+        defer { if llmGeneration == generation { llmTask = nil } }
         llmDebugStatus = "calling"
         let recipe = uiState.recipe
         let hidden: HiddenContext
@@ -124,14 +167,34 @@ final class AppStore: ObservableObject {
             nextLLMContext: nextLLMContext
         )
 
-        let orchestrator = OpenAILLMOrchestrator(
+        let orchestrator: any LLMOrchestrator = testOrchestrator ?? OpenAILLMOrchestrator(
             client: OpenAIClient(apiKey: resolvedAPIKey()),
             model: liveLLMModel
         )
         let result = await orchestrator.run(request)
 
+        // Cancellation guard: if the task was cancelled while awaiting, discard the result.
+        // nextLLMContext is intentionally NOT cleared so it applies to the next successful call.
+        guard !Task.isCancelled else {
+            llmDebugStatus = "cancelled"
+            return
+        }
+
         switch result {
         case .valid(let patchSet, let assistantMessage, _, _):
+            // Receipt-time stale-state check against CURRENT recipe (not the request snapshot).
+            // Guards races where the recipe was mutated while the LLM call was in flight.
+            let current = uiState.recipe
+            if patchSet.baseRecipeId != current.id {
+                append(ChatMessage(role: .assistant, text: assistantMessage))
+                llmDebugStatus = "fatal_recipeIdMismatch"
+                return
+            }
+            if patchSet.baseRecipeVersion != current.version {
+                append(ChatMessage(role: .assistant, text: assistantMessage))
+                llmDebugStatus = "expired_recipeVersionMismatch"
+                return
+            }
             nextLLMContext = nil
             send(.patchReceived(patchSet))
             append(ChatMessage(role: .assistant, text: assistantMessage))
