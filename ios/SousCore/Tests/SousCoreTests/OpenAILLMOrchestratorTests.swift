@@ -195,8 +195,9 @@ struct OpenAILLMOrchestratorTests {
         #expect(d3.failureCategory == nil)
 
         // 4. network failure: outcome="failure", failureCategory="network" (stable string)
+        // Two failures needed: first triggers retry, second triggers repeat_failure termination.
         struct FakeNetworkError: Error {}
-        let (orch4, _) = orchestrator([.failure(FakeNetworkError())])
+        let (orch4, _) = orchestrator([.failure(FakeNetworkError()), .failure(FakeNetworkError())])
         let r4 = await orch4.run(request())
         guard case .failure(_, _, _, let d4, _) = r4 else { Issue.record("Expected .failure"); return }
         #expect(d4.outcome == "failure")
@@ -207,5 +208,103 @@ struct OpenAILLMOrchestratorTests {
         let r5 = await orch5.run(request())
         guard case .failure(_, _, _, let d5, _) = r5 else { Issue.record("Expected .failure"); return }
         #expect(d5.failureCategory == "validationFatal")
+    }
+
+    // MARK: - Retry / Backoff / TerminationReason Tests
+
+    @Test("network failure then success: 2 attempts, terminationReason success")
+    func networkFailureThenSuccess_twoAttempts() async {
+        struct FakeNetworkError: Error {}
+        let (orch, mock) = orchestrator([.failure(FakeNetworkError()), .success(validJSON())])
+        let result = await orch.run(request())
+        guard case .valid(_, _, _, let d) = result else {
+            Issue.record("Expected .valid, got \(result)"); return
+        }
+        #expect(mock.callCount == 2)
+        #expect(d.attemptCount == 2)
+        #expect(d.terminationReason == "success")
+    }
+
+    @Test("network failure twice: terminates with repeat_failure")
+    func networkFailureTwice_repeatFailure() async {
+        struct FakeNetworkError: Error {}
+        let (orch, mock) = orchestrator([.failure(FakeNetworkError()), .failure(FakeNetworkError())])
+        let result = await orch.run(request())
+        guard case .failure(_, _, _, let d, let err) = result else {
+            Issue.record("Expected .failure, got \(result)"); return
+        }
+        #expect(err == .network)
+        #expect(mock.callCount == 2)
+        #expect(d.terminationReason == "repeat_failure")
+    }
+
+    @Test("recoverable validation failure triggers repair once then succeeds: terminationReason success")
+    func recoverableValidation_repairSucceeds_terminationSuccess() async {
+        let (orch, mock) = orchestrator([.success(badStepIdJSON()), .success(validJSON())])
+        let result = await orch.run(request())
+        guard case .valid(_, _, _, let d) = result else {
+            Issue.record("Expected .valid after repair, got \(result)"); return
+        }
+        #expect(mock.callCount == 2)
+        #expect(d.repairUsed == true)
+        #expect(d.terminationReason == "success")
+    }
+
+    @Test("same decode failure signature on primary + repair: terminates with repeat_failure")
+    func decodeInvalidJSON_sameSignatureOnRepair_repeatFailure() async {
+        // Both responses trigger DecodeFailure.decodeInvalidJSON — assistant_message is a number,
+        // not a String. The two raw strings are intentionally different so the rawText identity
+        // check in repair() does not fire; only the failure-signature guard does.
+        let jsonA = #"{"assistant_message": 1}"#
+        let jsonB = #"{"assistant_message": 2}"#
+        let (orch, mock) = orchestrator([.success(jsonA), .success(jsonB)])
+        let result = await orch.run(request())
+        guard case .failure(_, _, _, let d, _) = result else {
+            Issue.record("Expected .failure, got \(result)"); return
+        }
+        #expect(d.terminationReason == "repeat_failure")
+        #expect(d.repairUsed == true)
+        #expect(d.attemptCount == 2)   // primary call + one repair call
+        #expect(mock.callCount == 2)
+    }
+
+    @Test("repair returns identical rawText: terminates with repair_identical")
+    func repair_identicalRawText_terminates() async {
+        // Primary call returns JSON X that fails recoverable validation.
+        // Repair call returns the exact same rawText X.
+        // Orchestrator must terminate immediately — no further decode or repair.
+        let (orch, mock) = orchestrator([.success(badStepIdJSON()), .success(badStepIdJSON())])
+        let result = await orch.run(request())
+        guard case .failure(_, _, _, let d, _) = result else {
+            Issue.record("Expected .failure, got \(result)"); return
+        }
+        #expect(d.terminationReason == "repair_identical")
+        #expect(d.repairUsed == true)
+        #expect(d.attemptCount == 2)   // primary call + repair call
+        #expect(mock.callCount == 2)
+    }
+
+    @Test("fatal validation terminates immediately with fatal_validation, no retry")
+    func fatalValidation_terminatesImmediately() async {
+        let (orch, mock) = orchestrator([.success(doneStepMutationJSON())])
+        let result = await orch.run(request())
+        guard case .failure(_, _, _, let d, let err) = result else {
+            Issue.record("Expected .failure, got \(result)"); return
+        }
+        #expect(err == .validationFatal)
+        #expect(mock.callCount == 1)
+        #expect(d.terminationReason == "fatal_validation")
+    }
+
+    @Test("expired validation terminates immediately with expired_validation, no retry")
+    func expiredValidation_terminatesImmediately() async {
+        let (orch, mock) = orchestrator([.success(wrongVersionJSON())])
+        let result = await orch.run(request())
+        guard case .failure(_, _, _, let d, let err) = result else {
+            Issue.record("Expected .failure, got \(result)"); return
+        }
+        #expect(err == .validationExpired)
+        #expect(mock.callCount == 1)
+        #expect(d.terminationReason == "expired_validation")
     }
 }

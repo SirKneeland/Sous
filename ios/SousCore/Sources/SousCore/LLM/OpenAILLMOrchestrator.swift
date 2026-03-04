@@ -1,5 +1,18 @@
 import Foundation
 
+// MARK: - AttemptContext
+
+/// Mutable state threaded via inout through the attempt loop.
+/// Created fresh in run() and never escapes it — no sharing across tasks.
+private struct AttemptContext {
+    /// Total number of client.send() invocations this run.
+    var totalCalls: Int = 0
+    var repairUsed: Bool = false
+    /// Failure signature of the most recent failure: "\(category):\(primaryReason)".
+    /// Used to detect exact-signature repeats before dispatching repair.
+    var lastFailureSignature: String? = nil
+}
+
 // MARK: - OpenAILLMOrchestrator
 
 /// Concrete LLMOrchestrator for OpenAI-compatible transports.
@@ -12,6 +25,7 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
     public let timeout: TimeInterval
 
     private static let promptVersion = "v1"
+    private static let maxCalls = 3
 
     public init(client: LLMClient, model: String, timeout: TimeInterval = 30) {
         self.client = client
@@ -24,33 +38,72 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
     public func run(_ request: LLMRequest) async -> LLMResult {
         let requestId = UUID().uuidString
         let startMs = nowMs()
+        var context = AttemptContext()
 
-        let raw: LLMRawResponse
-        let networkMs: Int
-        do {
+        // Primary call with at most one network retry (within maxCalls budget).
+        var raw: LLMRawResponse?
+        var networkMs: Int = 0
+        while true {
+            context.totalCalls += 1
             let netStart = nowMs()
-            raw = try await client.send(LLMClientRequest(
-                requestId: requestId,
-                model: model,
-                messages: buildMessages(for: request),
-                responseFormat: .jsonObject,
-                timeout: timeout
-            ))
-            networkMs = nowMs() - netStart
-        } catch {
-            return .failure(
-                fallbackPatchSet: nil,
-                assistantMessage: "Network error. Please try again.",
-                raw: nil,
-                debug: makeDebug(.failed, outcome: "failure", attempts: 1, id: requestId, elapsed: nowMs() - startMs, error: .network),
-                error: .network
-            )
+            do {
+                raw = try await client.send(LLMClientRequest(
+                    requestId: requestId,
+                    model: model,
+                    messages: buildMessages(for: request),
+                    responseFormat: .jsonObject,
+                    timeout: timeout
+                ))
+                networkMs = nowMs() - netStart
+                break
+            } catch {
+                networkMs = nowMs() - netStart
+                let sig = "network:"
+                if sig == context.lastFailureSignature {
+                    return .failure(
+                        fallbackPatchSet: nil,
+                        assistantMessage: "Network error. Please try again.",
+                        raw: nil,
+                        debug: makeDebug(.failed, outcome: "failure", attempts: context.totalCalls,
+                                        id: requestId, elapsed: nowMs() - startMs,
+                                        networkMs: networkMs, error: .network,
+                                        terminationReason: "repeat_failure"),
+                        error: .network
+                    )
+                }
+                context.lastFailureSignature = sig
+                if context.totalCalls < Self.maxCalls {
+                    await backoff(attempt: context.totalCalls)
+                    continue
+                }
+                return .failure(
+                    fallbackPatchSet: nil,
+                    assistantMessage: "Network error. Please try again.",
+                    raw: nil,
+                    debug: makeDebug(.failed, outcome: "failure", attempts: context.totalCalls,
+                                    id: requestId, elapsed: nowMs() - startMs,
+                                    networkMs: networkMs, error: .network,
+                                    terminationReason: "budget_exhausted"),
+                    error: .network
+                )
+            }
         }
 
         return await decodeAndValidate(
-            raw: raw, request: request,
-            requestId: requestId, startMs: startMs, isRepair: false, networkMs: networkMs
+            raw: raw!, request: request,
+            requestId: requestId, startMs: startMs, isRepair: false,
+            networkMs: networkMs, context: &context
         )
+    }
+
+    // MARK: - Backoff
+
+    private func backoff(attempt: Int) async {
+        let base = 0.5
+        let cap = 2.0
+        let jitter = Double.random(in: 0...0.3)
+        let delaySeconds = min(base * pow(2.0, Double(attempt - 1)) + jitter, cap)
+        try? await Task.sleep(nanoseconds: UInt64(delaySeconds * 1_000_000_000))
     }
 
     // MARK: - Decode + Validate
@@ -61,28 +114,45 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
         requestId: String,
         startMs: Int,
         isRepair: Bool,
-        networkMs: Int? = nil
+        networkMs: Int?,
+        context: inout AttemptContext
     ) async -> LLMResult {
 
-        let attempts = isRepair ? 2 : 1
+        let attempts = context.totalCalls
         let decodeResult = PatchSetDecoder().decode(raw.rawText)
 
         switch decodeResult {
         case .failure(let df):
-            if isRepair {
+            let sig = signatureForDecode(df)
+            let llmErr = mapDecode(df)
+            if sig == context.lastFailureSignature {
                 return .failure(
                     fallbackPatchSet: nil,
                     assistantMessage: "I had trouble formatting my response. Please try rephrasing.",
                     raw: raw,
                     debug: makeDebug(.failed, outcome: "failure", attempts: attempts, id: requestId,
                                     elapsed: nowMs() - startMs, networkMs: networkMs,
-                                    repairUsed: true, error: mapDecode(df)),
-                    error: mapDecode(df)
+                                    repairUsed: context.repairUsed, error: llmErr,
+                                    terminationReason: "repeat_failure"),
+                    error: llmErr
                 )
             }
+            if context.repairUsed || context.totalCalls >= Self.maxCalls {
+                return .failure(
+                    fallbackPatchSet: nil,
+                    assistantMessage: "I had trouble formatting my response. Please try rephrasing.",
+                    raw: raw,
+                    debug: makeDebug(.failed, outcome: "failure", attempts: attempts, id: requestId,
+                                    elapsed: nowMs() - startMs, networkMs: networkMs,
+                                    repairUsed: context.repairUsed, error: llmErr,
+                                    terminationReason: "budget_exhausted"),
+                    error: llmErr
+                )
+            }
+            context.lastFailureSignature = sig
             return await repair(
                 request: request, previousJSON: raw.rawText, errors: [],
-                requestId: requestId, startMs: startMs
+                requestId: requestId, startMs: startMs, context: &context
             )
 
         case .success(let dto, let extractionUsed, let unknownKeys):
@@ -92,7 +162,8 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                     raw: raw,
                     debug: makeDebug(.succeeded, outcome: "noPatches", attempts: attempts, id: requestId,
                                     elapsed: nowMs() - startMs, networkMs: networkMs,
-                                    extractionUsed: extractionUsed, repairUsed: isRepair, unknownKeys: unknownKeys)
+                                    extractionUsed: extractionUsed, repairUsed: context.repairUsed,
+                                    unknownKeys: unknownKeys, terminationReason: "success")
                 )
             }
 
@@ -104,7 +175,8 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                     raw: raw,
                     debug: makeDebug(.failed, outcome: "failure", attempts: attempts, id: requestId,
                                     elapsed: nowMs() - startMs, networkMs: networkMs,
-                                    repairUsed: isRepair, error: .recipeIdMismatchFatal),
+                                    repairUsed: context.repairUsed, error: .recipeIdMismatchFatal,
+                                    terminationReason: "fatal_validation"),
                     error: .recipeIdMismatchFatal
                 )
             }
@@ -117,7 +189,8 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                     raw: raw,
                     debug: makeDebug(.failed, outcome: "failure", attempts: attempts, id: requestId,
                                     elapsed: nowMs() - startMs, networkMs: networkMs,
-                                    repairUsed: isRepair, error: .validationExpired),
+                                    repairUsed: context.repairUsed, error: .validationExpired,
+                                    terminationReason: "expired_validation"),
                     error: .validationExpired
                 )
             }
@@ -127,20 +200,35 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             do {
                 patches = try psDTO.patches.map { try toPatch($0) }
             } catch {
-                if isRepair {
+                let sig = "validationRecoverable:INVALID_ID"
+                if sig == context.lastFailureSignature {
                     return .failure(
                         fallbackPatchSet: nil,
                         assistantMessage: "I referenced an ID that doesn't exist. Try rephrasing.",
                         raw: raw,
                         debug: makeDebug(.failed, outcome: "failure", attempts: attempts, id: requestId,
                                         elapsed: nowMs() - startMs, networkMs: networkMs,
-                                        repairUsed: true, error: .validationRecoverable),
+                                        repairUsed: context.repairUsed, error: .validationRecoverable,
+                                        terminationReason: "repeat_failure"),
                         error: .validationRecoverable
                     )
                 }
+                if context.repairUsed || context.totalCalls >= Self.maxCalls {
+                    return .failure(
+                        fallbackPatchSet: nil,
+                        assistantMessage: "I referenced an ID that doesn't exist. Try rephrasing.",
+                        raw: raw,
+                        debug: makeDebug(.failed, outcome: "failure", attempts: attempts, id: requestId,
+                                        elapsed: nowMs() - startMs, networkMs: networkMs,
+                                        repairUsed: context.repairUsed, error: .validationRecoverable,
+                                        terminationReason: "budget_exhausted"),
+                        error: .validationRecoverable
+                    )
+                }
+                context.lastFailureSignature = sig
                 let errDescs = [ErrorDescriptor(code: "INVALID_ID", message: "Could not parse one or more patch operation IDs")]
                 return await repair(request: request, previousJSON: raw.rawText, errors: errDescs,
-                                    requestId: requestId, startMs: startMs)
+                                    requestId: requestId, startMs: startMs, context: &context)
             }
 
             let baseRecipeId = UUID(uuidString: psDTO.baseRecipeId) ?? UUID()
@@ -161,7 +249,8 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                     raw: raw,
                     debug: makeDebug(.succeeded, outcome: "valid", attempts: attempts, id: requestId,
                                     elapsed: nowMs() - startMs, networkMs: networkMs,
-                                    extractionUsed: extractionUsed, repairUsed: isRepair, unknownKeys: unknownKeys)
+                                    extractionUsed: extractionUsed, repairUsed: context.repairUsed,
+                                    unknownKeys: unknownKeys, terminationReason: "success")
                 )
             case .invalid(let validationErrors):
                 let classified = classify(validationErrors)
@@ -173,7 +262,8 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                         raw: raw,
                         debug: makeDebug(.failed, outcome: "failure", attempts: attempts, id: requestId,
                                         elapsed: nowMs() - startMs, networkMs: networkMs,
-                                        repairUsed: isRepair, error: .validationFatal),
+                                        repairUsed: context.repairUsed, error: .validationFatal,
+                                        terminationReason: "fatal_validation"),
                         error: .validationFatal
                     )
                 case .validationExpired:
@@ -183,26 +273,43 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                         raw: raw,
                         debug: makeDebug(.failed, outcome: "failure", attempts: attempts, id: requestId,
                                         elapsed: nowMs() - startMs, networkMs: networkMs,
-                                        repairUsed: isRepair, error: .validationExpired),
+                                        repairUsed: context.repairUsed, error: .validationExpired,
+                                        terminationReason: "expired_validation"),
                         error: .validationExpired
                     )
                 default: // recoverable
-                    if isRepair {
+                    let primaryReason = validationErrors.first.map { $0.code.rawValue } ?? "unknown"
+                    let sig = "validationRecoverable:\(primaryReason)"
+                    if sig == context.lastFailureSignature {
                         return .failure(
                             fallbackPatchSet: nil,
                             assistantMessage: "Something went wrong with my suggested changes. Try rephrasing your request.",
                             raw: raw,
                             debug: makeDebug(.failed, outcome: "failure", attempts: attempts, id: requestId,
                                             elapsed: nowMs() - startMs, networkMs: networkMs,
-                                            repairUsed: true, error: .validationRecoverable),
+                                            repairUsed: context.repairUsed, error: .validationRecoverable,
+                                            terminationReason: "repeat_failure"),
                             error: .validationRecoverable
                         )
                     }
+                    if context.repairUsed || context.totalCalls >= Self.maxCalls {
+                        return .failure(
+                            fallbackPatchSet: nil,
+                            assistantMessage: "Something went wrong with my suggested changes. Try rephrasing your request.",
+                            raw: raw,
+                            debug: makeDebug(.failed, outcome: "failure", attempts: attempts, id: requestId,
+                                            elapsed: nowMs() - startMs, networkMs: networkMs,
+                                            repairUsed: context.repairUsed, error: .validationRecoverable,
+                                            terminationReason: "budget_exhausted"),
+                            error: .validationRecoverable
+                        )
+                    }
+                    context.lastFailureSignature = sig
                     let errDescs = validationErrors.map {
                         ErrorDescriptor(code: $0.code.rawValue, message: String(describing: $0))
                     }
                     return await repair(request: request, previousJSON: raw.rawText, errors: errDescs,
-                                        requestId: requestId, startMs: startMs)
+                                        requestId: requestId, startMs: startMs, context: &context)
                 }
             }
         }
@@ -215,8 +322,11 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
         previousJSON: String,
         errors: [ErrorDescriptor],
         requestId: String,
-        startMs: Int
+        startMs: Int,
+        context: inout AttemptContext
     ) async -> LLMResult {
+        context.repairUsed = true
+        context.totalCalls += 1
         let repairRaw: LLMRawResponse
         let repairNetworkMs: Int
         do {
@@ -234,14 +344,32 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                 fallbackPatchSet: nil,
                 assistantMessage: "Network error. Please try again.",
                 raw: nil,
-                debug: makeDebug(.failed, outcome: "failure", attempts: 2, id: requestId,
-                                 elapsed: nowMs() - startMs, repairUsed: true, error: .network),
+                debug: makeDebug(.failed, outcome: "failure", attempts: context.totalCalls,
+                                 id: requestId, elapsed: nowMs() - startMs,
+                                 repairUsed: true, error: .network,
+                                 terminationReason: "repair_network_error"),
                 error: .network
             )
         }
+
+        // Identical rawText — stop immediately, do not re-decode
+        if repairRaw.rawText == previousJSON {
+            return .failure(
+                fallbackPatchSet: nil,
+                assistantMessage: "Something went wrong with my suggested changes. Try rephrasing your request.",
+                raw: repairRaw,
+                debug: makeDebug(.failed, outcome: "failure", attempts: context.totalCalls,
+                                 id: requestId, elapsed: nowMs() - startMs,
+                                 networkMs: repairNetworkMs, repairUsed: true,
+                                 terminationReason: "repair_identical"),
+                error: .validationRecoverable
+            )
+        }
+
         return await decodeAndValidate(
             raw: repairRaw, request: request,
-            requestId: requestId, startMs: startMs, isRepair: true, networkMs: repairNetworkMs
+            requestId: requestId, startMs: startMs, isRepair: true,
+            networkMs: repairNetworkMs, context: &context
         )
     }
 
@@ -409,6 +537,14 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
         }
     }
 
+    private func signatureForDecode(_ df: DecodeFailure) -> String {
+        switch df {
+        case .decodeNonJSON:    return "decode:nonJSON"
+        case .decodeInvalidJSON: return "decode:invalidJSON"
+        case .schemaInvalid:    return "decode:schemaInvalid"
+        }
+    }
+
     // MARK: - Debug Helpers
 
     private struct ErrorDescriptor {
@@ -428,12 +564,13 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
         extractionUsed: Bool = false,
         repairUsed: Bool = false,
         error: LLMError? = nil,
-        unknownKeys: [String] = []
+        unknownKeys: [String] = [],
+        terminationReason: String = "unknown"
     ) -> LLMDebugBundle {
         LLMDebugBundle(
             status: status,
             attemptCount: attempts,
-            maxAttempts: 2,
+            maxAttempts: Self.maxCalls,
             requestId: id,
             extractionUsed: extractionUsed,
             repairUsed: repairUsed,
@@ -444,7 +581,8 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             model: self.model,
             promptVersion: Self.promptVersion,
             outcome: outcome,
-            failureCategory: failureCategoryString(error)
+            failureCategory: failureCategoryString(error),
+            terminationReason: terminationReason
         )
     }
 

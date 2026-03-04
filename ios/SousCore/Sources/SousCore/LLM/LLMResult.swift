@@ -38,6 +38,9 @@ public struct LLMDebugBundle: Equatable, Sendable {
     public let outcome: String
     /// Stable failure bucket string; nil on success. See LLMError mapping in orchestrator.
     public let failureCategory: String?
+    /// Reason the attempt loop terminated. E.g. "success", "fatal_validation", "expired_validation",
+    /// "budget_exhausted", "repeat_failure", "repair_identical". Nil when not yet set.
+    public let terminationReason: String?
 
     public init(
         status: LLMDebugStatus,
@@ -55,7 +58,8 @@ public struct LLMDebugBundle: Equatable, Sendable {
         model: String = "unknown",
         promptVersion: String = "unknown",
         outcome: String = "unknown",
-        failureCategory: String? = nil
+        failureCategory: String? = nil,
+        terminationReason: String? = nil
     ) {
         self.status = status
         self.attemptCount = attemptCount
@@ -73,6 +77,7 @@ public struct LLMDebugBundle: Equatable, Sendable {
         self.promptVersion = promptVersion
         self.outcome = outcome
         self.failureCategory = failureCategory
+        self.terminationReason = terminationReason
     }
 }
 
