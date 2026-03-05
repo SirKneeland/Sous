@@ -61,7 +61,11 @@ struct LLMTypesTests {
             .validationRecoverable,
             .validationExpired,
             .validationFatal,
-            .recipeIdMismatchFatal
+            .recipeIdMismatchFatal,
+            .rateLimited(retryAfterSec: nil),
+            .auth,
+            .badRequest,
+            .server,
         ]
 
         for error in allErrors {
@@ -78,6 +82,10 @@ struct LLMTypesTests {
             case .validationExpired:     "validation"
             case .validationFatal:       "validation"
             case .recipeIdMismatchFatal: "validation"
+            case .rateLimited:           "transport"
+            case .auth:                  "transport"
+            case .badRequest:            "transport"
+            case .server:                "transport"
             }
             #expect(!category.isEmpty)
         }

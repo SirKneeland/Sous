@@ -95,12 +95,17 @@ struct OpenAIClient: LLMClient {
         }
 
         let ms = elapsed(since: start)
-        let httpStatus = (urlResponse as? HTTPURLResponse)?.statusCode
-
-        // Non-200 → .network. Log the actual status for debug diagnostics.
-        guard let status = httpStatus, status == 200 else {
-            debugLog("req=\(resolvedId) status=\(httpStatus.map { "\($0)" } ?? "nil") timing=\(ms)ms -> error:network")
+        guard let httpResp = urlResponse as? HTTPURLResponse else {
+            debugLog("req=\(resolvedId) status=nil timing=\(ms)ms -> error:network")
             throw LLMError.network
+        }
+        let status = httpResp.statusCode
+
+        // Non-200 → classified error.
+        guard status == 200 else {
+            let err = mapHTTPError(status: status, headers: httpResp, body: data)
+            debugLog("req=\(resolvedId) status=\(status) timing=\(ms)ms -> error:\(errorBucket(err))\(errorReason(status: status, body: data))")
+            throw err
         }
 
         // Parse OpenAI envelope to extract rawText.
@@ -132,6 +137,50 @@ struct OpenAIClient: LLMClient {
 
     private func elapsed(since start: Date) -> Int {
         Int(Date().timeIntervalSince(start) * 1000)
+    }
+
+    private func mapHTTPError(status: Int, headers: HTTPURLResponse, body: Data) -> LLMError {
+        switch status {
+        case 429:
+            let retryAfter = headers.value(forHTTPHeaderField: "Retry-After")
+                .flatMap { Int($0) }
+            return .rateLimited(retryAfterSec: retryAfter)
+        case 401, 403:
+            return .auth
+        case 400..<500:
+            return .badRequest
+        default: // 500–599 and unexpected
+            return .server
+        }
+    }
+
+    private func errorBucket(_ error: LLMError) -> String {
+        switch error {
+        case .rateLimited: return "rateLimited"
+        case .auth:        return "auth"
+        case .badRequest:  return "badRequest"
+        case .server:      return "server"
+        default:           return "network"
+        }
+    }
+
+    /// Extracts a short, safe reason string from the OpenAI error envelope.
+    /// Only runs in DEBUG. Never logs prompts, recipe text, or keys.
+    private func errorReason(status: Int, body: Data) -> String {
+#if DEBUG
+        guard !body.isEmpty,
+              let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+              let errObj = json["error"] as? [String: Any]
+        else { return "" }
+        let type_  = errObj["type"]    as? String ?? ""
+        let code   = errObj["code"]    as? String ?? ""
+        let rawMsg = errObj["message"] as? String ?? ""
+        let msg    = rawMsg.count > 120 ? String(rawMsg.prefix(120)) + "…" : rawMsg
+        let parts  = [type_, code, msg].filter { !$0.isEmpty }
+        return parts.isEmpty ? "" : " (\(parts.joined(separator: " | ")))"
+#else
+        return ""
+#endif
     }
 
     private func debugLog(_ message: String) {

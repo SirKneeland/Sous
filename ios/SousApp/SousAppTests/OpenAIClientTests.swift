@@ -21,12 +21,12 @@ private final class MockURLSession: URLSessionProtocol, @unchecked Sendable {
 
 // MARK: - Helpers
 
-private func makeHTTPResponse(status: Int) -> HTTPURLResponse {
+private func makeHTTPResponse(status: Int, headers: [String: String]? = nil) -> HTTPURLResponse {
     HTTPURLResponse(
         url: URL(string: "https://api.openai.com/v1/chat/completions")!,
         statusCode: status,
         httpVersion: nil,
-        headerFields: nil
+        headerFields: headers
     )!
 }
 
@@ -80,40 +80,71 @@ final class OpenAIClientTests: XCTestCase {
         }
     }
 
-    // MARK: HTTP error status → .network
+    // MARK: HTTP error status → classified LLMError
 
-    func testHTTP429_throwsNetwork() async throws {
+    func testHTTP429_throwsRateLimited() async throws {
         let mock = MockURLSession(result: .success((Data(), makeHTTPResponse(status: 429))))
         let client = OpenAIClient(apiKey: "sk-test", session: mock)
-
         do {
             _ = try await client.send(makeRequest())
-            XCTFail("Expected LLMError.network")
-        } catch LLMError.network {
+            XCTFail("Expected LLMError.rateLimited")
+        } catch LLMError.rateLimited {
             // Pass
         }
     }
 
-    func testHTTP500_throwsNetwork() async throws {
-        let mock = MockURLSession(result: .success((Data(), makeHTTPResponse(status: 500))))
+    func testHTTP429_withRetryAfterHeader_parsesSeconds() async throws {
+        let resp = makeHTTPResponse(status: 429, headers: ["Retry-After": "30"])
+        let mock = MockURLSession(result: .success((Data(), resp)))
         let client = OpenAIClient(apiKey: "sk-test", session: mock)
-
         do {
             _ = try await client.send(makeRequest())
-            XCTFail("Expected LLMError.network")
-        } catch LLMError.network {
-            // Pass
+            XCTFail("Expected LLMError.rateLimited")
+        } catch LLMError.rateLimited(let sec) {
+            XCTAssertEqual(sec, 30)
         }
     }
 
-    func testHTTP401_throwsNetwork() async throws {
+    func testHTTP401_throwsAuth() async throws {
         let mock = MockURLSession(result: .success((Data(), makeHTTPResponse(status: 401))))
         let client = OpenAIClient(apiKey: "sk-bad-key", session: mock)
-
         do {
             _ = try await client.send(makeRequest())
-            XCTFail("Expected LLMError.network")
-        } catch LLMError.network {
+            XCTFail("Expected LLMError.auth")
+        } catch LLMError.auth {
+            // Pass
+        }
+    }
+
+    func testHTTP403_throwsAuth() async throws {
+        let mock = MockURLSession(result: .success((Data(), makeHTTPResponse(status: 403))))
+        let client = OpenAIClient(apiKey: "sk-test", session: mock)
+        do {
+            _ = try await client.send(makeRequest())
+            XCTFail("Expected LLMError.auth")
+        } catch LLMError.auth {
+            // Pass
+        }
+    }
+
+    func testHTTP400_throwsBadRequest() async throws {
+        let mock = MockURLSession(result: .success((Data(), makeHTTPResponse(status: 400))))
+        let client = OpenAIClient(apiKey: "sk-test", session: mock)
+        do {
+            _ = try await client.send(makeRequest())
+            XCTFail("Expected LLMError.badRequest")
+        } catch LLMError.badRequest {
+            // Pass
+        }
+    }
+
+    func testHTTP500_throwsServer() async throws {
+        let mock = MockURLSession(result: .success((Data(), makeHTTPResponse(status: 500))))
+        let client = OpenAIClient(apiKey: "sk-test", session: mock)
+        do {
+            _ = try await client.send(makeRequest())
+            XCTFail("Expected LLMError.server")
+        } catch LLMError.server {
             // Pass
         }
     }

@@ -307,4 +307,34 @@ struct OpenAILLMOrchestratorTests {
         #expect(mock.callCount == 1)
         #expect(d.terminationReason == "expired_validation")
     }
+
+    @Test("auth error terminates immediately — not retried")
+    func authError_terminatesImmediately_notRetried() async {
+        let (orch, mock) = orchestrator([.failure(LLMError.auth)])
+        let result = await orch.run(request())
+        guard case .failure(_, _, _, let d, let err) = result else {
+            Issue.record("Expected .failure, got \(result)"); return
+        }
+        #expect(err == .auth)
+        #expect(mock.callCount == 1, "auth must not trigger any retry")
+        #expect(d.failureCategory == "auth")
+        #expect(d.terminationReason == "fatal_auth")
+    }
+
+    @Test("rateLimited error retries once then fails with repeat_failure")
+    func rateLimited_retriesOnce_thenRepeatFailure() async {
+        // Two consecutive rateLimited throws → repeat_failure on second.
+        let (orch, mock) = orchestrator([
+            .failure(LLMError.rateLimited(retryAfterSec: 0)),
+            .failure(LLMError.rateLimited(retryAfterSec: 0)),
+        ])
+        let result = await orch.run(request())
+        guard case .failure(_, _, _, let d, let err) = result else {
+            Issue.record("Expected .failure, got \(result)"); return
+        }
+        #expect(err == .rateLimited(retryAfterSec: 0))
+        #expect(mock.callCount == 2, "rateLimited must be retried exactly once")
+        #expect(d.failureCategory == "rateLimited")
+        #expect(d.terminationReason == "repeat_failure")
+    }
 }

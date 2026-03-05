@@ -58,33 +58,56 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                 break
             } catch {
                 networkMs = nowMs() - netStart
-                let sig = "network:"
-                if sig == context.lastFailureSignature {
+                let llmErr = error as? LLMError ?? .network
+
+                // Auth errors are fatal — never retry.
+                if case .auth = llmErr {
                     return .failure(
                         fallbackPatchSet: nil,
-                        assistantMessage: "Network error. Please try again.",
+                        assistantMessage: "Authentication failed. Please check your API key.",
                         raw: nil,
                         debug: makeDebug(.failed, outcome: "failure", attempts: context.totalCalls,
                                         id: requestId, elapsed: nowMs() - startMs,
-                                        networkMs: networkMs, error: .network,
+                                        networkMs: networkMs, error: .auth,
+                                        terminationReason: "fatal_auth"),
+                        error: .auth
+                    )
+                }
+
+                let sig: String
+                if case .rateLimited = llmErr { sig = "rateLimited:" }
+                else { sig = "network:" }
+
+                if sig == context.lastFailureSignature {
+                    return .failure(
+                        fallbackPatchSet: nil,
+                        assistantMessage: assistantMessage(for: llmErr),
+                        raw: nil,
+                        debug: makeDebug(.failed, outcome: "failure", attempts: context.totalCalls,
+                                        id: requestId, elapsed: nowMs() - startMs,
+                                        networkMs: networkMs, error: llmErr,
                                         terminationReason: "repeat_failure"),
-                        error: .network
+                        error: llmErr
                     )
                 }
                 context.lastFailureSignature = sig
                 if context.totalCalls < Self.maxCalls {
-                    await backoff(attempt: context.totalCalls)
+                    if case .rateLimited(let retryAfter) = llmErr {
+                        await rateLimitedBackoff(retryAfterSec: retryAfter)
+                    } else {
+                        await backoff(attempt: context.totalCalls)
+                    }
                     continue
                 }
                 return .failure(
                     fallbackPatchSet: nil,
-                    assistantMessage: "Network error. Please try again.",
+                    assistantMessage: assistantMessage(for: llmErr),
                     raw: nil,
                     debug: makeDebug(.failed, outcome: "failure", attempts: context.totalCalls,
                                     id: requestId, elapsed: nowMs() - startMs,
-                                    networkMs: networkMs, error: .network,
+                                    networkMs: networkMs, error: llmErr,
                                     terminationReason: "budget_exhausted"),
-                    error: .network
+                    error: llmErr
                 )
             }
         }
@@ -104,6 +127,22 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
         let jitter = Double.random(in: 0...0.3)
         let delaySeconds = min(base * pow(2.0, Double(attempt - 1)) + jitter, cap)
         try? await Task.sleep(nanoseconds: UInt64(delaySeconds * 1_000_000_000))
+    }
+
+    private func rateLimitedBackoff(retryAfterSec: Int?) async {
+        let cap = 2.0
+        let seconds = min(Double(retryAfterSec ?? 1), cap)
+        try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+    }
+
+    private func assistantMessage(for error: LLMError) -> String {
+        switch error {
+        case .rateLimited: return "I'm being rate limited — please try again in a moment."
+        case .auth:        return "Authentication failed. Please check your API key."
+        case .badRequest:  return "Something went wrong with the request. Please try again."
+        case .server:      return "The server encountered an error. Please try again."
+        default:           return "Network error. Please try again."
+        }
     }
 
     // MARK: - Decode + Validate
@@ -340,15 +379,16 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             ))
             repairNetworkMs = nowMs() - netStart
         } catch {
+            let llmErr = error as? LLMError ?? .network
             return .failure(
                 fallbackPatchSet: nil,
-                assistantMessage: "Network error. Please try again.",
+                assistantMessage: assistantMessage(for: llmErr),
                 raw: nil,
                 debug: makeDebug(.failed, outcome: "failure", attempts: context.totalCalls,
                                  id: requestId, elapsed: nowMs() - startMs,
-                                 repairUsed: true, error: .network,
+                                 repairUsed: true, error: llmErr,
                                  terminationReason: "repair_network_error"),
-                error: .network
+                error: llmErr
             )
         }
 
@@ -591,6 +631,10 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
         switch error {
         case .missingAPIKey:                             return "missingAPIKey"
         case .network, .timeout, .cancelled:             return "network"
+        case .rateLimited:                               return "rateLimited"
+        case .auth:                                      return "auth"
+        case .badRequest:                                return "badRequest"
+        case .server:                                    return "server"
         case .decodeNonJSON, .decodeInvalidJSON:         return "decode"
         case .schemaInvalid:                             return "schema"
         case .validationFatal, .recipeIdMismatchFatal:   return "validationFatal"

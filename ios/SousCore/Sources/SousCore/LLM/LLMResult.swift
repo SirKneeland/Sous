@@ -106,6 +106,14 @@ public enum LLMError: Error, Equatable, Sendable {
     case validationFatal
     /// The patchSet.baseRecipeId does not match the current recipe ID; reject immediately.
     case recipeIdMismatchFatal
+    /// HTTP 429 — rate limited or quota exceeded. retryAfterSec parsed from Retry-After header.
+    case rateLimited(retryAfterSec: Int?)
+    /// HTTP 401 or 403 — authentication / authorisation failure. Not retryable.
+    case auth
+    /// HTTP 4xx (other than 401/403/429) — malformed request.
+    case badRequest
+    /// HTTP 5xx — server-side error.
+    case server
 }
 
 // MARK: - LLMResult
