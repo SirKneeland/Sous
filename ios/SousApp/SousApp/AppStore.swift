@@ -63,9 +63,15 @@ final class AppStore: ObservableObject {
         }
     }
 
+    let keyProvider: any OpenAIKeyProviding
+
     private func resolvedAPIKey() -> String? {
-        let key = ProcessInfo.processInfo.environment["OPENAI_API_KEY"]
-        return (key?.isEmpty == false) ? key : nil
+        if let key = keyProvider.currentKey() { return key }
+#if DEBUG
+        let envKey = ProcessInfo.processInfo.environment["OPENAI_API_KEY"]
+        if envKey?.isEmpty == false { return envKey }
+#endif
+        return nil
     }
 
     static let recipeId          = UUID(uuidString: "00000000-0000-0000-FFFF-000000000001")!
@@ -76,8 +82,10 @@ final class AppStore: ObservableObject {
     static let stepBakeId        = UUID(uuidString: "00000000-0000-0000-0001-000000000002")!
     static let stepDoneId        = UUID(uuidString: "00000000-0000-0000-0001-000000000003")!
 
-    init(testOrchestrator: (any LLMOrchestrator)? = nil) {
+    init(testOrchestrator: (any LLMOrchestrator)? = nil,
+         keyProvider: any OpenAIKeyProviding = KeychainOpenAIKeyProvider()) {
         self.testOrchestrator = testOrchestrator
+        self.keyProvider = keyProvider
         let recipe = Recipe(
             id: Self.recipeId,
             version: 1,

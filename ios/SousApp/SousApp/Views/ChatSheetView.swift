@@ -5,6 +5,9 @@ struct ChatSheetView: View {
     @ObservedObject var store: AppStore
     @State private var composerText = ""
     @State private var debugExpanded = false
+#if DEBUG
+    @State private var keyInput = ""
+#endif
 
     private var hasPendingPatch: Bool {
         store.uiState.isPatchProposed
@@ -93,6 +96,27 @@ struct ChatSheetView: View {
                         )
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.top, 4)
+                }
+                Divider().padding(.vertical, 4)
+                Text("Key Present: \(store.keyProvider.currentKey() != nil ? "Yes" : "No")")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    SecureField("OpenAI Key", text: $keyInput)
+                        .font(.footnote)
+                        .textContentType(.password)
+                    Button("Save") {
+                        store.keyProvider.setKey(keyInput)
+                        keyInput = ""
+                    }
+                    .font(.caption)
+                    .buttonStyle(.bordered)
+                    .disabled(keyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Button("Clear") {
+                        store.keyProvider.clearKey()
+                    }
+                    .font(.caption)
+                    .buttonStyle(.bordered)
                 }
 #endif
             }
