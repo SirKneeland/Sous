@@ -64,7 +64,7 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                 if case .auth = llmErr {
                     return .failure(
                         fallbackPatchSet: nil,
-                        assistantMessage: "Authentication failed. Please check your API key.",
+                        assistantMessage: assistantMessage(for: .auth),
                         raw: nil,
                         debug: makeDebug(.failed, outcome: "failure", attempts: context.totalCalls,
                                         id: requestId, elapsed: nowMs() - startMs,
@@ -137,11 +137,17 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
 
     private func assistantMessage(for error: LLMError) -> String {
         switch error {
-        case .rateLimited: return "I'm being rate limited — please try again in a moment."
-        case .auth:        return "Authentication failed. Please check your API key."
-        case .badRequest:  return "Something went wrong with the request. Please try again."
-        case .server:      return "The server encountered an error. Please try again."
-        default:           return "Network error. Please try again."
+        case .missingAPIKey:                             return "OpenAI API key missing. Add it in Debug settings."
+        case .auth:                                      return "OpenAI key invalid or unauthorized."
+        case .rateLimited:                               return "OpenAI quota/rate limit hit. Try again shortly."
+        case .server:                                    return "OpenAI service error. Try again."
+        case .badRequest:                                return "Request failed. Please try a different phrasing."
+        case .network, .timeout, .cancelled:             return "Network issue. Check connection and try again."
+        case .decodeNonJSON, .decodeInvalidJSON,
+             .schemaInvalid, .validationRecoverable,
+             .validationExpired, .validationFatal,
+             .recipeIdMismatchFatal:                     return "Something went wrong. Please try again."
+        default:                                         return "Something went wrong. Please try again."
         }
     }
 

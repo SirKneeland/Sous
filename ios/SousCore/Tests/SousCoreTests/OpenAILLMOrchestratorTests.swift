@@ -337,4 +337,17 @@ struct OpenAILLMOrchestratorTests {
         #expect(d.failureCategory == "rateLimited")
         #expect(d.terminationReason == "repeat_failure")
     }
+
+    @Test("rateLimited failure message maps to quota/rate limit copy")
+    func rateLimited_assistantMessage_isQuotaString() async {
+        let (orch, _) = orchestrator([
+            .failure(LLMError.rateLimited(retryAfterSec: nil)),
+            .failure(LLMError.rateLimited(retryAfterSec: nil)),
+        ])
+        let result = await orch.run(request())
+        guard case .failure(_, let msg, _, _, _) = result else {
+            Issue.record("Expected .failure, got \(result)"); return
+        }
+        #expect(msg == "OpenAI quota/rate limit hit. Try again shortly.")
+    }
 }
