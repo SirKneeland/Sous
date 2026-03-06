@@ -32,6 +32,27 @@ private actor SyncOrchestrator: LLMOrchestrator {
     func run(_ request: LLMRequest) async -> LLMResult { fixedResult }
 }
 
+// MARK: - CapturingOrchestrator
+
+/// Actor-based mock that records every LLMRequest it receives and returns results from a
+/// pre-configured sequence (last result repeats if exhausted). Used to assert on what
+/// context the store passes to the orchestrator without exposing private AppStore state.
+private actor CapturingOrchestrator: LLMOrchestrator {
+    private let results: [LLMResult]
+    private(set) var requests: [LLMRequest] = []
+    private(set) var callCount = 0
+
+    init(results: [LLMResult]) { self.results = results }
+    init(result: LLMResult)    { self.results = [result] }
+
+    func run(_ request: LLMRequest) async -> LLMResult {
+        requests.append(request)
+        let idx = min(callCount, results.count - 1)
+        callCount += 1
+        return results[idx]
+    }
+}
+
 // MARK: - Helpers
 
 private extension AppStoreTests {
@@ -57,6 +78,30 @@ private extension AppStoreTests {
 
     func validResult(patchSet: PatchSet) -> LLMResult {
         .valid(patchSet: patchSet, assistantMessage: "Done.", raw: nil, debug: minimalDebug())
+    }
+
+    func noPatchesResult() -> LLMResult {
+        .noPatches(assistantMessage: "Clarification needed: please elaborate.", raw: nil, debug: minimalDebug())
+    }
+
+    func failureDebug() -> LLMDebugBundle {
+        LLMDebugBundle(
+            status: .failed,
+            attemptCount: 2, maxAttempts: 2,
+            requestId: "test-fail",
+            extractionUsed: false, repairUsed: true,
+            timingTotalMs: 0
+        )
+    }
+
+    func failureResult(fallbackPatchSet: PatchSet? = nil) -> LLMResult {
+        .failure(
+            fallbackPatchSet: fallbackPatchSet,
+            assistantMessage: "Something went wrong. Please try again.",
+            raw: nil,
+            debug: failureDebug(),
+            error: .schemaInvalid
+        )
     }
 
     /// Yields to the MainActor scheduler multiple times so enqueued tasks can complete.
@@ -251,5 +296,227 @@ final class AppStoreTests: XCTestCase {
         XCTAssertEqual(store.llmDebugStatus, "fatal_recipeIdMismatch")
         XCTAssertEqual(store.uiState.recipe, original,
                        "Recipe must be unchanged after fatal recipeId mismatch")
+    }
+
+    // MARK: (i) noPatches → assistant message appended, chatOpen state, no patch flow
+
+    func test_noPatches_appendsAssistantMessage_noPatchFlow() async {
+        let mock = SyncOrchestrator(result: noPatchesResult())
+        let store = AppStore(testOrchestrator: mock)
+        let initialCount = store.chatTranscript.count
+
+        store.send(.openChat)
+        store.sendUserMessage("what temperature?")
+        await drainMain()
+
+        // Exact state: chatOpen, no patch states entered
+        if case .chatOpen = store.uiState {} else {
+            XCTFail("Expected chatOpen after noPatches, got \(store.uiState)")
+        }
+        XCTAssertFalse(store.uiState.isPatchProposed, "noPatches must not enter patchProposed")
+        XCTAssertFalse(store.uiState.isPatchReview,   "noPatches must not enter patchReview")
+        // +2: user bubble + assistant reply
+        XCTAssertEqual(store.chatTranscript.count, initialCount + 2,
+                       "Transcript must grow by exactly 2 (user bubble + assistant reply)")
+        XCTAssertEqual(store.llmDebugStatus, "succeeded")
+    }
+
+    // MARK: (j) noPatches clears nextLLMContext — asserted via captured third request
+
+    func test_noPatches_clearsNextLLMContext() async {
+        // Call 1 (.valid): seed nextLLMContext by driving through reject
+        // Call 2 (.noPatches): must carry the prior reject context, then clear it
+        // Call 3: captured request must have nextLLMContext == nil
+        let mock = CapturingOrchestrator(results: [
+            validResult(patchSet: seedPatchSet()),
+            noPatchesResult(),
+            noPatchesResult(),
+        ])
+        let store = AppStore(testOrchestrator: mock)
+        let original = store.uiState.recipe
+
+        // Seed nextLLMContext via reject flow (call 1)
+        store.send(.openChat)
+        store.sendUserMessage("add a note")
+        await drainMain()
+        store.send(.validatePatch)
+        store.send(.rejectPatch(userText: "nope"))   // populates nextLLMContext
+
+        // noPatches call — should include the prior reject context (call 2)
+        store.sendUserMessage("never mind")
+        await drainMain()
+
+        // Third send — captured request must carry nil nextLLMContext (call 3)
+        store.sendUserMessage("what else?")
+        await drainMain()
+
+        let requests = await mock.requests
+        XCTAssertEqual(requests.count, 3, "Expected exactly 3 LLM calls")
+        XCTAssertNotNil(requests[1].nextLLMContext,
+                        "Call 2 (noPatches) must carry the prior reject context")
+        XCTAssertNil(requests[2].nextLLMContext,
+                     "Call 3 must have nil nextLLMContext — noPatches cleared it")
+        XCTAssertEqual(store.uiState.recipe, original, "Recipe must be unchanged throughout")
+    }
+
+    // MARK: (k) noPatches does not block future sends
+
+    func test_noPatches_doesNotBlockFutureSends() async {
+        let mock = CapturingOrchestrator(result: noPatchesResult())
+        let store = AppStore(testOrchestrator: mock)
+        let initialCount = store.chatTranscript.count
+
+        store.send(.openChat)
+        store.sendUserMessage("first")
+        await drainMain()
+        store.sendUserMessage("second")
+        await drainMain()
+
+        let callCount = await mock.callCount
+        XCTAssertEqual(callCount, 2, "Orchestrator must be called exactly twice")
+        // +4: user1, assistant1, user2, assistant2
+        XCTAssertEqual(store.chatTranscript.count, initialCount + 4,
+                       "Transcript must reflect both successful sends (+4)")
+        XCTAssertEqual(store.llmDebugStatus, "succeeded")
+        XCTAssertFalse(store.uiState.isPatchProposed)
+        XCTAssertFalse(store.uiState.isPatchReview)
+    }
+
+    // MARK: (l) noPatches + existing recipe leaves recipe byte-for-byte unchanged
+
+    func test_noPatches_recipeByteForByteUnchanged() async {
+        let mock = SyncOrchestrator(result: noPatchesResult())
+        let store = AppStore(testOrchestrator: mock)
+        let original = store.uiState.recipe
+
+        store.send(.openChat)
+        store.sendUserMessage("just a question")
+        await drainMain()
+
+        XCTAssertEqual(store.uiState.recipe, original,
+                       "Recipe must be byte-for-byte unchanged after noPatches")
+        XCTAssertEqual(store.uiState.recipe.version, original.version,
+                       "Recipe version must not increment")
+        XCTAssertFalse(store.uiState.isPatchProposed)
+        XCTAssertFalse(store.uiState.isPatchReview)
+        if case .chatOpen = store.uiState {} else {
+            XCTFail("Expected chatOpen after noPatches, got \(store.uiState)")
+        }
+    }
+
+    // MARK: (m) repair exhaustion (failure, no fallback) → no mutation, no patch flow
+
+    func test_failure_noMutation_noPatchFlow() async {
+        let mock = SyncOrchestrator(result: failureResult(fallbackPatchSet: nil))
+        let store = AppStore(testOrchestrator: mock)
+        let original = store.uiState.recipe
+        let initialCount = store.chatTranscript.count
+
+        store.send(.openChat)
+        store.sendUserMessage("make it spicy")
+        await drainMain()
+
+        XCTAssertEqual(store.uiState.recipe, original,
+                       "Recipe must not mutate after LLM failure with no fallback")
+        XCTAssertFalse(store.uiState.isPatchProposed,
+                       "Failure with no fallback must not enter patchProposed")
+        XCTAssertFalse(store.uiState.isPatchReview,
+                       "Failure with no fallback must not enter patchReview")
+        // +2: user bubble + assistant failure message
+        XCTAssertEqual(store.chatTranscript.count, initialCount + 2,
+                       "Transcript must grow by 2 (user + assistant failure message)")
+        XCTAssertEqual(store.llmDebugStatus, "failed",
+                       "llmDebugStatus must be 'failed' after exhaustion")
+    }
+
+    // MARK: (n) failure with fallbackPatchSet → recipe does not mutate before Accept
+
+    func test_failureWithFallback_noMutationUntilAccept() async {
+        let mock = SyncOrchestrator(result: failureResult(fallbackPatchSet: seedPatchSet()))
+        let store = AppStore(testOrchestrator: mock)
+        let original = store.uiState.recipe
+
+        store.send(.openChat)
+        store.sendUserMessage("make it spicy")
+        await drainMain()
+
+        // Fallback patch enters proposed path — recipe still unchanged
+        XCTAssertEqual(store.uiState.recipe, original,
+                       "Recipe must not mutate before Accept even with fallbackPatchSet")
+        XCTAssertTrue(store.uiState.isPatchProposed,
+                      "Fallback patchSet must enter patchProposed")
+        XCTAssertEqual(store.llmDebugStatus, "failed")
+
+        // Accept → recipe mutates
+        store.send(.validatePatch)
+        store.send(.acceptPatch)
+        let updated = store.uiState.recipe
+        XCTAssertEqual(updated.version, original.version + 1,
+                       "Recipe version must increment exactly once on Accept")
+        XCTAssertTrue(updated.notes.contains("test note"),
+                      "Fallback patch note must be present after Accept")
+    }
+
+    // MARK: (o) repeated failure does not block future sends
+
+    func test_failure_doesNotBlockFutureSends() async {
+        let mock = CapturingOrchestrator(results: [
+            failureResult(fallbackPatchSet: nil),
+            noPatchesResult(),
+        ])
+        let store = AppStore(testOrchestrator: mock)
+        let initialCount = store.chatTranscript.count
+
+        store.send(.openChat)
+        store.sendUserMessage("first")
+        await drainMain()
+
+        XCTAssertEqual(store.llmDebugStatus, "failed")
+        // Second send must not be blocked by stale failed state
+        store.sendUserMessage("second")
+        await drainMain()
+
+        let callCount = await mock.callCount
+        XCTAssertEqual(callCount, 2, "Orchestrator must be called exactly twice")
+        // +4: user1, assistant1(failure), user2, assistant2(noPatches)
+        XCTAssertEqual(store.chatTranscript.count, initialCount + 4,
+                       "Transcript must reflect both sends (+4 entries)")
+        XCTAssertEqual(store.llmDebugStatus, "succeeded")
+    }
+
+    // MARK: (p) failure does not clear nextLLMContext — preserved for next call
+
+    func test_failure_preservesNextLLMContext() async {
+        let mock = CapturingOrchestrator(results: [
+            validResult(patchSet: seedPatchSet()),   // call 1: seed nextLLMContext via reject
+            failureResult(fallbackPatchSet: nil),    // call 2: failure must NOT clear context
+            noPatchesResult(),                       // call 3: must receive preserved context
+        ])
+        let store = AppStore(testOrchestrator: mock)
+        let original = store.uiState.recipe
+
+        // Call 1: valid → reject → seeds nextLLMContext
+        store.send(.openChat)
+        store.sendUserMessage("first")
+        await drainMain()
+        store.send(.validatePatch)
+        store.send(.rejectPatch(userText: "no thanks"))
+
+        // Call 2: failure(nil) — nextLLMContext must survive
+        store.sendUserMessage("second")
+        await drainMain()
+        XCTAssertEqual(store.llmDebugStatus, "failed")
+
+        // Call 3: noPatches — request must still carry the reject context
+        store.sendUserMessage("third")
+        await drainMain()
+
+        let requests = await mock.requests
+        XCTAssertEqual(requests.count, 3, "Expected exactly 3 LLM calls")
+        XCTAssertNotNil(requests[1].nextLLMContext,
+                        "Call 2 (failure) must carry the prior reject context")
+        XCTAssertNotNil(requests[2].nextLLMContext,
+                        "Call 3 must still carry context — failure did not clear it")
+        XCTAssertEqual(store.uiState.recipe, original, "Recipe must be unchanged throughout")
     }
 }
