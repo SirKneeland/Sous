@@ -156,4 +156,100 @@ final class AppStoreTests: XCTestCase {
         XCTAssertFalse(store.uiState.isPatchProposed,
                        "Wrong recipeId must not enter patch review")
     }
+
+    // MARK: (e) Valid PatchSet → no recipe mutation until Accept
+
+    func test_validPatch_noMutationUntilAccept() async {
+        let mock = SyncOrchestrator(result: validResult(patchSet: seedPatchSet()))
+        let store = AppStore(testOrchestrator: mock)
+        let original = store.uiState.recipe
+
+        // Establish chatOpen (patchReceived is only handled from chatOpen state)
+        store.send(.openChat)
+
+        store.sendUserMessage("add a note")
+        await drainMain()
+
+        // Must be in patchProposed; recipe not yet mutated
+        XCTAssertTrue(store.uiState.isPatchProposed, "Must be in patchProposed after valid LLM result")
+        XCTAssertEqual(store.uiState.recipe, original, "Recipe must not change before Accept")
+
+        // Validate → patchReview; recipe still unchanged
+        store.send(.validatePatch)
+        XCTAssertTrue(store.uiState.isPatchReview, "Must be in patchReview after validatePatch")
+        XCTAssertEqual(store.uiState.recipe, original, "Recipe must not change during patchReview")
+
+        // Accept → recipe mutates deterministically
+        store.send(.acceptPatch)
+        let updated = store.uiState.recipe
+        XCTAssertEqual(updated.version, original.version + 1,
+                       "Recipe version must increment exactly once on Accept")
+        XCTAssertTrue(updated.notes.contains("test note"),
+                      "Patch note must be present after Accept")
+        XCTAssertTrue(updated.notes.contains("Original family recipe"),
+                      "Original note must be preserved after Accept")
+    }
+
+    // MARK: (f) Reject → no recipe mutation ever
+
+    func test_reject_noMutation() async {
+        let mock = SyncOrchestrator(result: validResult(patchSet: seedPatchSet()))
+        let store = AppStore(testOrchestrator: mock)
+        let original = store.uiState.recipe
+
+        store.send(.openChat)
+        store.sendUserMessage("add a note")
+        await drainMain()
+
+        store.send(.validatePatch)
+        store.send(.rejectPatch(userText: "nope"))
+
+        XCTAssertEqual(store.uiState.recipe, original,
+                       "Recipe must be identical to original after Reject")
+        XCTAssertFalse(store.uiState.isPatchProposed, "No pending patch after Reject")
+        XCTAssertFalse(store.uiState.isPatchReview,   "No patch review after Reject")
+    }
+
+    // MARK: (g) Expired (stale version) → no recipe mutation ever
+
+    func test_staleVersion_recipeUnchanged() async {
+        let stalePatchSet = PatchSet(
+            baseRecipeId: AppStore.recipeId,
+            baseRecipeVersion: 99,
+            patches: [.addNote(text: "stale")]
+        )
+        let mock = SyncOrchestrator(result: validResult(patchSet: stalePatchSet))
+        let store = AppStore(testOrchestrator: mock)
+        let original = store.uiState.recipe
+
+        store.send(.openChat)
+        store.sendUserMessage("make it better")
+        await drainMain()
+
+        XCTAssertEqual(store.llmDebugStatus, "expired_recipeVersionMismatch")
+        XCTAssertEqual(store.uiState.recipe, original,
+                       "Recipe must be unchanged after expired version mismatch")
+    }
+
+    // MARK: (h) Fatal recipeId mismatch → no recipe mutation ever
+
+    func test_fatalIdMismatch_recipeUnchanged() async {
+        let wrongId = UUID(uuidString: "DEADBEEF-0000-0000-0000-000000000000")!
+        let mismatchedPatchSet = PatchSet(
+            baseRecipeId: wrongId,
+            baseRecipeVersion: 1,
+            patches: [.addNote(text: "wrong recipe")]
+        )
+        let mock = SyncOrchestrator(result: validResult(patchSet: mismatchedPatchSet))
+        let store = AppStore(testOrchestrator: mock)
+        let original = store.uiState.recipe
+
+        store.send(.openChat)
+        store.sendUserMessage("make it better")
+        await drainMain()
+
+        XCTAssertEqual(store.llmDebugStatus, "fatal_recipeIdMismatch")
+        XCTAssertEqual(store.uiState.recipe, original,
+                       "Recipe must be unchanged after fatal recipeId mismatch")
+    }
 }
