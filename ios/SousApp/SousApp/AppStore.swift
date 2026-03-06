@@ -37,6 +37,8 @@ final class AppStore: ObservableObject {
     @Published var uiState: UIState
     @Published var chatTranscript: [ChatMessage] = []
     @Published var llmDebugStatus: String? = nil
+    /// The debug bundle from the most recent LLM run. Updated on every result path.
+    @Published var lastDebugBundle: LLMDebugBundle? = nil
 
     /// Toggle via setUseLiveLLM(_:) so cancellation side-effects are applied correctly.
     private(set) var useLiveLLM = true
@@ -189,7 +191,8 @@ final class AppStore: ObservableObject {
         }
 
         switch result {
-        case .valid(let patchSet, let assistantMessage, _, _):
+        case .valid(let patchSet, let assistantMessage, _, let debug):
+            lastDebugBundle = debug
             // Receipt-time stale-state check against CURRENT recipe (not the request snapshot).
             // Guards races where the recipe was mutated while the LLM call was in flight.
             let current = uiState.recipe
@@ -208,12 +211,14 @@ final class AppStore: ObservableObject {
             append(ChatMessage(role: .assistant, text: assistantMessage))
             llmDebugStatus = "succeeded"
 
-        case .noPatches(let assistantMessage, _, _):
+        case .noPatches(let assistantMessage, _, let debug):
+            lastDebugBundle = debug
             nextLLMContext = nil
             append(ChatMessage(role: .assistant, text: assistantMessage))
             llmDebugStatus = "succeeded"
 
-        case .failure(let fallbackPatchSet, let assistantMessage, _, _, _):
+        case .failure(let fallbackPatchSet, let assistantMessage, _, let debug, _):
+            lastDebugBundle = debug
             if let fallback = fallbackPatchSet {
                 send(.patchReceived(fallback))
             }

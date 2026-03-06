@@ -18,6 +18,9 @@ public struct LLMRawResponse: Equatable, Sendable {
     public let timingMs: Int
     public let httpStatus: Int?
     public let transport: Transport
+    public let promptTokens: Int?
+    public let completionTokens: Int?
+    public let totalTokens: Int?
 
     public init(
         rawText: String,
@@ -25,7 +28,10 @@ public struct LLMRawResponse: Equatable, Sendable {
         attempt: Int,
         timingMs: Int,
         httpStatus: Int? = nil,
-        transport: Transport
+        transport: Transport,
+        promptTokens: Int? = nil,
+        completionTokens: Int? = nil,
+        totalTokens: Int? = nil
     ) {
         self.rawText = rawText
         self.requestId = requestId
@@ -33,5 +39,8 @@ public struct LLMRawResponse: Equatable, Sendable {
         self.timingMs = timingMs
         self.httpStatus = httpStatus
         self.transport = transport
+        self.promptTokens = promptTokens
+        self.completionTokens = completionTokens
+        self.totalTokens = totalTokens
     }
 }

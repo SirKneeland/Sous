@@ -7,6 +7,7 @@ struct ChatSheetView: View {
     @State private var debugExpanded = false
 #if DEBUG
     @State private var keyInput = ""
+    @State private var debugCopied = false
 #endif
 
     private var hasPendingPatch: Bool {
@@ -114,6 +115,24 @@ struct ChatSheetView: View {
                     .disabled(keyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     Button("Clear") {
                         store.keyProvider.clearKey()
+                    }
+                    .font(.caption)
+                    .buttonStyle(.bordered)
+                }
+                Divider().padding(.vertical, 4)
+                HStack(spacing: 8) {
+                    Button(debugCopied ? "Copied" : "Copy Debug Info") {
+                        let json: String
+                        if let bundle = store.lastDebugBundle {
+                            json = LLMDebugExport.make(from: bundle).jsonString()
+                        } else {
+                            json = "{}"
+                        }
+                        UIPasteboard.general.string = json
+                        debugCopied = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            debugCopied = false
+                        }
                     }
                     .font(.caption)
                     .buttonStyle(.bordered)

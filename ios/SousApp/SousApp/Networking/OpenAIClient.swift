@@ -123,13 +123,21 @@ struct OpenAIClient: LLMClient {
 
         debugLog("req=\(resolvedId) status=\(status) timing=\(ms)ms")
 
+        let usage = json["usage"] as? [String: Any]
+        let promptTokens    = usage?["prompt_tokens"]     as? Int
+        let completionTokens = usage?["completion_tokens"] as? Int
+        let totalTokens     = usage?["total_tokens"]      as? Int
+
         return LLMRawResponse(
             rawText: content,
             requestId: resolvedId,
             attempt: 1,
             timingMs: ms,
             httpStatus: status,
-            transport: .openAI
+            transport: .openAI,
+            promptTokens: promptTokens,
+            completionTokens: completionTokens,
+            totalTokens: totalTokens
         )
     }
 

@@ -178,7 +178,7 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                     debug: makeDebug(.failed, outcome: "failure", attempts: attempts, id: requestId,
                                     elapsed: nowMs() - startMs, networkMs: networkMs,
                                     repairUsed: context.repairUsed, error: llmErr,
-                                    terminationReason: "repeat_failure"),
+                                    terminationReason: "repeat_failure", raw: raw),
                     error: llmErr
                 )
             }
@@ -190,7 +190,7 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                     debug: makeDebug(.failed, outcome: "failure", attempts: attempts, id: requestId,
                                     elapsed: nowMs() - startMs, networkMs: networkMs,
                                     repairUsed: context.repairUsed, error: llmErr,
-                                    terminationReason: "budget_exhausted"),
+                                    terminationReason: "budget_exhausted", raw: raw),
                     error: llmErr
                 )
             }
@@ -208,7 +208,7 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                     debug: makeDebug(.succeeded, outcome: "noPatches", attempts: attempts, id: requestId,
                                     elapsed: nowMs() - startMs, networkMs: networkMs,
                                     extractionUsed: extractionUsed, repairUsed: context.repairUsed,
-                                    unknownKeys: unknownKeys, terminationReason: "success")
+                                    unknownKeys: unknownKeys, terminationReason: "success", raw: raw)
                 )
             }
 
@@ -221,7 +221,7 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                     debug: makeDebug(.failed, outcome: "failure", attempts: attempts, id: requestId,
                                     elapsed: nowMs() - startMs, networkMs: networkMs,
                                     repairUsed: context.repairUsed, error: .recipeIdMismatchFatal,
-                                    terminationReason: "fatal_validation"),
+                                    terminationReason: "fatal_validation", raw: raw),
                     error: .recipeIdMismatchFatal
                 )
             }
@@ -235,7 +235,7 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                     debug: makeDebug(.failed, outcome: "failure", attempts: attempts, id: requestId,
                                     elapsed: nowMs() - startMs, networkMs: networkMs,
                                     repairUsed: context.repairUsed, error: .validationExpired,
-                                    terminationReason: "expired_validation"),
+                                    terminationReason: "expired_validation", raw: raw),
                     error: .validationExpired
                 )
             }
@@ -254,7 +254,7 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                         debug: makeDebug(.failed, outcome: "failure", attempts: attempts, id: requestId,
                                         elapsed: nowMs() - startMs, networkMs: networkMs,
                                         repairUsed: context.repairUsed, error: .validationRecoverable,
-                                        terminationReason: "repeat_failure"),
+                                        terminationReason: "repeat_failure", raw: raw),
                         error: .validationRecoverable
                     )
                 }
@@ -266,7 +266,7 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                         debug: makeDebug(.failed, outcome: "failure", attempts: attempts, id: requestId,
                                         elapsed: nowMs() - startMs, networkMs: networkMs,
                                         repairUsed: context.repairUsed, error: .validationRecoverable,
-                                        terminationReason: "budget_exhausted"),
+                                        terminationReason: "budget_exhausted", raw: raw),
                         error: .validationRecoverable
                     )
                 }
@@ -295,7 +295,7 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                     debug: makeDebug(.succeeded, outcome: "valid", attempts: attempts, id: requestId,
                                     elapsed: nowMs() - startMs, networkMs: networkMs,
                                     extractionUsed: extractionUsed, repairUsed: context.repairUsed,
-                                    unknownKeys: unknownKeys, terminationReason: "success")
+                                    unknownKeys: unknownKeys, terminationReason: "success", raw: raw)
                 )
             case .invalid(let validationErrors):
                 let classified = classify(validationErrors)
@@ -308,7 +308,7 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                         debug: makeDebug(.failed, outcome: "failure", attempts: attempts, id: requestId,
                                         elapsed: nowMs() - startMs, networkMs: networkMs,
                                         repairUsed: context.repairUsed, error: .validationFatal,
-                                        terminationReason: "fatal_validation"),
+                                        terminationReason: "fatal_validation", raw: raw),
                         error: .validationFatal
                     )
                 case .validationExpired:
@@ -319,7 +319,7 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                         debug: makeDebug(.failed, outcome: "failure", attempts: attempts, id: requestId,
                                         elapsed: nowMs() - startMs, networkMs: networkMs,
                                         repairUsed: context.repairUsed, error: .validationExpired,
-                                        terminationReason: "expired_validation"),
+                                        terminationReason: "expired_validation", raw: raw),
                         error: .validationExpired
                     )
                 default: // recoverable
@@ -333,7 +333,7 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                             debug: makeDebug(.failed, outcome: "failure", attempts: attempts, id: requestId,
                                             elapsed: nowMs() - startMs, networkMs: networkMs,
                                             repairUsed: context.repairUsed, error: .validationRecoverable,
-                                            terminationReason: "repeat_failure"),
+                                            terminationReason: "repeat_failure", raw: raw),
                             error: .validationRecoverable
                         )
                     }
@@ -345,7 +345,7 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                             debug: makeDebug(.failed, outcome: "failure", attempts: attempts, id: requestId,
                                             elapsed: nowMs() - startMs, networkMs: networkMs,
                                             repairUsed: context.repairUsed, error: .validationRecoverable,
-                                            terminationReason: "budget_exhausted"),
+                                            terminationReason: "budget_exhausted", raw: raw),
                             error: .validationRecoverable
                         )
                     }
@@ -407,7 +407,7 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                 debug: makeDebug(.failed, outcome: "failure", attempts: context.totalCalls,
                                  id: requestId, elapsed: nowMs() - startMs,
                                  networkMs: repairNetworkMs, repairUsed: true,
-                                 terminationReason: "repair_identical"),
+                                 terminationReason: "repair_identical", raw: repairRaw),
                 error: .validationRecoverable
             )
         }
@@ -611,7 +611,8 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
         repairUsed: Bool = false,
         error: LLMError? = nil,
         unknownKeys: [String] = [],
-        terminationReason: String = "unknown"
+        terminationReason: String = "unknown",
+        raw: LLMRawResponse? = nil
     ) -> LLMDebugBundle {
         LLMDebugBundle(
             status: status,
@@ -628,7 +629,10 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             promptVersion: Self.promptVersion,
             outcome: outcome,
             failureCategory: failureCategoryString(error),
-            terminationReason: terminationReason
+            terminationReason: terminationReason,
+            promptTokens: raw?.promptTokens,
+            completionTokens: raw?.completionTokens,
+            totalTokens: raw?.totalTokens
         )
     }
 

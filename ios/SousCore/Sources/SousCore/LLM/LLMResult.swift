@@ -41,6 +41,10 @@ public struct LLMDebugBundle: Equatable, Sendable {
     /// Reason the attempt loop terminated. E.g. "success", "fatal_validation", "expired_validation",
     /// "budget_exhausted", "repeat_failure", "repair_identical". Nil when not yet set.
     public let terminationReason: String?
+    /// Token counts from the OpenAI usage field. Nil if absent in the response.
+    public let promptTokens: Int?
+    public let completionTokens: Int?
+    public let totalTokens: Int?
 
     public init(
         status: LLMDebugStatus,
@@ -59,7 +63,10 @@ public struct LLMDebugBundle: Equatable, Sendable {
         promptVersion: String = "unknown",
         outcome: String = "unknown",
         failureCategory: String? = nil,
-        terminationReason: String? = nil
+        terminationReason: String? = nil,
+        promptTokens: Int? = nil,
+        completionTokens: Int? = nil,
+        totalTokens: Int? = nil
     ) {
         self.status = status
         self.attemptCount = attemptCount
@@ -78,6 +85,9 @@ public struct LLMDebugBundle: Equatable, Sendable {
         self.outcome = outcome
         self.failureCategory = failureCategory
         self.terminationReason = terminationReason
+        self.promptTokens = promptTokens
+        self.completionTokens = completionTokens
+        self.totalTokens = totalTokens
     }
 }
 
