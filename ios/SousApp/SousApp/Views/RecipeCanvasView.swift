@@ -4,15 +4,26 @@ import SousCore
 struct RecipeCanvasView: View {
     let recipe: Recipe
     let onOpenChat: () -> Void
+    var onOpenSettings: () -> Void = {}
     var llmDebugStatus: String? = nil
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                Text(recipe.title)
-                    .font(.title).bold()
-                Text("Version: \(recipe.version)")
-                    .font(.caption).foregroundStyle(.secondary)
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(recipe.title)
+                            .font(.title).bold()
+                        Text("Version: \(recipe.version)")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button { onOpenSettings() } label: {
+                        Image(systemName: "gearshape")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                    }
+                }
 
                 Divider()
 

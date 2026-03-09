@@ -3,13 +3,19 @@ import SousCore
 
 struct ContentView: View {
     @StateObject private var store = AppStore()
+    @State private var showSettings = false
 
     var body: some View {
         ZStack {
             if case .patchReview(let recipe, let patchSet, let validation, _) = store.uiState {
                 PatchReviewView(recipe: recipe, patchSet: patchSet, validation: validation, store: store)
             } else {
-                RecipeCanvasView(recipe: store.uiState.recipe, onOpenChat: { store.send(.openChat) }, llmDebugStatus: store.llmDebugStatus)
+                RecipeCanvasView(
+                    recipe: store.uiState.recipe,
+                    onOpenChat: { store.send(.openChat) },
+                    onOpenSettings: { showSettings = true },
+                    llmDebugStatus: store.llmDebugStatus
+                )
             }
 
             if store.uiState.isSheetPresented && !store.uiState.isPatchReview {
@@ -25,6 +31,9 @@ struct ContentView: View {
         )) {
             ChatSheetView(store: store)
                 .interactiveDismissDisabled(store.uiState.isPatchProposed)
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsView(keyProvider: store.keyProvider)
         }
     }
 }

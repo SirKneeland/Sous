@@ -130,7 +130,10 @@ final class AppStoreTests: XCTestCase {
                        "Second send must be blocked while first is in flight")
 
         // Allow the first task to start and reach await orchestrator.run.
-        await Task.yield()
+        // drainMain (5 yields) is required here: a single yield is not reliably enough for
+        // the LLM task to start on the main actor, hop to the orchestrator's actor executor,
+        // and execute callCount += 1 before the assertion runs.
+        await drainMain()
         let count = await mock.callCount
         XCTAssertEqual(count, 1, "Orchestrator must be called exactly once")
 

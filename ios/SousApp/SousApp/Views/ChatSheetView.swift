@@ -8,7 +8,6 @@ struct ChatSheetView: View {
     @State private var debugExpanded = false
     @State private var showPhotoSheet = false
 #if DEBUG
-    @State private var keyInput = ""
     @State private var debugCopied = false
 #endif
 
@@ -99,27 +98,6 @@ struct ChatSheetView: View {
                         )
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.top, 4)
-                }
-                Divider().padding(.vertical, 4)
-                Text("Key Present: \(store.keyProvider.currentKey() != nil ? "Yes" : "No")")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                HStack(spacing: 6) {
-                    SecureField("OpenAI Key", text: $keyInput)
-                        .font(.footnote)
-                        .textContentType(.password)
-                    Button("Save") {
-                        store.keyProvider.setKey(keyInput)
-                        keyInput = ""
-                    }
-                    .font(.caption)
-                    .buttonStyle(.bordered)
-                    .disabled(keyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    Button("Clear") {
-                        store.keyProvider.clearKey()
-                    }
-                    .font(.caption)
-                    .buttonStyle(.bordered)
                 }
                 Divider().padding(.vertical, 4)
                 HStack(spacing: 8) {

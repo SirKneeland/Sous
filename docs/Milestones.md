@@ -12,14 +12,14 @@ Statuses:
 
 ## Project State
 
-**Current milestone:** Milestone 8 — Native iOS Migration: LLM Integration
+**Current milestone:** Milestone 9 — Native iOS Migration: Photo Capture + Multimodal Flow
 
 **Recently completed:**
+- Milestone 8 — Native iOS Migration: LLM Integration
 - Milestone 7 — Native iOS Migration: Patch Review + User Control
-- Milestone 6 — Native iOS Migration: Recipe Canvas + Cooking Mode UX
 
 **Next milestone:**
-- Milestone 9 — Native iOS Migration: Photo Capture + Multimodal Flow
+- Milestone 10 — Native iOS Migration: Local Session Persistence + Crash-Proofing
 
 This section exists to make the active project phase immediately visible to humans and AI agents without scanning the entire roadmap.
 
@@ -145,8 +145,8 @@ Explicit non-goals:
 
 ---
 
-## Milestone 8 — Native iOS Migration: LLM Integration (OpenAI Client)  
-**Status:** CURRENT
+## Milestone 8 — Native iOS Migration: LLM Integration (OpenAI Client)
+**Status:** DONE
 
 **Goal:** Bring back real AI behavior using a native OpenAI client while preserving Sous’s deterministic patching guarantees and safety model.
 
@@ -168,8 +168,8 @@ Explicit non-goals:
 
 ---
 
-## Milestone 9 — Native iOS Migration: Photo Capture + Multimodal Flow  
-**Status:** PLANNED
+## Milestone 9 — Native iOS Migration: Photo Capture + Multimodal Flow
+**Status:** CURRENT
 
 **Goal:** Make photo-based help feel native, reliable, and fast.
 
