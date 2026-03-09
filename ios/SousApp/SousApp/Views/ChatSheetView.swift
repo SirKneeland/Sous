@@ -1,8 +1,9 @@
-import SwiftUI
 import SousCore
+import SwiftUI
 
 struct ChatSheetView: View {
     @ObservedObject var store: AppStore
+    @StateObject private var photoSend = PhotoSendCoordinator()
     @State private var composerText = ""
     @State private var debugExpanded = false
     @State private var showPhotoSheet = false
@@ -147,10 +148,75 @@ struct ChatSheetView: View {
 
             Divider()
 
+            // Attachment preview strip (shown when an image is attached or preparing)
+            attachmentStrip
+
             // Composer
             composerBar
         }
         .safeAreaInset(edge: .bottom) { Color.clear.frame(height: 0) }
+    }
+
+    // MARK: - Attachment strip
+
+    /// Shown above the composer when an image is attached, preparing, or failed.
+    @ViewBuilder
+    private var attachmentStrip: some View {
+        switch photoSend.attachmentState {
+        case .idle:
+            EmptyView()
+
+        case .previewing(_, let thumbnail):
+            HStack(spacing: 10) {
+                Image(uiImage: thumbnail)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 56, height: 56)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                Text("Photo attached")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button {
+                    photoSend.clear()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 6)
+            Divider()
+
+        case .preparing:
+            HStack(spacing: 8) {
+                ProgressView()
+                    .scaleEffect(0.8)
+                Text("Preparing image…")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal)
+            .padding(.vertical, 6)
+            Divider()
+
+        case .failed:
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle")
+                    .foregroundStyle(.red)
+                Text("Image could not be prepared.")
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                Spacer()
+                Button("Dismiss") { photoSend.clear() }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 6)
+            Divider()
+        }
     }
 
     // MARK: - Composer
@@ -166,8 +232,8 @@ struct ChatSheetView: View {
             }
             .sheet(isPresented: $showPhotoSheet) {
                 PhotoAcquisitionSheet(
-                    onAcquired: { _ in
-                        // TODO: Prompt N — dispatch acquired ImageAsset to multimodal send pipeline
+                    onAcquired: { asset in
+                        photoSend.attach(asset)
                         showPhotoSheet = false
                     },
                     onCancel: { showPhotoSheet = false }
@@ -194,16 +260,46 @@ struct ChatSheetView: View {
                 )
 
             Button {
-                store.sendUserMessage(composerText)
-                composerText = ""
+                sendAction()
             } label: {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.title2)
             }
-            .disabled(composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .disabled(!canSend)
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
+    }
+
+    // MARK: - Send logic
+
+    private var canSendText: Bool {
+        !composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var canSend: Bool {
+        (canSendText || photoSend.attachmentState.canSend) && !photoSend.attachmentState.isInFlight
+    }
+
+    private func sendAction() {
+        if photoSend.attachmentState.canSend {
+            // Photo send: capture text snapshot, run preparation, clear only on success.
+            guard !store.hasActivePatch, !store.isLLMCallInFlight else { return }
+            let capturedText = composerText
+            let recipeSnapshot = store.uiState.recipe
+            Task {
+                if await photoSend.send(text: capturedText, recipe: recipeSnapshot) != nil {
+                    // Preparation succeeded — now append message and clear composer.
+                    store.appendPhotoMessage(capturedText)
+                    composerText = ""
+                }
+                // Failure: composerText untouched; attachmentStrip shows error.
+            }
+        } else {
+            // Text-only send: existing path unchanged.
+            store.sendUserMessage(composerText)
+            composerText = ""
+        }
     }
 }
 

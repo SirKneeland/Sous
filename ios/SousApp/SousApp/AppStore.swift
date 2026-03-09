@@ -227,6 +227,21 @@ final class AppStore: ObservableObject {
         }
     }
 
+    // MARK: - Photo send support
+
+    /// Whether a patch is currently pending review. Exposed for photo send guard checks.
+    var hasActivePatch: Bool { hasPendingPatch }
+
+    /// Whether a live LLM text call is currently in flight. Exposed for photo send guard checks.
+    var isLLMCallInFlight: Bool { useLiveLLM && llmTask != nil }
+
+    /// Appends a user chat message after successful photo preparation.
+    /// Called by the view only after `PhotoSendCoordinator.send(text:recipe:)` returns non-nil.
+    func appendPhotoMessage(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        append(ChatMessage(role: .user, text: trimmed.isEmpty ? "[Photo]" : trimmed))
+    }
+
     private func append(_ message: ChatMessage) {
         chatTranscript.append(message)
         if chatTranscript.count > maxMessages {
