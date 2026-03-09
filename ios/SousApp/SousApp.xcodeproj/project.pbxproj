@@ -412,6 +412,8 @@
 				DEVELOPMENT_TEAM = LQFHAFN92D;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Sous uses the camera to photograph your dish for AI cooking assistance.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Sous accesses your photo library to select an image for AI cooking assistance.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -444,6 +446,8 @@
 				DEVELOPMENT_TEAM = LQFHAFN92D;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Sous uses the camera to photograph your dish for AI cooking assistance.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Sous accesses your photo library to select an image for AI cooking assistance.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

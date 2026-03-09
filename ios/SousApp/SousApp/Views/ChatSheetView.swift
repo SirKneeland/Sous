@@ -5,6 +5,7 @@ struct ChatSheetView: View {
     @ObservedObject var store: AppStore
     @State private var composerText = ""
     @State private var debugExpanded = false
+    @State private var showPhotoSheet = false
 #if DEBUG
     @State private var keyInput = ""
     @State private var debugCopied = false
@@ -156,6 +157,23 @@ struct ChatSheetView: View {
 
     private var composerBar: some View {
         HStack(alignment: .bottom, spacing: 8) {
+            Button {
+                showPhotoSheet = true
+            } label: {
+                Image(systemName: "camera")
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+            }
+            .sheet(isPresented: $showPhotoSheet) {
+                PhotoAcquisitionSheet(
+                    onAcquired: { _ in
+                        // TODO: Prompt N — dispatch acquired ImageAsset to multimodal send pipeline
+                        showPhotoSheet = false
+                    },
+                    onCancel: { showPhotoSheet = false }
+                )
+            }
+
             TextEditor(text: $composerText)
                 .frame(maxHeight: 72)
                 .overlay(
