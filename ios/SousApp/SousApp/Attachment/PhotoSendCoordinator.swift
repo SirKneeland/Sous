@@ -66,7 +66,8 @@ final class PhotoSendCoordinator: ObservableObject {
 
     /// The prepared multimodal request from the most recent successful send.
     ///
-    /// Ephemeral handoff artifact: lives here until Prompt 5 wires the backend call.
+    /// Ephemeral handoff artifact returned directly from `send(text:recipe:)`.
+    /// Also stored here for callers that need to access it after the fact.
     /// Cleared when a new send begins or when `clear()` is called.
     private(set) var pendingMultimodalRequest: MultimodalLLMRequest? = nil
 
@@ -113,7 +114,8 @@ final class PhotoSendCoordinator: ObservableObject {
     ///   - Returns `nil` with no state change
     ///
     /// The `recipe` snapshot is passed by the caller (view) from `store.uiState.recipe` at tap time.
-    /// `userPrefs` and `nextLLMContext` are placeholder defaults; Prompt 5 will wire the real values.
+    /// `userPrefs` and `nextLLMContext` are placeholder defaults; `AppStore.sendMultimodalRequest(_:)`
+    /// rebuilds the base LLMRequest with the real values before dispatching to the orchestrator.
     func send(text: String, recipe: Recipe) async -> MultimodalLLMRequest? {
         guard case .previewing(let asset, _) = attachmentState else { return nil }
 

@@ -19,6 +19,23 @@ private final class MockURLSession: URLSessionProtocol, @unchecked Sendable {
     }
 }
 
+// MARK: - CapturingMockURLSession
+
+/// Captures the URLRequest sent by the client so tests can inspect the body.
+private final class CapturingMockURLSession: URLSessionProtocol, @unchecked Sendable {
+    private(set) var capturedRequest: URLRequest?
+    private let result: Result<(Data, URLResponse), Error>
+
+    init(result: Result<(Data, URLResponse), Error>) {
+        self.result = result
+    }
+
+    func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+        capturedRequest = request
+        return try result.get()
+    }
+}
+
 // MARK: - Helpers
 
 private func makeHTTPResponse(status: Int, headers: [String: String]? = nil) -> HTTPURLResponse {
@@ -253,5 +270,84 @@ final class OpenAIClientTests: XCTestCase {
         let response = try await client.send(makeRequest(requestId: "caller-supplied-id"))
 
         XCTAssertEqual(response.requestId, "caller-supplied-id")
+    }
+
+    // MARK: Multimodal message serialization
+
+    func testMultimodalRequest_serializesImageAsArrayContent() async throws {
+        let imageData = Data([0xFF, 0xD8, 0xFF])
+        let image = try PreparedImage(
+            data: imageData, mimeType: "image/jpeg",
+            widthPx: 100, heightPx: 100, originalByteCount: 3
+        )
+        let clientRequest = LLMClientRequest(
+            requestId: "multimodal-test",
+            model: "gpt-4o",
+            messages: [
+                LLMMessage(role: .system, content: "You are Sous."),
+                LLMMessage(role: .user, content: "Is this done?")
+            ],
+            responseFormat: .jsonObject,
+            timeout: 30,
+            image: image
+        )
+        let session = CapturingMockURLSession(
+            result: .success((makeEnvelope(content: "{}"), makeHTTPResponse(status: 200)))
+        )
+        let client = OpenAIClient(apiKey: "sk-test", session: session)
+
+        _ = try await client.send(clientRequest)
+
+        guard let body = session.capturedRequest?.httpBody,
+              let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+              let messages = json["messages"] as? [[String: Any]] else {
+            XCTFail("Could not parse request body as JSON messages array")
+            return
+        }
+
+        XCTAssertEqual(messages.count, 2)
+
+        // System message must still have plain string content.
+        XCTAssertEqual(messages[0]["role"] as? String, "system")
+        XCTAssertNotNil(messages[0]["content"] as? String,
+                        "System message content must remain a plain string")
+
+        // Last user message must have array content with text + image_url.
+        XCTAssertEqual(messages[1]["role"] as? String, "user")
+        guard let contentArray = messages[1]["content"] as? [[String: Any]] else {
+            XCTFail("Last user message content must be an array for multimodal requests")
+            return
+        }
+        XCTAssertEqual(contentArray.count, 2)
+        XCTAssertEqual(contentArray[0]["type"] as? String, "text")
+        XCTAssertEqual(contentArray[0]["text"] as? String, "Is this done?")
+        XCTAssertEqual(contentArray[1]["type"] as? String, "image_url")
+        guard let imageURLDict = contentArray[1]["image_url"] as? [String: Any],
+              let imageURL = imageURLDict["url"] as? String else {
+            XCTFail("Missing image_url.url in multimodal content item")
+            return
+        }
+        let expectedBase64 = imageData.base64EncodedString()
+        XCTAssertEqual(imageURL, "data:image/jpeg;base64,\(expectedBase64)")
+    }
+
+    func testTextOnlyRequest_serializesStringContent_backwardCompat() async throws {
+        let session = CapturingMockURLSession(
+            result: .success((makeEnvelope(content: "{}"), makeHTTPResponse(status: 200)))
+        )
+        let client = OpenAIClient(apiKey: "sk-test", session: session)
+
+        _ = try await client.send(makeRequest())
+
+        guard let body = session.capturedRequest?.httpBody,
+              let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+              let messages = json["messages"] as? [[String: Any]] else {
+            XCTFail("Could not parse request body as JSON messages array")
+            return
+        }
+
+        XCTAssertEqual(messages.count, 1)
+        XCTAssertNotNil(messages[0]["content"] as? String,
+                        "Text-only message content must be a plain string (not an array)")
     }
 }

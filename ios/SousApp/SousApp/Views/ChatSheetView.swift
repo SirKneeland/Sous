@@ -64,12 +64,18 @@ struct ChatSheetView: View {
                         ForEach(store.chatTranscript) { message in
                             ChatBubbleView(message: message)
                         }
+                        if store.isThinking {
+                            ThinkingBubbleView()
+                        }
                         Color.clear.frame(height: 1).id("bottom")
                     }
                     .padding(.horizontal)
                     .padding(.vertical, 8)
                 }
                 .onChange(of: store.chatTranscript.count) { _ in
+                    withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
+                }
+                .onChange(of: store.isThinking) { _ in
                     withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
                 }
             }
@@ -256,7 +262,9 @@ struct ChatSheetView: View {
     }
 
     private var canSend: Bool {
-        (canSendText || photoSend.attachmentState.canSend) && !photoSend.attachmentState.isInFlight
+        (canSendText || photoSend.attachmentState.canSend)
+            && !photoSend.attachmentState.isInFlight
+            && !store.isLLMCallInFlight
     }
 
     private func sendAction() {
@@ -266,10 +274,11 @@ struct ChatSheetView: View {
             let capturedText = composerText
             let recipeSnapshot = store.uiState.recipe
             Task {
-                if await photoSend.send(text: capturedText, recipe: recipeSnapshot) != nil {
-                    // Preparation succeeded — now append message and clear composer.
+                if let multimodalReq = await photoSend.send(text: capturedText, recipe: recipeSnapshot) {
+                    // Preparation succeeded — append message, clear composer, then dispatch LLM.
                     store.appendPhotoMessage(capturedText)
                     composerText = ""
+                    store.sendMultimodalRequest(multimodalReq)
                 }
                 // Failure: composerText untouched; attachmentStrip shows error.
             }
@@ -277,6 +286,27 @@ struct ChatSheetView: View {
             // Text-only send: existing path unchanged.
             store.sendUserMessage(composerText)
             composerText = ""
+        }
+    }
+}
+
+// MARK: - Thinking bubble
+
+private struct ThinkingBubbleView: View {
+    var body: some View {
+        HStack {
+            HStack(spacing: 6) {
+                ProgressView()
+                    .scaleEffect(0.75)
+                Text("Thinking…")
+                    .foregroundStyle(Color.secondary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color(.secondarySystemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .font(.body)
+            Spacer(minLength: 48)
         }
     }
 }

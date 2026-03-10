@@ -15,4 +15,14 @@ public protocol LLMClient {
 /// Always returns exactly one LLMResult — at most one PatchSet by construction.
 public protocol LLMOrchestrator {
     func run(_ request: LLMRequest) async -> LLMResult
+    func run(_ request: MultimodalLLMRequest) async -> LLMResult
+}
+
+public extension LLMOrchestrator {
+    /// Default: strip the image and delegate to the text-only path.
+    /// Concrete orchestrators (e.g. OpenAILLMOrchestrator) override this with a real
+    /// vision-capable implementation.  Test mocks get this for free without changes.
+    func run(_ request: MultimodalLLMRequest) async -> LLMResult {
+        return await run(request.base)
+    }
 }

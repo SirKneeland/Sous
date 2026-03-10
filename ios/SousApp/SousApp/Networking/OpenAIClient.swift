@@ -59,7 +59,7 @@ struct OpenAIClient: LLMClient {
         // Assemble body — model comes from caller, never hard-coded here.
         var body: [String: Any] = [
             "model": request.model,
-            "messages": request.messages.map { ["role": $0.role.rawValue, "content": $0.content] }
+            "messages": buildMessagePayload(from: request)
         ]
 
         switch request.responseFormat {
@@ -139,6 +139,36 @@ struct OpenAIClient: LLMClient {
             completionTokens: completionTokens,
             totalTokens: totalTokens
         )
+    }
+
+    // MARK: - Message serialization
+
+    /// Builds the messages array for the OpenAI API body.
+    ///
+    /// Text-only: each message is serialized as `{"role": "...", "content": "string"}`.
+    ///
+    /// Multimodal: the last user message is replaced with an array content block:
+    /// `[{"type":"text","text":"..."},{"type":"image_url","image_url":{"url":"data:...;base64,..."}}]`
+    /// All preceding messages keep string content (system messages cannot carry images).
+    private func buildMessagePayload(from request: LLMClientRequest) -> [[String: Any]] {
+        guard let image = request.image else {
+            return request.messages.map { ["role": $0.role.rawValue, "content": $0.content] }
+        }
+
+        let base64 = image.data.base64EncodedString()
+        let dataURL = "data:\(image.mimeType);base64,\(base64)"
+
+        return request.messages.enumerated().map { index, msg in
+            // Attach image only to the last message (always the user turn in our layout).
+            guard index == request.messages.count - 1 else {
+                return ["role": msg.role.rawValue, "content": msg.content]
+            }
+            let contentItems: [[String: Any]] = [
+                ["type": "text", "text": msg.content],
+                ["type": "image_url", "image_url": ["url": dataURL]]
+            ]
+            return ["role": msg.role.rawValue, "content": contentItems]
+        }
     }
 
     // MARK: - Private helpers

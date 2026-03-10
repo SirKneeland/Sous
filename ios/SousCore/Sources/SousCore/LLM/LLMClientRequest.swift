@@ -41,18 +41,23 @@ public struct LLMClientRequest: Sendable {
     public let messages: [LLMMessage]
     public let responseFormat: LLMResponseFormat
     public let timeout: TimeInterval
+    /// When non-nil the client attaches this image to the last user message as
+    /// base64-encoded content (OpenAI vision format).  Text-only calls leave this nil.
+    public let image: PreparedImage?
 
     public init(
         requestId: String? = nil,
         model: String,
         messages: [LLMMessage],
         responseFormat: LLMResponseFormat,
-        timeout: TimeInterval
+        timeout: TimeInterval,
+        image: PreparedImage? = nil
     ) {
         self.requestId = requestId
         self.model = model
         self.messages = messages
         self.responseFormat = responseFormat
         self.timeout = timeout
+        self.image = image
     }
 }

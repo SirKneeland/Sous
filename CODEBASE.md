@@ -117,27 +117,26 @@
 
 ---
 
-## Current Milestone State (Milestone 8)
+## Current Milestone State (Milestone 9)
 
-**Milestone 8 — Native iOS Migration: LLM Integration (CURRENT)**
+**Milestone 9 — Native iOS Migration: Photo Capture + Multimodal Flow (CURRENT)**
 
 What is built and wired up:
-- `OpenAIClient` is fully implemented: builds URLRequest with Bearer auth, sends to OpenAI, maps HTTP status codes to typed LLMError cases, returns LLMRawResponse with token counts
-- `OpenAILLMOrchestrator` is fully implemented: system prompt construction (differs by hasCanvas), retry with exponential backoff + jitter (max 3 calls, 0.5s base, 2s cap), rate-limit header parsing, one JSON repair pass, full LLMResult output with debug bundle
-- `PatchSetDecoder` is complete: two-pass decode (strict JSON → extraction fallback), schema validation, returns typed DecodeResult
-- `PatchValidator` and `PatchApplier` are complete and tested
-- `AppStore` is fully wired: dispatches real LLM calls in production, single-flight enforcement, generation-based cancellation, stale-state checks at receipt time, nextLLMContext round-trip
-- `UIStateMachine` is complete: all 8 transitions, patch accept/reject with HiddenContext accumulation
-- Multimodal foundations are built (ImagePreparator, PreparedImage, acquisition pickers, PhotoSendCoordinator) but **not yet wired to the orchestrator**
+- Full multimodal send path: camera/library → image prep → AppStore dispatch → OpenAI vision call → LLMResult → recipe patch or assistant message
+- `LLMClientRequest` carries an optional `PreparedImage`; `OpenAIClient` serializes it as a base64 `image_url` content block in the last user message (OpenAI vision format)
+- `OpenAILLMOrchestrator` has a `run(MultimodalLLMRequest)` overload: 10 MB size gate (rejects before any network call), same retry/backoff/repair logic as the text path, uses `gpt-4o` model
+- `LLMOrchestrator` protocol extended with `run(MultimodalLLMRequest)`; default extension falls back to `run(request.base)` so existing test mocks need no changes
+- `AppStore.sendMultimodalRequest(_:)`: single-flight enforced identically to text sends; rebuilds the base `LLMRequest` with fresh `nextLLMContext`, `userPrefs`, and recipe snapshot from AppStore state before dispatching
+- `ChatSheetView.sendAction()`: on photo send success, appends the user bubble, clears the composer, then calls `store.sendMultimodalRequest(_:)`; send button disabled while any LLM call is in flight
+- All arch guardrails preserved: multimodal patches go through PatchValidator → user accept → PatchApplier; no direct recipe mutation
 
-What remains for Milestone 8:
-- Verify end-to-end happy path on device with live OPENAI_API_KEY via Keychain
-- Any gaps in the Keychain onboarding UX (key entry UI)
+What remains for Milestone 9:
+- Verify end-to-end photo → suggestion/patch flow on device with a live API key
+- Permission handling (camera/library) was built in M8 and is already present
 
-What is next (Milestone 9 — Photo Capture + Multimodal Flow):
-- Wire MultimodalLLMRequest into OpenAILLMOrchestrator (include image in messages)
-- Connect PhotoSendCoordinator to AppStore dispatch path
-- Handle multimodal prompt variant (vision model, image content block)
+What is next (Milestone 10 — Local Session Persistence + Crash-Proofing):
+- Persist in-progress recipe state, step progress, pending patches, and minimal chat context
+- Silent restore on app relaunch; crash-safe write strategy; data model migrations
 
 ---
 
@@ -169,13 +168,13 @@ What is next (Milestone 9 — Photo Capture + Multimodal Flow):
 ## Notes for Future Sessions
 
 - **Swift version is 6.2** — strict concurrency checking is enabled. Any new code touching shared state must be @MainActor or Sendable-safe.
-- **LLM model in AppStore is `"gpt-4o-mini"`** — hardcoded string. If upgrading to gpt-4o or a vision model for M9, this is the place to change it (or make it dynamic).
-- **`nextLLMContext` in AppStore** — carries the last patch decision (accept/reject + summary) into the next LLM call as silent context, then clears. This is the only mechanism for cross-turn memory today.
+- **Two LLM models in AppStore:** `liveLLMModel = "gpt-4o-mini"` (text path) and `multimodalLLMModel = "gpt-4o"` (vision path). The orchestrator always uses whatever model it is initialized with; the model choice lives in AppStore.
+- **`nextLLMContext` in AppStore** — carries the last patch decision (accept/reject + summary) into the next LLM call as silent context, then clears. This is the only mechanism for cross-turn memory today. The multimodal path also injects `nextLLMContext` (rebuilt in `sendWithMultimodalLLM`).
 - **`HiddenContext` in UIState** — accumulates rejection facts across multiple rejections; fed back into the LLM prompt silently via `LLMContextComposer`. Not persisted across sessions.
 - **`SessionStore.swift` is a skeleton** — session persistence is not implemented. Each app launch starts fresh.
 - **`src/`, `api/`, `server/` directories exist** but are not used in any current milestone. Do not touch them.
 - **Seed recipe** in AppStore is hardcoded: "Simple Bread" with 3 ingredients, 3 steps (1 marked done), 1 note. The done step is intentional — it tests immutability in the live app.
-- **Multimodal wiring gap:** `MultimodalLLMRequest` exists in SousCore but OpenAILLMOrchestrator only accepts `LLMRequest`. M9 will require either a new method or overloading `run()` on the orchestrator.
+- **Multimodal wiring is complete (M9):** `OpenAILLMOrchestrator` now has `run(MultimodalLLMRequest)` which attaches the image to the client request and uses `gpt-4o`. The `LLMOrchestrator` protocol carries a default extension that falls back to `run(request.base)` so test mocks require no changes.
 - **No external Swift dependencies** — pure stdlib + Foundation + SousCore SPM. Adding a dependency requires operator approval per CLAUDE.md.
 - **`xcodebuild test` requires a simulator to be available.** If CI doesn't have one, tests may fail at launch, not in logic.
 

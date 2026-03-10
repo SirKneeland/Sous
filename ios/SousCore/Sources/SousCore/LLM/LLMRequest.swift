@@ -62,6 +62,10 @@ public struct LLMRequest: Sendable {
     public let userPrefs: LLMUserPrefs
     /// Included exactly once with this request, then cleared by the caller.
     public let nextLLMContext: NextLLMContext?
+    /// Prior user/assistant turns from the session transcript, oldest first.
+    /// Injected between the recipe context and the current user message so the model
+    /// has multi-turn memory. Empty for the first message in a session.
+    public let conversationHistory: [LLMMessage]
 
     public init(
         recipeId: String,
@@ -70,7 +74,8 @@ public struct LLMRequest: Sendable {
         userMessage: String,
         recipeSnapshotForPrompt: Recipe,
         userPrefs: LLMUserPrefs,
-        nextLLMContext: NextLLMContext? = nil
+        nextLLMContext: NextLLMContext? = nil,
+        conversationHistory: [LLMMessage] = []
     ) {
         self.recipeId = recipeId
         self.recipeVersion = recipeVersion
@@ -79,5 +84,6 @@ public struct LLMRequest: Sendable {
         self.recipeSnapshotForPrompt = recipeSnapshotForPrompt
         self.userPrefs = userPrefs
         self.nextLLMContext = nextLLMContext
+        self.conversationHistory = conversationHistory
     }
 }

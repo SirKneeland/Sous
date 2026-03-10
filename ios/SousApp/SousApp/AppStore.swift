@@ -37,6 +37,8 @@ final class AppStore: ObservableObject {
     @Published var uiState: UIState
     @Published var chatTranscript: [ChatMessage] = []
     @Published var llmDebugStatus: String? = nil
+    /// True while any LLM call (text or multimodal) is in flight. Drives the thinking indicator.
+    @Published var isThinking: Bool = false
     /// The debug bundle from the most recent LLM run. Updated on every result path.
     @Published var lastDebugBundle: LLMDebugBundle? = nil
 
@@ -45,6 +47,7 @@ final class AppStore: ObservableObject {
 
     private let maxMessages = 200
     private let liveLLMModel = "gpt-4o-mini"
+    private let multimodalLLMModel = "gpt-4o"
     private let proposer: any PatchProposer = MockPatchProposer()
     private var nextLLMContext: NextLLMContext? = nil
 
@@ -160,7 +163,13 @@ final class AppStore: ObservableObject {
     private func sendWithLLM(_ userText: String, generation: Int) async {
         // Clear llmTask when this generation's call ends (natural or cancelled).
         // The generation guard prevents an old cancelled task from clearing a newer task's ref.
-        defer { if llmGeneration == generation { llmTask = nil } }
+        defer {
+            if llmGeneration == generation {
+                llmTask = nil
+                isThinking = false
+            }
+        }
+        isThinking = true
         llmDebugStatus = "calling"
         let recipe = uiState.recipe
         let hidden: HiddenContext
@@ -174,7 +183,8 @@ final class AppStore: ObservableObject {
             recipeSnapshotForPrompt: recipe,
             // TODO: wire real user prefs (Prompt 8)
             userPrefs: LLMUserPrefs(hardAvoids: ["cilantro"]),
-            nextLLMContext: nextLLMContext
+            nextLLMContext: nextLLMContext,
+            conversationHistory: buildConversationHistory()
         )
 
         let orchestrator: any LLMOrchestrator = testOrchestrator ?? OpenAILLMOrchestrator(
@@ -232,7 +242,7 @@ final class AppStore: ObservableObject {
     /// Whether a patch is currently pending review. Exposed for photo send guard checks.
     var hasActivePatch: Bool { hasPendingPatch }
 
-    /// Whether a live LLM text call is currently in flight. Exposed for photo send guard checks.
+    /// Whether a live LLM call (text or multimodal) is currently in flight.
     var isLLMCallInFlight: Bool { useLiveLLM && llmTask != nil }
 
     /// Appends a user chat message after successful photo preparation.
@@ -242,11 +252,122 @@ final class AppStore: ObservableObject {
         append(ChatMessage(role: .user, text: trimmed.isEmpty ? "[Photo]" : trimmed))
     }
 
+    /// Dispatches a multimodal LLM call using the prepared image.
+    ///
+    /// Single-flight enforced identically to text sends: blocked if a call is already
+    /// in-flight or a patch is pending.  The `base` LLMRequest from the coordinator is
+    /// rebuilt here so that `nextLLMContext`, `userPrefs`, and a fresh recipe snapshot
+    /// are always injected from AppStore's canonical state.
+    func sendMultimodalRequest(_ multimodalReq: MultimodalLLMRequest) {
+        guard !hasPendingPatch else { return }
+        guard useLiveLLM else { return }
+        if llmTask != nil {
+            llmDebugStatus = "blocked_inflight_llm"
+            return
+        }
+        llmGeneration += 1
+        let gen = llmGeneration
+        llmTask = Task { await self.sendWithMultimodalLLM(multimodalReq, generation: gen) }
+    }
+
+    private func sendWithMultimodalLLM(_ multimodalReq: MultimodalLLMRequest, generation: Int) async {
+        defer {
+            if llmGeneration == generation {
+                llmTask = nil
+                isThinking = false
+            }
+        }
+        isThinking = true
+        llmDebugStatus = "calling"
+        let recipe = uiState.recipe
+        let hidden: HiddenContext
+        if case .chatOpen(_, _, let h) = uiState { hidden = h } else { hidden = HiddenContext() }
+
+        // Rebuild the base LLMRequest with proper session context from AppStore state.
+        // The coordinator's base.userMessage carries the user's text; everything else is
+        // sourced fresh so stale snapshots from the coordinator don't reach the orchestrator.
+        let base = LLMRequest(
+            recipeId: recipe.id.uuidString,
+            recipeVersion: recipe.version,
+            hasCanvas: true,
+            userMessage: LLMContextComposer.composeUserMessage(
+                userText: multimodalReq.base.userMessage,
+                hidden: hidden
+            ),
+            recipeSnapshotForPrompt: recipe,
+            userPrefs: LLMUserPrefs(hardAvoids: ["cilantro"]),
+            nextLLMContext: nextLLMContext,
+            conversationHistory: buildConversationHistory()
+        )
+        let request = MultimodalLLMRequest(base: base, image: multimodalReq.image)
+
+        let orchestrator: any LLMOrchestrator = testOrchestrator ?? OpenAILLMOrchestrator(
+            client: OpenAIClient(apiKey: resolvedAPIKey()),
+            model: multimodalLLMModel
+        )
+        let result = await orchestrator.run(request)
+
+        guard !Task.isCancelled else {
+            llmDebugStatus = "cancelled"
+            return
+        }
+
+        switch result {
+        case .valid(let patchSet, let assistantMessage, _, let debug):
+            lastDebugBundle = debug
+            let current = uiState.recipe
+            if patchSet.baseRecipeId != current.id {
+                append(ChatMessage(role: .assistant, text: assistantMessage))
+                llmDebugStatus = "fatal_recipeIdMismatch"
+                return
+            }
+            if patchSet.baseRecipeVersion != current.version {
+                append(ChatMessage(role: .assistant, text: assistantMessage))
+                llmDebugStatus = "expired_recipeVersionMismatch"
+                return
+            }
+            nextLLMContext = nil
+            send(.patchReceived(patchSet))
+            append(ChatMessage(role: .assistant, text: assistantMessage))
+            llmDebugStatus = "succeeded"
+
+        case .noPatches(let assistantMessage, _, let debug):
+            lastDebugBundle = debug
+            nextLLMContext = nil
+            append(ChatMessage(role: .assistant, text: assistantMessage))
+            llmDebugStatus = "succeeded"
+
+        case .failure(let fallbackPatchSet, let assistantMessage, _, let debug, _):
+            lastDebugBundle = debug
+            if let fallback = fallbackPatchSet {
+                send(.patchReceived(fallback))
+            }
+            append(ChatMessage(role: .assistant, text: assistantMessage))
+            llmDebugStatus = "failed"
+        }
+    }
+
     private func append(_ message: ChatMessage) {
         chatTranscript.append(message)
         if chatTranscript.count > maxMessages {
             chatTranscript.removeFirst(chatTranscript.count - maxMessages)
         }
+    }
+
+    /// Builds the prior-turn history to include in the next LLM request.
+    ///
+    /// Drops the last transcript entry (the current user message, which was just appended
+    /// before the async send), filters out system messages, and caps at 20 entries
+    /// (10 full turns) to control token cost on long sessions.
+    private func buildConversationHistory() -> [LLMMessage] {
+        chatTranscript
+            .dropLast()
+            .filter { $0.role == .user || $0.role == .assistant }
+            .suffix(20)
+            .map { msg in
+                let role: LLMMessage.Role = msg.role == .user ? .user : .assistant
+                return LLMMessage(role: role, content: msg.text)
+            }
     }
 
     func send(_ event: UIEvent) {

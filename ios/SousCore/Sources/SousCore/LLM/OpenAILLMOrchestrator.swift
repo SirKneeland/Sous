@@ -35,6 +35,110 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
 
     // MARK: - LLMOrchestrator
 
+    /// Maximum compressed image size accepted before any network call.
+    /// Base64 encoding adds ~33%, keeping the total payload well under OpenAI's limit.
+    private static let maxImageBytes = 10 * 1024 * 1024  // 10 MB compressed
+
+    /// Multimodal path: attaches the prepared image to the last user message and uses
+    /// the vision-capable model.  Repair calls (on JSON errors) are text-only — the image
+    /// is not re-sent during repair, only the error context.
+    public func run(_ request: MultimodalLLMRequest) async -> LLMResult {
+        if request.image.preparedByteCount > Self.maxImageBytes {
+            let id = UUID().uuidString
+            return .failure(
+                fallbackPatchSet: nil,
+                assistantMessage: "The photo is too large to send. Please try a different photo.",
+                raw: nil,
+                debug: makeDebug(.failed, outcome: "failure", attempts: 0,
+                                 id: id, elapsed: 0,
+                                 error: .badRequest, terminationReason: "payload_too_large"),
+                error: .badRequest
+            )
+        }
+
+        let requestId = UUID().uuidString
+        let startMs = nowMs()
+        var context = AttemptContext()
+        var raw: LLMRawResponse?
+        var networkMs: Int = 0
+
+        while true {
+            context.totalCalls += 1
+            let netStart = nowMs()
+            do {
+                raw = try await client.send(LLMClientRequest(
+                    requestId: requestId,
+                    model: model,
+                    messages: buildMessages(for: request.base),
+                    responseFormat: .jsonObject,
+                    timeout: timeout,
+                    image: request.image
+                ))
+                networkMs = nowMs() - netStart
+                break
+            } catch {
+                networkMs = nowMs() - netStart
+                let llmErr = error as? LLMError ?? .network
+
+                if case .auth = llmErr {
+                    return .failure(
+                        fallbackPatchSet: nil,
+                        assistantMessage: assistantMessage(for: .auth),
+                        raw: nil,
+                        debug: makeDebug(.failed, outcome: "failure", attempts: context.totalCalls,
+                                        id: requestId, elapsed: nowMs() - startMs,
+                                        networkMs: networkMs, error: .auth,
+                                        terminationReason: "fatal_auth"),
+                        error: .auth
+                    )
+                }
+
+                let sig: String
+                if case .rateLimited = llmErr { sig = "rateLimited:" }
+                else { sig = "network:" }
+
+                if sig == context.lastFailureSignature {
+                    return .failure(
+                        fallbackPatchSet: nil,
+                        assistantMessage: assistantMessage(for: llmErr),
+                        raw: nil,
+                        debug: makeDebug(.failed, outcome: "failure", attempts: context.totalCalls,
+                                        id: requestId, elapsed: nowMs() - startMs,
+                                        networkMs: networkMs, error: llmErr,
+                                        terminationReason: "repeat_failure"),
+                        error: llmErr
+                    )
+                }
+                context.lastFailureSignature = sig
+                if context.totalCalls < Self.maxCalls {
+                    if case .rateLimited(let retryAfter) = llmErr {
+                        await rateLimitedBackoff(retryAfterSec: retryAfter)
+                    } else {
+                        await backoff(attempt: context.totalCalls)
+                    }
+                    continue
+                }
+                return .failure(
+                    fallbackPatchSet: nil,
+                    assistantMessage: assistantMessage(for: llmErr),
+                    raw: nil,
+                    debug: makeDebug(.failed, outcome: "failure", attempts: context.totalCalls,
+                                    id: requestId, elapsed: nowMs() - startMs,
+                                    networkMs: networkMs, error: llmErr,
+                                    terminationReason: "budget_exhausted"),
+                    error: llmErr
+                )
+            }
+        }
+
+        // Repair (on decode/validation error) is text-only — image is not re-sent.
+        return await decodeAndValidate(
+            raw: raw!, request: request.base,
+            requestId: requestId, startMs: startMs, isRepair: false,
+            networkMs: networkMs, context: &context
+        )
+    }
+
     public func run(_ request: LLMRequest) async -> LLMResult {
         let requestId = UUID().uuidString
         let startMs = nowMs()
@@ -147,7 +251,6 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
              .schemaInvalid, .validationRecoverable,
              .validationExpired, .validationFatal,
              .recipeIdMismatchFatal:                     return "Something went wrong. Please try again."
-        default:                                         return "Something went wrong. Please try again."
         }
     }
 
@@ -422,11 +525,13 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
     // MARK: - Prompt Builders
 
     private func buildMessages(for request: LLMRequest) -> [LLMMessage] {
-        [
+        var messages = [
             LLMMessage(role: .system, content: systemPrompt(hasCanvas: request.hasCanvas)),
             LLMMessage(role: .system, content: recipeContextMessage(for: request)),
-            LLMMessage(role: .user, content: request.userMessage)
         ]
+        messages += request.conversationHistory
+        messages.append(LLMMessage(role: .user, content: request.userMessage))
+        return messages
     }
 
     private func buildRepairMessages(

@@ -350,4 +350,73 @@ struct OpenAILLMOrchestratorTests {
         }
         #expect(msg == "OpenAI quota/rate limit hit. Try again shortly.")
     }
+
+    // MARK: - Multimodal run() tests
+
+    @Test("multimodal: payload too large returns .failure before any network call")
+    func multimodal_payloadTooLarge_returnsFailureBeforeNetworkCall() async throws {
+        // MockLLMClient with no configured responses — any network call would crash.
+        let mock = MockLLMClient([])
+        let orch = OpenAILLMOrchestrator(client: mock, model: "gpt-4o")
+
+        // 10 MB + 1 byte exceeds the 10 MB internal gate.
+        let bigData = Data(repeating: 0xFF, count: 10 * 1024 * 1024 + 1)
+        let image = try PreparedImage(
+            data: bigData, mimeType: "image/jpeg",
+            widthPx: 1000, heightPx: 1000, originalByteCount: bigData.count
+        )
+        let req = MultimodalLLMRequest(base: request(), image: image)
+
+        let result = await orch.run(req)
+
+        #expect(mock.callCount == 0, "No network call must be made when image exceeds size limit")
+        guard case .failure(_, let msg, _, _, let err) = result else {
+            Issue.record("Expected .failure for oversized payload, got \(result)"); return
+        }
+        #expect(err == .badRequest)
+        #expect(msg.contains("too large"))
+    }
+
+    @Test("multimodal: valid response returns .valid result via shared decode path")
+    func multimodal_validResponse_returnsValid() async throws {
+        let mock = MockLLMClient([.success(validJSON())])
+        let orch = OpenAILLMOrchestrator(client: mock, model: "gpt-4o")
+
+        let imageData = Data([0xFF, 0xD8, 0xFF])
+        let image = try PreparedImage(
+            data: imageData, mimeType: "image/jpeg",
+            widthPx: 100, heightPx: 100, originalByteCount: 3
+        )
+        let req = MultimodalLLMRequest(base: request(), image: image)
+
+        let result = await orch.run(req)
+
+        #expect(mock.callCount == 1)
+        guard case .valid(let ps, _, _, _) = result else {
+            Issue.record("Expected .valid, got \(result)"); return
+        }
+        #expect(ps.patches.count == 1)
+    }
+
+    @Test("multimodal: auth error terminates immediately without retry")
+    func multimodal_authError_noRetry() async throws {
+        let mock = MockLLMClient([.failure(LLMError.auth)])
+        let orch = OpenAILLMOrchestrator(client: mock, model: "gpt-4o")
+
+        let imageData = Data([0xFF, 0xD8, 0xFF])
+        let image = try PreparedImage(
+            data: imageData, mimeType: "image/jpeg",
+            widthPx: 100, heightPx: 100, originalByteCount: 3
+        )
+        let req = MultimodalLLMRequest(base: request(), image: image)
+
+        let result = await orch.run(req)
+
+        #expect(mock.callCount == 1, "auth must not trigger any retry in multimodal path")
+        guard case .failure(_, _, _, let d, let err) = result else {
+            Issue.record("Expected .failure, got \(result)"); return
+        }
+        #expect(err == .auth)
+        #expect(d.terminationReason == "fatal_auth")
+    }
 }

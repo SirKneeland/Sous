@@ -57,6 +57,24 @@ private actor CapturingOrchestrator: LLMOrchestrator {
 
 private extension AppStoreTests {
 
+    func makeMultimodalRequest() throws -> MultimodalLLMRequest {
+        let imageData = Data([0xFF, 0xD8, 0xFF])
+        let image = try PreparedImage(
+            data: imageData, mimeType: "image/jpeg",
+            widthPx: 100, heightPx: 100, originalByteCount: 3
+        )
+        // base values other than userMessage are rebuilt by AppStore.sendWithMultimodalLLM.
+        let base = LLMRequest(
+            recipeId: AppStore.recipeId.uuidString,
+            recipeVersion: 1,
+            hasCanvas: true,
+            userMessage: "Does this look done?",
+            recipeSnapshotForPrompt: Recipe(title: "placeholder"),
+            userPrefs: LLMUserPrefs(hardAvoids: [])
+        )
+        return MultimodalLLMRequest(base: base, image: image)
+    }
+
     func minimalDebug() -> LLMDebugBundle {
         LLMDebugBundle(
             status: .succeeded,
@@ -458,6 +476,93 @@ final class AppStoreTests: XCTestCase {
                        "Recipe version must increment exactly once on Accept")
         XCTAssertTrue(updated.notes.contains("test note"),
                       "Fallback patch note must be present after Accept")
+    }
+
+    // MARK: (m9-a) multimodal send dispatches to orchestrator and returns result
+
+    func test_multimodalSend_dispatchesOrchestrator_andHandlesResult() async throws {
+        let mock = CapturingOrchestrator(result: noPatchesResult())
+        let store = AppStore(testOrchestrator: mock)
+        let initialCount = store.chatTranscript.count
+
+        store.send(.openChat)
+        let req = try makeMultimodalRequest()
+        store.sendMultimodalRequest(req)
+        await drainMain()
+
+        let count = await mock.callCount
+        XCTAssertEqual(count, 1, "Orchestrator must be called exactly once for multimodal send")
+        XCTAssertEqual(store.llmDebugStatus, "succeeded")
+        // noPatches → assistant message appended
+        XCTAssertEqual(store.chatTranscript.count, initialCount + 1,
+                       "One assistant message must be appended after noPatches multimodal result")
+    }
+
+    // MARK: (m9-b) multimodal send blocked while a text LLM call is in flight
+
+    func test_multimodalSend_blockedWhileTextLLMInFlight() async throws {
+        let textMock = ControlledOrchestrator()
+        let store = AppStore(testOrchestrator: textMock)
+
+        store.sendUserMessage("first")  // starts text LLM task
+        let req = try makeMultimodalRequest()
+        store.sendMultimodalRequest(req)
+
+        XCTAssertEqual(store.llmDebugStatus, "blocked_inflight_llm",
+                       "Multimodal send must be blocked while text LLM is in flight")
+
+        // Drain: resume the controlled mock to avoid a leaked continuation.
+        await textMock.resume(with: noPatchesResult())
+        await drainMain()
+    }
+
+    // MARK: (m9-c) multimodal send blocked when patch is pending
+
+    func test_multimodalSend_blockedIfPatchPending() async throws {
+        let mock = CapturingOrchestrator(result: validResult(patchSet: seedPatchSet()))
+        let store = AppStore(testOrchestrator: mock)
+
+        store.send(.openChat)
+        store.sendUserMessage("add a note")
+        await drainMain()
+        XCTAssertTrue(store.uiState.isPatchProposed, "Pre-condition: must be in patchProposed")
+
+        let callCountBefore = await mock.callCount
+        let req = try makeMultimodalRequest()
+        store.sendMultimodalRequest(req)
+        await drainMain()
+
+        let callCountAfter = await mock.callCount
+        XCTAssertEqual(callCountAfter, callCountBefore,
+                       "No additional orchestrator call must be made when a patch is pending")
+        XCTAssertTrue(store.uiState.isPatchProposed,
+                      "State must remain patchProposed after a blocked multimodal send")
+    }
+
+    // MARK: (m9-d) multimodal valid patch — no mutation before Accept
+
+    func test_multimodalSend_validPatch_noMutationUntilAccept() async throws {
+        let mock = SyncOrchestrator(result: validResult(patchSet: seedPatchSet()))
+        let store = AppStore(testOrchestrator: mock)
+        let original = store.uiState.recipe
+
+        store.send(.openChat)
+        let req = try makeMultimodalRequest()
+        store.sendMultimodalRequest(req)
+        await drainMain()
+
+        XCTAssertTrue(store.uiState.isPatchProposed,
+                      "Valid multimodal result must enter patchProposed")
+        XCTAssertEqual(store.uiState.recipe, original,
+                       "Recipe must not change before Accept")
+
+        store.send(.validatePatch)
+        store.send(.acceptPatch)
+        let updated = store.uiState.recipe
+        XCTAssertEqual(updated.version, original.version + 1,
+                       "Recipe version must increment after Accept")
+        XCTAssertTrue(updated.notes.contains("test note"),
+                      "Patch note must be applied after Accept")
     }
 
     // MARK: (o) repeated failure does not block future sends
