@@ -4,6 +4,7 @@ import SousCore
 struct RecipeCanvasView: View {
     let recipe: Recipe
     let onOpenChat: () -> Void
+    var onMarkStepDone: (UUID) -> Void = { _ in }
     var onOpenSettings: () -> Void = {}
     var llmDebugStatus: String? = nil
 
@@ -34,13 +35,23 @@ struct RecipeCanvasView: View {
 
                 Text("Steps").font(.headline)
                 ForEach(recipe.steps, id: \.id) { step in
-                    HStack(alignment: .top, spacing: 8) {
-                        Text(step.status == .done ? "[done]" : "[todo]")
-                            .font(.caption).monospaced()
-                            .foregroundStyle(step.status == .done ? .secondary : .primary)
-                        Text(step.text)
-                            .strikethrough(step.status == .done)
+                    Button {
+                        if step.status == .todo { onMarkStepDone(step.id) }
+                    } label: {
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: step.status == .done
+                                  ? "checkmark.circle.fill"
+                                  : "circle")
+                                .foregroundStyle(step.status == .done ? .secondary : .primary)
+                            Text(step.text)
+                                .strikethrough(step.status == .done)
+                                .foregroundStyle(step.status == .done ? .secondary : .primary)
+                                .multilineTextAlignment(.leading)
+                            Spacer()
+                        }
                     }
+                    .buttonStyle(.plain)
+                    .disabled(step.status == .done)
                 }
 
                 if !recipe.notes.isEmpty {

@@ -13,6 +13,7 @@ struct ContentView: View {
                 RecipeCanvasView(
                     recipe: store.uiState.recipe,
                     onOpenChat: { store.send(.openChat) },
+                    onMarkStepDone: { id in store.send(.markStepDone(stepId: id)) },
                     onOpenSettings: { showSettings = true },
                     llmDebugStatus: store.llmDebugStatus
                 )

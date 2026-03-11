@@ -52,7 +52,7 @@
   - `Validation/PatchValidator.swift` — Static `validate(patchSet:recipe:) -> PatchValidationResult`; checks version, IDs, step immutability, internal conflicts
   - `Application/PatchApplier.swift` — Static `apply(patchSet:recipe:) throws -> Recipe`; validates first, then applies atomically, increments recipe.version
   - `LLM/LLMProtocols.swift` — `LLMClient` and `LLMOrchestrator` protocols (both Sendable)
-  - `LLM/LLMRequest.swift` — Immutable snapshot: recipeId, recipeVersion, hasCanvas, userMessage, recipeSnapshotForPrompt, userPrefs, nextLLMContext
+  - `LLM/LLMRequest.swift` — Immutable snapshot: recipeId, recipeVersion, hasCanvas, userMessage, recipeSnapshotForPrompt, userPrefs, nextLLMContext; PatchDecision/NextLLMContext are Codable here
   - `LLM/LLMResult.swift` — Enum: `.valid(patchSet, assistantMessage, ...)` | `.noPatches(...)` | `.failure(...)`
   - `LLM/LLMRawResponse.swift` — Transport response: rawText, requestId, attempt, timingMs, httpStatus, token counts
   - `LLM/OpenAILLMOrchestrator.swift` — Concrete orchestrator: prompt construction, retry/backoff, JSON repair, validation (~655 lines)
@@ -61,7 +61,10 @@
   - `Multimodal/DefaultImagePreparator.swift` — Concrete impl: JPEG compression + resizing
   - `Multimodal/ImageAsset.swift` — Enum: url(URL) | data(Data) | uiImage(UIImage)
   - `Multimodal/PreparedImage.swift` — base64 JPEG, mediaType, bytesOriginal, bytesCompressed, compressionRatio
-  - `Multimodal/MultimodalLLMRequest.swift` — Composes LLMRequest + PreparedImage (ready for M9, not yet wired)
+  - `Multimodal/MultimodalLLMRequest.swift` — Composes LLMRequest + PreparedImage
+  - `Persistence/RecipeCodable.swift` — Manual Codable for StepStatus; Ingredient/Step/Recipe/PatchSet use synthesized conformances declared in their model files
+  - `Persistence/PatchCodable.swift` — Manual Codable for Patch enum (discriminated "type" key, 7 cases) and PatchSetStatus
+  - `Persistence/LLMContextCodable.swift` — Documentation file; PatchDecision.Decision/PatchDecision/NextLLMContext declared Codable in LLMRequest.swift
 
 ### App Target
 - **Purpose:** SwiftUI views, LLMClient (network transport), AppStore (app-level state machine)
@@ -84,7 +87,8 @@
   - `Attachment/PhotoSendCoordinator.swift` — Orchestrates image prep → send
   - `Keychain/OpenAIKeyProvider.swift` — Keychain storage for API key
   - `Debug/LLMDebugExport.swift` — Exports LLMDebugBundle for analysis
-  - `SessionStore.swift` — Session persistence skeleton
+  - `Persistence/SessionSnapshot.swift` — Codable struct; schemaVersion, recipe, pendingPatchSet, chatMessages[], nextLLMContext, savedAt
+  - `Persistence/SessionPersistence.swift` — Static helpers: save (atomic), load (nil on absent/corrupt), clear; all accept optional URL for test injection
 
 ---
 
@@ -105,38 +109,34 @@
 
 - **Core logic tests:** `SousCoreTests`
   - Location: `ios/SousCore/Tests/SousCoreTests/`
-  - Key files: PatchValidatorTests.swift, PatchApplierTests.swift, PatchSetDecoderTests.swift, OpenAILLMOrchestratorTests.swift, ImagePreparatorTests.swift, LLMTypesTests.swift, MultimodalTypesTests.swift
+  - Key files: PatchValidatorTests.swift, PatchApplierTests.swift, PatchSetDecoderTests.swift, OpenAILLMOrchestratorTests.swift, ImagePreparatorTests.swift, LLMTypesTests.swift, MultimodalTypesTests.swift, RecipeCodableTests.swift, PatchCodableTests.swift
   - Run with: `swift test` (from `ios/SousCore/`)
 
 - **App target tests:** `SousAppTests`
   - Location: `ios/SousApp/SousAppTests/`
-  - Key files: AppStoreTests.swift, UIStateMachineTests.swift, OpenAIClientTests.swift, OpenAIKeyProviderTests.swift, PhotoSendStateTests.swift, PhotoSendCoordinatorTests.swift, ImageAcquisitionStateTests.swift, LLMDebugExportTests.swift
-  - Run with: `xcodebuild test -scheme SousApp -destination 'platform=iOS Simulator,name=iPhone 16'`
+  - Key files: AppStoreTests.swift, UIStateMachineTests.swift, OpenAIClientTests.swift, OpenAIKeyProviderTests.swift, PhotoSendStateTests.swift, PhotoSendCoordinatorTests.swift, ImageAcquisitionStateTests.swift, LLMDebugExportTests.swift, SessionPersistenceTests.swift
+  - Run with: `xcodebuild test -scheme SousApp -destination 'platform=iOS Simulator,name=iPhone 17'`
 
 - **UI tests:** `SousAppUITests` — Minimal coverage, launch tests only
 
 ---
 
-## Current Milestone State (Milestone 9)
+## Current Milestone State (Milestone 10)
 
-**Milestone 9 — Native iOS Migration: Photo Capture + Multimodal Flow (CURRENT)**
+**Milestone 10 — Native iOS Migration: Local Session Persistence + Crash-Proofing (CURRENT)**
 
 What is built and wired up:
-- Full multimodal send path: camera/library → image prep → AppStore dispatch → OpenAI vision call → LLMResult → recipe patch or assistant message
-- `LLMClientRequest` carries an optional `PreparedImage`; `OpenAIClient` serializes it as a base64 `image_url` content block in the last user message (OpenAI vision format)
-- `OpenAILLMOrchestrator` has a `run(MultimodalLLMRequest)` overload: 10 MB size gate (rejects before any network call), same retry/backoff/repair logic as the text path, uses `gpt-4o` model
-- `LLMOrchestrator` protocol extended with `run(MultimodalLLMRequest)`; default extension falls back to `run(request.base)` so existing test mocks need no changes
-- `AppStore.sendMultimodalRequest(_:)`: single-flight enforced identically to text sends; rebuilds the base `LLMRequest` with fresh `nextLLMContext`, `userPrefs`, and recipe snapshot from AppStore state before dispatching
-- `ChatSheetView.sendAction()`: on photo send success, appends the user bubble, clears the composer, then calls `store.sendMultimodalRequest(_:)`; send button disabled while any LLM call is in flight
-- All arch guardrails preserved: multimodal patches go through PatchValidator → user accept → PatchApplier; no direct recipe mutation
+- `SessionSnapshot` — Codable struct persisted to `Documents/sous_session.json`; captures recipe (incl. step done/todo status), pending AI patch, last 20 chat messages, and last patch accept/reject decision
+- `SessionPersistence` — Crash-safe write via `Data.write(options: .atomic)`; silent load on startup; clear for test isolation
+- All SousCore models now Codable: `Ingredient`, `Step`, `Recipe`, `PatchSet`, `StepStatus`, `Patch` (all 7 cases), `PatchSetStatus`, `PatchDecision`, `NextLLMContext`
+- `AppStore` restores state silently on init: if a valid snapshot is found, recipe + chat + nextLLMContext are loaded; if a pending patch was in flight it re-enters patchProposed state
+- Save triggers: after `patchReceived`, `acceptPatch`, `rejectPatch`; after every user/assistant chat message appended
+- Schema versioning: `schemaVersion` checked on load; mismatch falls back to seed recipe
+- `isPersistenceEnabled` flag in AppStore: automatically `false` when a test orchestrator is injected — all existing tests remain fully isolated from disk I/O
+- 29 new tests: 13 in `RecipeCodableTests`, 16 in `PatchCodableTests`, 11 in `SessionPersistenceTests`
 
-What remains for Milestone 9:
-- Verify end-to-end photo → suggestion/patch flow on device with a live API key
-- Permission handling (camera/library) was built in M8 and is already present
-
-What is next (Milestone 10 — Local Session Persistence + Crash-Proofing):
-- Persist in-progress recipe state, step progress, pending patches, and minimal chat context
-- Silent restore on app relaunch; crash-safe write strategy; data model migrations
+What is next (Milestone 11 — TBD):
+- See Milestones.md for upcoming work
 
 ---
 
@@ -171,7 +171,7 @@ What is next (Milestone 10 — Local Session Persistence + Crash-Proofing):
 - **Two LLM models in AppStore:** `liveLLMModel = "gpt-4o-mini"` (text path) and `multimodalLLMModel = "gpt-4o"` (vision path). The orchestrator always uses whatever model it is initialized with; the model choice lives in AppStore.
 - **`nextLLMContext` in AppStore** — carries the last patch decision (accept/reject + summary) into the next LLM call as silent context, then clears. This is the only mechanism for cross-turn memory today. The multimodal path also injects `nextLLMContext` (rebuilt in `sendWithMultimodalLLM`).
 - **`HiddenContext` in UIState** — accumulates rejection facts across multiple rejections; fed back into the LLM prompt silently via `LLMContextComposer`. Not persisted across sessions.
-- **`SessionStore.swift` is a skeleton** — session persistence is not implemented. Each app launch starts fresh.
+- **Session persistence is live (M10)** — `SessionPersistence` + `SessionSnapshot` are implemented. AppStore silently restores on launch from `Documents/sous_session.json`. The old `SessionStore.swift` skeleton has been replaced.
 - **`src/`, `api/`, `server/` directories exist** but are not used in any current milestone. Do not touch them.
 - **Seed recipe** in AppStore is hardcoded: "Simple Bread" with 3 ingredients, 3 steps (1 marked done), 1 note. The done step is intentional — it tests immutability in the live app.
 - **Multimodal wiring is complete (M9):** `OpenAILLMOrchestrator` now has `run(MultimodalLLMRequest)` which attaches the image to the client request and uses `gpt-4o`. The `LLMOrchestrator` protocol carries a default extension that falls back to `run(request.base)` so test mocks require no changes.

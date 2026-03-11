@@ -49,6 +49,28 @@ public enum UIStateMachine {
             let newHidden = hidden.appending(rejection)
             return .chatOpen(recipe: recipe, draftUserText: userText, hidden: newHidden)
 
+        // MARK: markStepDone — user-initiated, works in any state
+
+        case (_, .markStepDone(let stepId)):
+            let recipe = state.recipe
+            // No-op if step doesn't exist or is already done (done steps are immutable).
+            guard recipe.steps.contains(where: { $0.id == stepId && $0.status == .todo }) else {
+                return state
+            }
+            let updatedSteps = recipe.steps.map { step -> Step in
+                guard step.id == stepId else { return step }
+                return Step(id: step.id, text: step.text, status: .done)
+            }
+            let updated = Recipe(
+                id: recipe.id,
+                version: recipe.version + 1,
+                title: recipe.title,
+                ingredients: recipe.ingredients,
+                steps: updatedSteps,
+                notes: recipe.notes
+            )
+            return state.replacingRecipe(updated)
+
         // MARK: unhandled combinations — no-op
 
         default:

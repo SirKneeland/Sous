@@ -1,6 +1,6 @@
 import Foundation
 
-public struct Recipe: Equatable, Sendable {
+public struct Recipe: Equatable, Sendable, Codable {
     public let id: UUID
     public var version: Int
     public var title: String

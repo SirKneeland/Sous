@@ -17,8 +17,8 @@ public struct LLMUserPrefs: Equatable, Sendable {
 // MARK: - PatchDecision
 
 /// Records the user's explicit decision on a PatchSet, carried forward as LLM context.
-public struct PatchDecision: Equatable, Sendable {
-    public enum Decision: String, Equatable, Sendable {
+public struct PatchDecision: Equatable, Sendable, Codable {
+    public enum Decision: String, Equatable, Sendable, Codable {
         case accepted
         case rejected
     }
@@ -38,7 +38,7 @@ public struct PatchDecision: Equatable, Sendable {
 
 /// One-shot context attached to the next LLM request, then cleared.
 /// Prevents the model from re-proposing a rejected plan.
-public struct NextLLMContext: Equatable, Sendable {
+public struct NextLLMContext: Equatable, Sendable, Codable {
     public let lastPatchDecision: PatchDecision?
 
     public init(lastPatchDecision: PatchDecision?) {

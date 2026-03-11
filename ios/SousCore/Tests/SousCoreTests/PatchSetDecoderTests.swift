@@ -293,4 +293,77 @@ struct PatchSetDecoderTests {
         """
         expectFailure(decoder.decode(json), .schemaInvalid(.patchOpUnknownType))
     }
+
+    // MARK: Test 17: add_ingredient with JSON null after_id — success, afterId decoded as nil
+
+    @Test func addIngredient_jsonNullAfterId_decodesAsNil() {
+        let json = """
+        {
+            "assistant_message": "Adding tomato as an ingredient.",
+            "patchSet": {
+                "patchSetId": "ps-1",
+                "baseRecipeId": "r-1",
+                "baseRecipeVersion": 1,
+                "patches": [{"type": "add_ingredient", "text": "tomato", "after_id": null}]
+            }
+        }
+        """
+        let result = decoder.decode(json)
+        guard let dto = expectSuccess(result, extractionUsed: false) else { return }
+        guard case .addIngredient(let text, let afterId) = dto.patchSet?.patches[0] else {
+            Issue.record("Expected addIngredient patch op")
+            return
+        }
+        #expect(text == "tomato")
+        #expect(afterId == nil, "JSON null after_id must decode as nil, not the string 'null'")
+    }
+
+    // MARK: Test 18: add_ingredient with UUID string after_id — success, afterId decoded as string
+
+    @Test func addIngredient_uuidAfterId_decodesAsString() {
+        let uuidStr = "AAAABBBB-0000-0000-0000-000000000001"
+        let json = """
+        {
+            "assistant_message": "Inserting tomato after flour.",
+            "patchSet": {
+                "patchSetId": "ps-1",
+                "baseRecipeId": "r-1",
+                "baseRecipeVersion": 1,
+                "patches": [{"type": "add_ingredient", "text": "tomato", "after_id": "\(uuidStr)"}]
+            }
+        }
+        """
+        let result = decoder.decode(json)
+        guard let dto = expectSuccess(result, extractionUsed: false) else { return }
+        guard case .addIngredient(let text, let afterId) = dto.patchSet?.patches[0] else {
+            Issue.record("Expected addIngredient patch op")
+            return
+        }
+        #expect(text == "tomato")
+        #expect(afterId == uuidStr)
+    }
+
+    // MARK: Test 19: add_step with JSON null after_step_id — success, afterStepId decoded as nil
+
+    @Test func addStep_jsonNullAfterStepId_decodesAsNil() {
+        let json = """
+        {
+            "assistant_message": "Adding a new step.",
+            "patchSet": {
+                "patchSetId": "ps-1",
+                "baseRecipeId": "r-1",
+                "baseRecipeVersion": 1,
+                "patches": [{"type": "add_step", "text": "Stir well", "after_step_id": null}]
+            }
+        }
+        """
+        let result = decoder.decode(json)
+        guard let dto = expectSuccess(result, extractionUsed: false) else { return }
+        guard case .addStep(let text, let afterStepId) = dto.patchSet?.patches[0] else {
+            Issue.record("Expected addStep patch op")
+            return
+        }
+        #expect(text == "Stir well")
+        #expect(afterStepId == nil, "JSON null after_step_id must decode as nil")
+    }
 }

@@ -34,6 +34,35 @@ public enum UIState: Equatable {
     case patchReview(recipe: Recipe, patchSet: PatchSet, validation: PatchValidationResult, hidden: HiddenContext)
 }
 
+// MARK: - UIState helpers
+
+extension UIState {
+    /// The recipe embedded in the current state, regardless of which state it is.
+    public var recipe: Recipe {
+        switch self {
+        case .recipeOnly(let r):             return r
+        case .chatOpen(let r, _, _):         return r
+        case .patchProposed(let r, _, _, _): return r
+        case .patchReview(let r, _, _, _):   return r
+        }
+    }
+
+    /// Returns a copy of the current state with the recipe replaced.
+    /// All other associated values (draft text, patchSet, hidden context, etc.) are preserved.
+    public func replacingRecipe(_ newRecipe: Recipe) -> UIState {
+        switch self {
+        case .recipeOnly:
+            return .recipeOnly(recipe: newRecipe)
+        case .chatOpen(_, let draft, let hidden):
+            return .chatOpen(recipe: newRecipe, draftUserText: draft, hidden: hidden)
+        case .patchProposed(_, let ps, let validation, let hidden):
+            return .patchProposed(recipe: newRecipe, patchSet: ps, validation: validation, hidden: hidden)
+        case .patchReview(_, let ps, let validation, let hidden):
+            return .patchReview(recipe: newRecipe, patchSet: ps, validation: validation, hidden: hidden)
+        }
+    }
+}
+
 // MARK: - UIEvent
 
 public enum UIEvent {
@@ -46,4 +75,6 @@ public enum UIEvent {
     /// Discard the patch and return to chat. `userText` becomes the new draft.
     /// The rejection fact is embedded silently in `HiddenContext`.
     case rejectPatch(userText: String)
+    /// User taps a todo step to mark it done. One-way; done steps are immutable.
+    case markStepDone(stepId: UUID)
 }

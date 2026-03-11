@@ -241,4 +241,57 @@ final class UIStateMachineTests: XCTestCase {
         let result = LLMContextComposer.composeUserMessage(userText: "hi", hidden: hidden)
         XCTAssertTrue(result.contains("entry1\nentry2"), "Entries should be newline-separated")
     }
+
+    // MARK: markStepDone
+
+    func test_markStepDone_todoStep_marksItDone() {
+        let recipe = Self.seedRecipe()
+        let state = UIState.recipeOnly(recipe: recipe)
+
+        let next = UIStateMachine.reduce(state, .markStepDone(stepId: Self.stepMixId))
+
+        guard case .recipeOnly(let updated) = next else {
+            return XCTFail("Expected recipeOnly, got \(next)")
+        }
+        let markedStep = updated.steps.first { $0.id == Self.stepMixId }
+        XCTAssertEqual(markedStep?.status, .done, "Todo step must be marked done")
+    }
+
+    func test_markStepDone_incrementsRecipeVersion() {
+        let state = UIState.recipeOnly(recipe: Self.seedRecipe())
+        let next = UIStateMachine.reduce(state, .markStepDone(stepId: Self.stepMixId))
+        XCTAssertEqual(next.recipe.version, 2, "Version must increment when a step is marked done")
+    }
+
+    func test_markStepDone_doneStep_isNoOp() {
+        let state = UIState.recipeOnly(recipe: Self.seedRecipe())
+        // stepDoneId is already .done in the seed recipe
+        let next = UIStateMachine.reduce(state, .markStepDone(stepId: Self.stepDoneId))
+        XCTAssertEqual(next.recipe.version, 1, "Marking an already-done step must be a no-op")
+    }
+
+    func test_markStepDone_unknownId_isNoOp() {
+        let state = UIState.recipeOnly(recipe: Self.seedRecipe())
+        let next = UIStateMachine.reduce(state, .markStepDone(stepId: UUID()))
+        XCTAssertEqual(next.recipe.version, 1, "Unknown stepId must be a no-op")
+    }
+
+    func test_markStepDone_worksInChatOpenState() {
+        let state = UIState.chatOpen(recipe: Self.seedRecipe(),
+                                     draftUserText: "hello",
+                                     hidden: HiddenContext())
+        let next = UIStateMachine.reduce(state, .markStepDone(stepId: Self.stepMixId))
+        guard case .chatOpen(let updated, let draft, _) = next else {
+            return XCTFail("Expected chatOpen, got \(next)")
+        }
+        XCTAssertEqual(draft, "hello", "Draft text must be preserved")
+        XCTAssertEqual(updated.steps.first { $0.id == Self.stepMixId }?.status, .done)
+    }
+
+    func test_markStepDone_preservesOtherSteps() {
+        let state = UIState.recipeOnly(recipe: Self.seedRecipe())
+        let next = UIStateMachine.reduce(state, .markStepDone(stepId: Self.stepMixId))
+        let bakeStep = next.recipe.steps.first { $0.id == Self.stepBakeId }
+        XCTAssertEqual(bakeStep?.status, .todo, "Other todo steps must remain todo")
+    }
 }

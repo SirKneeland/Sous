@@ -2,18 +2,9 @@ import Combine
 import Foundation
 import SousCore
 
-// MARK: - UIState projection helpers
+// MARK: - UIState projection helpers (app-layer only)
 
 extension UIState {
-    var recipe: Recipe {
-        switch self {
-        case .recipeOnly(let r):             return r
-        case .chatOpen(let r, _, _):         return r
-        case .patchProposed(let r, _, _, _): return r
-        case .patchReview(let r, _, _, _):   return r
-        }
-    }
-
     var isSheetPresented: Bool {
         if case .recipeOnly = self { return false }
         return true
@@ -44,6 +35,14 @@ final class AppStore: ObservableObject {
 
     /// Toggle via setUseLiveLLM(_:) so cancellation side-effects are applied correctly.
     private(set) var useLiveLLM = true
+
+    /// False when a test orchestrator is injected; skips all disk I/O so tests
+    /// are isolated from the real session file and from each other.
+    private let isPersistenceEnabled: Bool
+
+    /// Override in tests to avoid touching the real Documents directory.
+    /// Nil means use SessionPersistence.defaultFileURL.
+    private let sessionFileURL: URL?
 
     private let maxMessages = 200
     private let liveLLMModel = "gpt-4o-mini"
@@ -88,32 +87,54 @@ final class AppStore: ObservableObject {
     static let stepDoneId        = UUID(uuidString: "00000000-0000-0000-0001-000000000003")!
 
     init(testOrchestrator: (any LLMOrchestrator)? = nil,
+         sessionFileURL: URL? = nil,
          keyProvider: any OpenAIKeyProviding = KeychainOpenAIKeyProvider()) {
         self.testOrchestrator = testOrchestrator
         self.keyProvider = keyProvider
-        let recipe = Recipe(
-            id: Self.recipeId,
-            version: 1,
-            title: "Simple Bread",
-            ingredients: [
-                Ingredient(id: Self.ingredientFlourId, text: "2 cups flour"),
-                Ingredient(id: Self.ingredientSaltId,  text: "1 tsp salt"),
-                Ingredient(id: Self.ingredientWaterId, text: "3/4 cup water"),
-            ],
-            steps: [
-                Step(id: Self.stepMixId,  text: "Mix dry ingredients",       status: .todo),
-                Step(id: Self.stepBakeId, text: "Bake at 375°F for 30 min",  status: .todo),
-                Step(id: Self.stepDoneId, text: "Let cool on rack",           status: .done),
-            ],
-            notes: ["Original family recipe"]
-        )
-        uiState = .recipeOnly(recipe: recipe)
+        self.sessionFileURL = sessionFileURL
+        isPersistenceEnabled = (testOrchestrator == nil)
 
-        chatTranscript = [
-            ChatMessage(role: .system,    text: "Sous is ready. Tap the mic or type to get started."),
-            ChatMessage(role: .assistant, text: "Hi! I'm looking at your Simple Bread recipe. What would you like to change?"),
-            ChatMessage(role: .assistant, text: "Tip: use the Debug panel to simulate a patch if you want to test the review flow."),
-        ]
+        // Attempt silent session restore; fall back to seed data on first launch
+        // or if the saved file is absent, corrupt, or from a different schema version.
+        if testOrchestrator == nil,
+           let snapshot = SessionPersistence.load(from: sessionFileURL),
+           snapshot.schemaVersion == SessionSnapshot.currentSchemaVersion {
+            if let patch = snapshot.pendingPatchSet {
+                uiState = .patchProposed(
+                    recipe: snapshot.recipe,
+                    patchSet: patch,
+                    validation: nil,
+                    hidden: HiddenContext()
+                )
+            } else {
+                uiState = .recipeOnly(recipe: snapshot.recipe)
+            }
+            chatTranscript = snapshot.chatMessages
+            nextLLMContext = snapshot.nextLLMContext
+        } else {
+            let recipe = Recipe(
+                id: Self.recipeId,
+                version: 1,
+                title: "Simple Bread",
+                ingredients: [
+                    Ingredient(id: Self.ingredientFlourId, text: "2 cups flour"),
+                    Ingredient(id: Self.ingredientSaltId,  text: "1 tsp salt"),
+                    Ingredient(id: Self.ingredientWaterId, text: "3/4 cup water"),
+                ],
+                steps: [
+                    Step(id: Self.stepMixId,  text: "Mix dry ingredients",       status: .todo),
+                    Step(id: Self.stepBakeId, text: "Bake at 375°F for 30 min",  status: .todo),
+                    Step(id: Self.stepDoneId, text: "Let cool on rack",           status: .done),
+                ],
+                notes: ["Original family recipe"]
+            )
+            uiState = .recipeOnly(recipe: recipe)
+            chatTranscript = [
+                ChatMessage(role: .system,    text: "Sous is ready. Tap the mic or type to get started."),
+                ChatMessage(role: .assistant, text: "Hi! I'm looking at your Simple Bread recipe. What would you like to change?"),
+                ChatMessage(role: .assistant, text: "Tip: use the Debug panel to simulate a patch if you want to test the review flow."),
+            ]
+        }
     }
 
     deinit {
@@ -352,6 +373,11 @@ final class AppStore: ObservableObject {
         if chatTranscript.count > maxMessages {
             chatTranscript.removeFirst(chatTranscript.count - maxMessages)
         }
+        // Persist after every user or assistant message so the transcript
+        // survives a crash between the user sending and the AI replying.
+        if message.role == .user || message.role == .assistant {
+            saveSession()
+        }
     }
 
     /// Builds the prior-turn history to include in the next LLM request.
@@ -394,6 +420,52 @@ final class AppStore: ObservableObject {
         default:
             break
         }
+        // Persist after events that change recipe state, pending patch, or nextLLMContext.
+        switch event {
+        case .patchReceived, .acceptPatch, .rejectPatch, .markStepDone:
+            saveSession()
+        default:
+            break
+        }
+    }
+
+    // MARK: - Session persistence
+
+    /// Saves a snapshot of the current session state to disk.
+    ///
+    /// Called synchronously on the main actor.  The JSON payload is small
+    /// (recipe + ≤20 messages + optional patch) so the write is negligible.
+    /// `Data.write(options: .atomic)` handles crash-safety via temp-file + rename.
+    private func saveSession() {
+        guard isPersistenceEnabled else { return }
+        try? SessionPersistence.save(makeSnapshot(), to: sessionFileURL)
+    }
+
+    private func makeSnapshot() -> SessionSnapshot {
+        let pendingPatch: PatchSet? = {
+            switch uiState {
+            case .patchProposed(_, let ps, _, _),
+                 .patchReview(_, let ps, _, _):
+                return ps
+            default:
+                return nil
+            }
+        }()
+        // Persist the last 20 user/assistant messages — same cap as
+        // buildConversationHistory() so the LLM always has the full context.
+        let messages = Array(
+            chatTranscript
+                .filter { $0.role == .user || $0.role == .assistant }
+                .suffix(20)
+        )
+        return SessionSnapshot(
+            schemaVersion: SessionSnapshot.currentSchemaVersion,
+            recipe: uiState.recipe,
+            pendingPatchSet: pendingPatch,
+            chatMessages: messages,
+            nextLLMContext: nextLLMContext,
+            savedAt: Date()
+        )
     }
 
     // MARK: - Debug simulation

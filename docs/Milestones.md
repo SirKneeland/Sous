@@ -12,14 +12,15 @@ Statuses:
 
 ## Project State
 
-**Current milestone:** Milestone 9 — Native iOS Migration: Photo Capture + Multimodal Flow
+**Current milestone:** Milestone 11 — Native iOS Migration: TestFlight Alpha + Instrumentation
 
 **Recently completed:**
+- Milestone 10 — Native iOS Migration: Local Session Persistence + Crash-Proofing
+- Milestone 9 — Native iOS Migration: Photo Capture + Multimodal Flow
 - Milestone 8 — Native iOS Migration: LLM Integration
-- Milestone 7 — Native iOS Migration: Patch Review + User Control
 
 **Next milestone:**
-- Milestone 10 — Native iOS Migration: Local Session Persistence + Crash-Proofing
+- Milestone 12 — Accounts + Cooking Defaults
 
 This section exists to make the active project phase immediately visible to humans and AI agents without scanning the entire roadmap.
 
@@ -169,7 +170,7 @@ Explicit non-goals:
 ---
 
 ## Milestone 9 — Native iOS Migration: Photo Capture + Multimodal Flow
-**Status:** CURRENT
+**Status:** DONE
 
 **Goal:** Make photo-based help feel native, reliable, and fast.
 
@@ -186,8 +187,8 @@ Explicit non-goals:
 
 ---
 
-## Milestone 10 — Native iOS Migration: Local Session Persistence + Crash-Proofing  
-**Status:** PLANNED
+## Milestone 10 — Native iOS Migration: Local Session Persistence + Crash-Proofing
+**Status:** DONE
 
 **Goal:** Ensure Sous survives real iOS behavior without losing cooking progress.
 
@@ -206,8 +207,8 @@ This milestone is about **trust**.
 
 ---
 
-## Milestone 11 — Native iOS Migration: TestFlight Alpha + Instrumentation  
-**Status:** PLANNED
+## Milestone 11 — Native iOS Migration: TestFlight Alpha + Instrumentation
+**Status:** CURRENT
 
 **Goal:** Ship a usable alpha to real users with enough observability to fix issues quickly.
 

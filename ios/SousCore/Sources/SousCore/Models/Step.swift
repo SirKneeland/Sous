@@ -5,7 +5,7 @@ public enum StepStatus: Equatable, Sendable {
     case done
 }
 
-public struct Step: Equatable, Sendable {
+public struct Step: Equatable, Sendable, Codable {
     public let id: UUID
     public var text: String
     public var status: StepStatus

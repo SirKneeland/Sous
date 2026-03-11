@@ -298,8 +298,9 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                 )
             }
             context.lastFailureSignature = sig
+            let decodeErrors = [ErrorDescriptor(code: sig, message: describeDecodeFailure(df))]
             return await repair(
-                request: request, previousJSON: raw.rawText, errors: [],
+                request: request, previousJSON: raw.rawText, errors: decodeErrors,
                 requestId: requestId, startMs: startMs, context: &context
             )
 
@@ -564,11 +565,15 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
         Previous JSON:
         \(previousJSON)
         """
-        return [
+        // Include the conversation history so the repair model has full context
+        // for what the user was asking (critical for multi-turn clarification replies).
+        var messages = [
             LLMMessage(role: .system, content: systemPrompt(hasCanvas: request.hasCanvas)),
             LLMMessage(role: .system, content: recipeContextMessage(for: request)),
-            LLMMessage(role: .user, content: content)
         ]
+        messages += request.conversationHistory
+        messages.append(LLMMessage(role: .user, content: content))
+        return messages
     }
 
     // MARK: - Prompt Text
@@ -582,16 +587,19 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             1. Never reprint the full recipe. The canvas is the source of truth.
             2. Output JSON only. No markdown. No code fences. No prose outside JSON.
             3. Never propose changes to any step with status "done".
-            4. Emit patchSet when the user's message implies a recipe change. If intent is ambiguous, ask a clarifying question and emit patchSet: null.
+            4. Emit patchSet when the user's message implies a recipe change — including when they are answering a clarifying question you previously asked. If intent is still unclear after context, ask one clarifying question and emit patchSet: null.
 
-            Output shape:
-            {"assistant_message":"<short reply>","patchSet":{...}|null}
+            Output shape — no changes:
+            {"assistant_message":"<reply>","patchSet":null}
 
-            Patch operation types (exact "type" values):
-            {"type":"add_ingredient","text":"...","after_id":"<uuid>|null"}
+            Output shape — with changes (patchSetId must be a new UUID you generate):
+            {"assistant_message":"<reply>","patchSet":{"patchSetId":"<generate-a-new-uuid>","baseRecipeId":"<copy id from RECIPE CONTEXT>","baseRecipeVersion":<copy version from RECIPE CONTEXT>,"patches":[<operations>]}}
+
+            Patch operations (exact "type" values; after_id / after_step_id are JSON null to append at end, or a UUID string to insert after that specific item):
+            {"type":"add_ingredient","text":"...","after_id":null}
             {"type":"update_ingredient","id":"<uuid>","text":"..."}
             {"type":"remove_ingredient","id":"<uuid>"}
-            {"type":"add_step","text":"...","after_step_id":"<uuid>|null"}
+            {"type":"add_step","text":"...","after_step_id":null}
             {"type":"update_step","id":"<uuid>","text":"..."}
             {"type":"remove_step","id":"<uuid>"}
             {"type":"add_note","text":"..."}
@@ -678,6 +686,40 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             if case .versionMismatch = e { return .validationExpired }
         }
         return .validationRecoverable
+    }
+
+    private func describeDecodeFailure(_ df: DecodeFailure) -> String {
+        switch df {
+        case .decodeNonJSON:
+            return "Response was not valid JSON — re-emit as valid JSON"
+        case .decodeInvalidJSON:
+            return "Response JSON had wrong field types — check all field types match the schema"
+        case .schemaInvalid(let reason):
+            switch reason {
+            case .missingAssistantMessage:
+                return "Missing required field: assistant_message (must be a string)"
+            case .patchSetIdMissing:
+                return "Missing required field: patchSet.patchSetId (generate a new UUID string)"
+            case .baseRecipeIdMissing:
+                return "Missing required field: patchSet.baseRecipeId (copy id from RECIPE CONTEXT)"
+            case .baseRecipeVersionMissing:
+                return "Missing required field: patchSet.baseRecipeVersion (copy version integer from RECIPE CONTEXT)"
+            case .patchesMissing:
+                return "Missing required field: patchSet.patches (must be a non-empty array)"
+            case .patchesEmpty:
+                return "patchSet.patches array is empty — include at least one patch operation"
+            case .patchElementNotObject:
+                return "A patches element is not a JSON object"
+            case .patchOpMissingType:
+                return "A patch operation is missing the required 'type' field"
+            case .patchOpTypeNotString:
+                return "A patch operation's 'type' field must be a string"
+            case .patchOpUnknownType:
+                return "A patch operation has an unrecognized 'type' value — use only documented types"
+            case .patchOpMissingField:
+                return "A patch operation is missing a required field for its type"
+            }
+        }
     }
 
     private func mapDecode(_ df: DecodeFailure) -> LLMError {

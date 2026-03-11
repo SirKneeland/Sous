@@ -6,7 +6,7 @@ public enum PatchSetStatus: Equatable, Sendable {
     case rejected
 }
 
-public struct PatchSet: Equatable, Sendable {
+public struct PatchSet: Equatable, Sendable, Codable {
     public let patchSetId: UUID
     public let baseRecipeId: UUID
     public let baseRecipeVersion: Int
