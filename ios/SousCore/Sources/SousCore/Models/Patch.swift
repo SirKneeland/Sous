@@ -8,4 +8,6 @@ public enum Patch: Equatable, Sendable {
     case updateStep(id: UUID, text: String)
     case removeStep(id: UUID)
     case addNote(text: String)
+    /// Sets the recipe title. Used when creating a recipe from scratch (blank state).
+    case setTitle(String)
 }

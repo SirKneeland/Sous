@@ -596,6 +596,7 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             {"assistant_message":"<reply>","patchSet":{"patchSetId":"<generate-a-new-uuid>","baseRecipeId":"<copy id from RECIPE CONTEXT>","baseRecipeVersion":<copy version from RECIPE CONTEXT>,"patches":[<operations>]}}
 
             Patch operations (exact "type" values; after_id / after_step_id are JSON null to append at end, or a UUID string to insert after that specific item):
+            {"type":"set_title","title":"<recipe name>"}
             {"type":"add_ingredient","text":"...","after_id":null}
             {"type":"update_ingredient","id":"<uuid>","text":"..."}
             {"type":"remove_ingredient","id":"<uuid>"}
@@ -606,15 +607,26 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             """
         } else {
             return """
-            You are Sous, an AI cooking assistant. No recipe exists yet.
+            You are Sous, an AI cooking assistant. No recipe canvas exists yet.
 
-            RULES:
+            RULES — never violate:
             1. Output JSON only. No markdown. No code fences. No prose outside JSON.
-            2. Help the user decide what to cook. Ask 1-2 focused questions and suggest 2-3 options.
-            3. Do not generate a recipe until the user explicitly commits to a specific choice.
-            4. Always emit patchSet: null.
+            2. Help the user decide what to cook. Ask 1–2 focused questions, suggest 2–3 options with short blurbs. ALL text shown to the user — including numbered lists, option descriptions, and follow-up questions — must be placed inside assistant_message. Never put content in any other JSON field.
+            3. Do not generate a recipe until the user explicitly commits to a specific choice. Commit signals include: "make that", "yes", "generate it", "option 2", or a single number selecting a previously presented option (e.g. "1", "2", "3").
+            4. When the user explicitly commits: generate a full recipe using set_title, add_ingredient, and add_step patches. Use baseRecipeId and baseRecipeVersion from RECIPE CONTEXT. The canvas is blank — there are NO existing ingredients or steps and NO existing IDs. ALL add_ingredient patches MUST use "after_id": null. ALL add_step patches MUST use "after_step_id": null. Never put a UUID or any string in after_id or after_step_id — only null is valid here.
+            5. When still exploring: emit patchSet: null.
 
-            Output shape: {"assistant_message":"<reply>","patchSet":null}
+            Output shape — exploring:
+            {"assistant_message":"<reply>","patchSet":null}
+
+            Output shape — creating recipe (patchSetId must be a new UUID you generate):
+            {"assistant_message":"<brief reply>","patchSet":{"patchSetId":"<new-uuid>","baseRecipeId":"<from RECIPE CONTEXT>","baseRecipeVersion":<from RECIPE CONTEXT>,"patches":[{"type":"set_title","title":"..."},{"type":"add_ingredient","text":"...","after_id":null},{"type":"add_step","text":"...","after_step_id":null}]}}
+
+            Patch operations for recipe creation (blank canvas — always null for after_id and after_step_id):
+            {"type":"set_title","title":"<recipe name>"}
+            {"type":"add_ingredient","text":"...","after_id":null}
+            {"type":"add_step","text":"...","after_step_id":null}
+            {"type":"add_note","text":"..."}
             """
         }
     }
@@ -670,6 +682,8 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             return .removeStep(id: try uuid(idStr))
         case .addNote(let text):
             return .addNote(text: text)
+        case .setTitle(let title):
+            return .setTitle(title)
         }
     }
 

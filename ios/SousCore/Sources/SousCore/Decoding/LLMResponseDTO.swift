@@ -38,6 +38,7 @@ enum LLMPatchOpDTO: Equatable, Sendable {
     case updateStep(id: String, text: String)
     case removeStep(id: String)
     case addNote(text: String)
+    case setTitle(title: String)
 }
 
 // MARK: - LLMSummaryDTO

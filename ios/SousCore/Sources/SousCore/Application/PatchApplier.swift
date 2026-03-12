@@ -15,6 +15,7 @@ public enum PatchApplier {
         }
 
         // Work on a mutable copy — atomic: either all succeed or we throw before returning
+        var newTitle = recipe.title
         var ingredients = recipe.ingredients
         var steps = recipe.steps
         var notes = recipe.notes
@@ -58,13 +59,16 @@ public enum PatchApplier {
 
             case .addNote(let text):
                 notes.append(text)
+
+            case .setTitle(let title):
+                newTitle = title
             }
         }
 
         return Recipe(
             id: recipe.id,
             version: recipe.version + 1,
-            title: recipe.title,
+            title: newTitle,
             ingredients: ingredients,
             steps: steps,
             notes: notes

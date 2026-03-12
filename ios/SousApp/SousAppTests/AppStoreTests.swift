@@ -592,6 +592,75 @@ final class AppStoreTests: XCTestCase {
         XCTAssertEqual(store.llmDebugStatus, "succeeded")
     }
 
+    // MARK: (m11-a) startNewSession transitions to blank state
+
+    func test_m11a_startNewSession_clearsToBlankState() async {
+        let mock = ControlledOrchestrator()
+        let store = AppStore(testOrchestrator: mock)
+
+        // Pre-condition: test mode starts with hasCanvas = true and seed data
+        XCTAssertTrue(store.hasCanvas, "Pre-condition: hasCanvas must be true in test mode")
+
+        store.startNewSession()
+
+        XCTAssertFalse(store.hasCanvas, "hasCanvas must be false after startNewSession")
+        XCTAssertTrue(store.chatTranscript.isEmpty, "Chat transcript must be empty after startNewSession")
+        if case .chatOpen = store.uiState {} else {
+            XCTFail("Expected chatOpen state after startNewSession, got \(store.uiState)")
+        }
+        XCTAssertNotEqual(store.uiState.recipe.id, AppStore.recipeId,
+                          "Blank recipe must have a new UUID, not the seed recipe ID")
+
+        // Cleanup: resume the controlled mock to avoid a leaked continuation
+        await mock.resume(with: noPatchesResult())
+    }
+
+    // MARK: (m11-b) LLM request in blank state uses hasCanvas = false
+
+    func test_m11b_blankState_LLMRequest_hasCanvasFalse() async {
+        let capturer = CapturingOrchestrator(result: noPatchesResult())
+        let store = AppStore(testOrchestrator: capturer)
+        store.startNewSession()
+
+        store.sendUserMessage("I want to cook something Italian")
+        await drainMain()
+
+        let requests = await capturer.requests
+        XCTAssertFalse(requests.isEmpty, "Expected at least one LLM call")
+        XCTAssertFalse(requests[0].hasCanvas,
+                       "LLM request in blank state must have hasCanvas == false")
+    }
+
+    // MARK: (m11-c) accepting first recipe from blank state sets hasCanvas = true
+
+    func test_m11c_acceptFirstRecipe_setsHasCanvas() async {
+        let mock = ControlledOrchestrator()
+        let store = AppStore(testOrchestrator: mock)
+        store.startNewSession()
+
+        XCTAssertFalse(store.hasCanvas, "Pre-condition: must be false after startNewSession")
+
+        let blankRecipe = store.uiState.recipe
+        let ps = PatchSet(
+            baseRecipeId: blankRecipe.id,
+            baseRecipeVersion: blankRecipe.version,
+            patches: [.setTitle("Pasta Carbonara"), .addNote(text: "created")]
+        )
+        store.send(.patchReceived(ps))
+        store.send(.validatePatch)
+        store.send(.acceptPatch)
+
+        XCTAssertTrue(store.hasCanvas,
+                      "hasCanvas must be true after accepting the first recipe")
+        XCTAssertFalse(store.uiState.isPatchProposed, "No pending patch after Accept")
+        XCTAssertFalse(store.uiState.isPatchReview, "No patch review after Accept")
+        if case .recipeOnly(let r) = store.uiState {
+            XCTAssertEqual(r.title, "Pasta Carbonara", "setTitle patch must be applied")
+        } else {
+            XCTFail("Expected recipeOnly after Accept, got \(store.uiState)")
+        }
+    }
+
     // MARK: (p) failure does not clear nextLLMContext — preserved for next call
 
     func test_failure_preservesNextLLMContext() async {

@@ -314,4 +314,34 @@ struct PatchApplierTests {
         #expect(updated.steps[2].text == "Check crust")
         #expect(updated.steps[3].id == SeedRecipes.stepDoneId)
     }
+
+    // MARK: - setTitle
+
+    @Test("setTitle updates recipe title and increments version")
+    func setTitleUpdatesTitle() throws {
+        let recipe = SeedRecipes.sample()
+        let patchSet = PatchSet(
+            baseRecipeId: recipe.id,
+            baseRecipeVersion: 1,
+            patches: [.setTitle("Garlic Pasta")]
+        )
+        let updated = try PatchApplier.apply(patchSet: patchSet, to: recipe)
+        #expect(updated.title == "Garlic Pasta")
+        #expect(updated.version == 2)
+        #expect(updated.id == recipe.id)
+    }
+
+    @Test("setTitle does not affect ingredients, steps, or notes")
+    func setTitleDoesNotAffectOtherFields() throws {
+        let recipe = SeedRecipes.sample()
+        let patchSet = PatchSet(
+            baseRecipeId: recipe.id,
+            baseRecipeVersion: 1,
+            patches: [.setTitle("New Name")]
+        )
+        let updated = try PatchApplier.apply(patchSet: patchSet, to: recipe)
+        #expect(updated.ingredients == recipe.ingredients)
+        #expect(updated.steps == recipe.steps)
+        #expect(updated.notes == recipe.notes)
+    }
 }

@@ -3,6 +3,10 @@ import SwiftUI
 
 struct ChatSheetView: View {
     @ObservedObject var store: AppStore
+    /// When true, the view fills the screen rather than appearing as a sheet.
+    /// The Close button is hidden; a Settings button appears instead.
+    var isFullscreen: Bool = false
+    var onOpenSettings: () -> Void = {}
     @StateObject private var photoSend = PhotoSendCoordinator()
     @State private var composerText = ""
     @State private var debugExpanded = false
@@ -47,9 +51,21 @@ struct ChatSheetView: View {
         VStack(spacing: 0) {
             // Top bar
             HStack {
-                Text("Chat").font(.headline)
+                if isFullscreen {
+                    Text("Sous").font(.headline)
+                } else {
+                    Text("Chat").font(.headline)
+                }
                 Spacer()
-                Button("Close") { store.send(.closeChat) }
+                if isFullscreen {
+                    Button { onOpenSettings() } label: {
+                        Image(systemName: "gearshape")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    Button("Close") { store.send(.closeChat) }
+                }
             }
             .padding(.horizontal)
             .padding(.top, 16)

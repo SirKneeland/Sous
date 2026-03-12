@@ -116,6 +116,9 @@ public enum PatchValidator {
 
             case .addNote:
                 break
+
+            case .setTitle:
+                break
             }
         }
 

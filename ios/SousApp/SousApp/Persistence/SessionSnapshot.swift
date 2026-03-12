@@ -11,9 +11,11 @@ import SousCore
 /// - `nextLLMContext` preserves the last accept/reject decision so the model
 ///   receives it on the very next call after relaunch.
 struct SessionSnapshot: Codable, Sendable {
-    static let currentSchemaVersion = 1
+    static let currentSchemaVersion = 2
 
     let schemaVersion: Int
+    /// Whether a recipe canvas exists in the session (false = blank/exploration state).
+    let hasCanvas: Bool
     let recipe: Recipe
     let pendingPatchSet: PatchSet?
     let chatMessages: [ChatMessage]

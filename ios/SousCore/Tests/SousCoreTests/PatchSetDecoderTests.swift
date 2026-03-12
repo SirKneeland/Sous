@@ -366,4 +366,18 @@ struct PatchSetDecoderTests {
         #expect(text == "Stir well")
         #expect(afterStepId == nil, "JSON null after_step_id must decode as nil")
     }
+
+    @Test("set_title op decodes title correctly")
+    func setTitle_decodesTitle() {
+        let json = """
+        {"assistant_message":"Here's your recipe","patchSet":{"patchSetId":"ps-1","baseRecipeId":"r-1","baseRecipeVersion":1,"patches":[{"type":"set_title","title":"Pasta Carbonara"}]}}
+        """
+        let result = decoder.decode(json)
+        guard let dto = expectSuccess(result, extractionUsed: false) else { return }
+        guard case .setTitle(let title) = dto.patchSet?.patches[0] else {
+            Issue.record("Expected setTitle patch op")
+            return
+        }
+        #expect(title == "Pasta Carbonara")
+    }
 }

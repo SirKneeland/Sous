@@ -32,6 +32,8 @@ final class AppStore: ObservableObject {
     @Published var isThinking: Bool = false
     /// The debug bundle from the most recent LLM run. Updated on every result path.
     @Published var lastDebugBundle: LLMDebugBundle? = nil
+    /// True when a recipe canvas exists (user has at least one recipe). False in blank/exploration state.
+    @Published var hasCanvas: Bool
 
     /// Toggle via setUseLiveLLM(_:) so cancellation side-effects are applied correctly.
     private(set) var useLiveLLM = true
@@ -94,24 +96,31 @@ final class AppStore: ObservableObject {
         self.sessionFileURL = sessionFileURL
         isPersistenceEnabled = (testOrchestrator == nil)
 
-        // Attempt silent session restore; fall back to seed data on first launch
-        // or if the saved file is absent, corrupt, or from a different schema version.
         if testOrchestrator == nil,
            let snapshot = SessionPersistence.load(from: sessionFileURL),
            snapshot.schemaVersion == SessionSnapshot.currentSchemaVersion {
-            if let patch = snapshot.pendingPatchSet {
-                uiState = .patchProposed(
-                    recipe: snapshot.recipe,
-                    patchSet: patch,
-                    validation: nil,
-                    hidden: HiddenContext()
-                )
-            } else {
-                uiState = .recipeOnly(recipe: snapshot.recipe)
-            }
+            // Restore saved session
+            hasCanvas = snapshot.hasCanvas
             chatTranscript = snapshot.chatMessages
             nextLLMContext = snapshot.nextLLMContext
-        } else {
+            if snapshot.hasCanvas {
+                if let patch = snapshot.pendingPatchSet {
+                    uiState = .patchProposed(
+                        recipe: snapshot.recipe,
+                        patchSet: patch,
+                        validation: nil,
+                        hidden: HiddenContext()
+                    )
+                } else {
+                    uiState = .recipeOnly(recipe: snapshot.recipe)
+                }
+            } else {
+                // Restore blank/exploration state — preserve transcript for ongoing exploration
+                uiState = .chatOpen(recipe: snapshot.recipe, draftUserText: "", hidden: HiddenContext())
+            }
+        } else if testOrchestrator != nil {
+            // Test mode: predictable seed data so existing tests remain stable
+            hasCanvas = true
             let recipe = Recipe(
                 id: Self.recipeId,
                 version: 1,
@@ -134,11 +143,39 @@ final class AppStore: ObservableObject {
                 ChatMessage(role: .assistant, text: "Hi! I'm looking at your Simple Bread recipe. What would you like to change?"),
                 ChatMessage(role: .assistant, text: "Tip: use the Debug panel to simulate a patch if you want to test the review flow."),
             ]
+        } else {
+            // First launch (no valid session): blank/exploration state
+            hasCanvas = false
+            uiState = .chatOpen(
+                recipe: Recipe(id: UUID(), version: 1, title: "New Recipe"),
+                draftUserText: "",
+                hidden: HiddenContext()
+            )
+            chatTranscript = []
         }
     }
 
     deinit {
         llmTask?.cancel()
+    }
+
+    // MARK: - New Session
+
+    /// Clears the current session and returns to the blank starting state.
+    /// Called when the user taps "New Recipe".
+    func startNewSession() {
+        cancelLiveLLM()
+        hasCanvas = false
+        uiState = .chatOpen(
+            recipe: Recipe(id: UUID(), version: 1, title: "New Recipe"),
+            draftUserText: "",
+            hidden: HiddenContext()
+        )
+        chatTranscript = []
+        nextLLMContext = nil
+        if isPersistenceEnabled {
+            SessionPersistence.clear(at: sessionFileURL)
+        }
     }
 
     // MARK: - Live LLM toggle
@@ -199,7 +236,7 @@ final class AppStore: ObservableObject {
         let request = LLMRequest(
             recipeId: recipe.id.uuidString,
             recipeVersion: recipe.version,
-            hasCanvas: true,
+            hasCanvas: hasCanvas,
             userMessage: LLMContextComposer.composeUserMessage(userText: userText, hidden: hidden),
             recipeSnapshotForPrompt: recipe,
             // TODO: wire real user prefs (Prompt 8)
@@ -310,7 +347,7 @@ final class AppStore: ObservableObject {
         let base = LLMRequest(
             recipeId: recipe.id.uuidString,
             recipeVersion: recipe.version,
-            hasCanvas: true,
+            hasCanvas: hasCanvas,
             userMessage: LLMContextComposer.composeUserMessage(
                 userText: multimodalReq.base.userMessage,
                 hidden: hidden
@@ -399,6 +436,10 @@ final class AppStore: ObservableObject {
     func send(_ event: UIEvent) {
         let prev = uiState
         uiState = UIStateMachine.reduce(uiState, event)
+        // When the first recipe is accepted from blank state, reveal the canvas.
+        if case .acceptPatch = event, !hasCanvas, case .recipeOnly = uiState {
+            hasCanvas = true
+        }
         // Record patch decision only after the transition succeeds.
         switch event {
         case .acceptPatch:
@@ -460,6 +501,7 @@ final class AppStore: ObservableObject {
         )
         return SessionSnapshot(
             schemaVersion: SessionSnapshot.currentSchemaVersion,
+            hasCanvas: hasCanvas,
             recipe: uiState.recipe,
             pendingPatchSet: pendingPatch,
             chatMessages: messages,

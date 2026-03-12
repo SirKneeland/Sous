@@ -34,7 +34,7 @@ extension PatchSetStatus: Codable {
 
 extension Patch: Codable {
     private enum CodingKeys: String, CodingKey {
-        case type, text, id, afterId, afterStepId
+        case type, text, id, afterId, afterStepId, title
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -65,6 +65,9 @@ extension Patch: Codable {
         case .addNote(let text):
             try c.encode("addNote", forKey: .type)
             try c.encode(text, forKey: .text)
+        case .setTitle(let title):
+            try c.encode("setTitle", forKey: .type)
+            try c.encode(title, forKey: .title)
         }
     }
 
@@ -98,6 +101,8 @@ extension Patch: Codable {
             self = .removeStep(id: try c.decode(UUID.self, forKey: .id))
         case "addNote":
             self = .addNote(text: try c.decode(String.self, forKey: .text))
+        case "setTitle":
+            self = .setTitle(try c.decode(String.self, forKey: .title))
         default:
             throw DecodingError.dataCorruptedError(
                 forKey: .type, in: c,

@@ -41,7 +41,7 @@ final class SessionPersistenceTests: XCTestCase {
         )
     }
 
-    private func makeSnapshot(withPatch: Bool = false) -> SessionSnapshot {
+    private func makeSnapshot(withPatch: Bool = false, hasCanvas: Bool = true) -> SessionSnapshot {
         let recipe = makeRecipe()
         let patch: PatchSet? = withPatch ? PatchSet(
             baseRecipeId: recipe.id,
@@ -50,6 +50,7 @@ final class SessionPersistenceTests: XCTestCase {
         ) : nil
         return SessionSnapshot(
             schemaVersion: SessionSnapshot.currentSchemaVersion,
+            hasCanvas: hasCanvas,
             recipe: recipe,
             pendingPatchSet: patch,
             chatMessages: [
@@ -113,6 +114,7 @@ final class SessionPersistenceTests: XCTestCase {
         ))
         let snapshot = SessionSnapshot(
             schemaVersion: SessionSnapshot.currentSchemaVersion,
+            hasCanvas: true,
             recipe: makeRecipe(),
             pendingPatchSet: nil,
             chatMessages: [],
@@ -148,6 +150,7 @@ final class SessionPersistenceTests: XCTestCase {
         recipe2.version = 999
         let snapshot2 = SessionSnapshot(
             schemaVersion: SessionSnapshot.currentSchemaVersion,
+            hasCanvas: true,
             recipe: recipe2,
             pendingPatchSet: nil,
             chatMessages: [],
@@ -162,14 +165,19 @@ final class SessionPersistenceTests: XCTestCase {
 
     // MARK: - AppStore restore integration
 
-    func test_appStore_usesSeedData_whenNoSnapshot() async {
-        // Point AppStore at a nonexistent temp URL so it never finds a snapshot,
-        // regardless of any real session file in the Documents directory.
+    func test_appStore_startsBlank_whenNoSnapshot() async {
+        // Point AppStore at a nonexistent temp URL so it never finds a snapshot.
+        // M11: first launch should produce blank/exploration state, not seed data.
         let noFile = FileManager.default.temporaryDirectory
             .appendingPathComponent("sous_nosnapshot_\(UUID().uuidString).json")
         let store = AppStore(sessionFileURL: noFile)
-        XCTAssertEqual(store.uiState.recipe.title, "Simple Bread",
-                       "AppStore must use seed recipe when no snapshot is on disk")
+        XCTAssertFalse(store.hasCanvas,
+                       "AppStore must start in blank state when no snapshot is on disk")
+        if case .chatOpen = store.uiState {} else {
+            XCTFail("Expected chatOpen (exploration) state on first launch, got \(store.uiState)")
+        }
+        XCTAssertTrue(store.chatTranscript.isEmpty,
+                      "Chat transcript must be empty on first launch")
     }
 
     func test_appStore_persistsRecipeOnAccept() async {

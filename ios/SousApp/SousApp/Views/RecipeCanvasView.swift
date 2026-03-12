@@ -6,6 +6,7 @@ struct RecipeCanvasView: View {
     let onOpenChat: () -> Void
     var onMarkStepDone: (UUID) -> Void = { _ in }
     var onOpenSettings: () -> Void = {}
+    var onStartNew: () -> Void = {}
     var llmDebugStatus: String? = nil
 
     var body: some View {
@@ -19,6 +20,11 @@ struct RecipeCanvasView: View {
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
+                    Button { onStartNew() } label: {
+                        Image(systemName: "plus")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                    }
                     Button { onOpenSettings() } label: {
                         Image(systemName: "gearshape")
                             .font(.title3)

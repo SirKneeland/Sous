@@ -115,4 +115,9 @@ final class PatchCodableTests: XCTestCase {
         XCTAssertNil(decoded.summary)
         XCTAssertNil(decoded.baseRecipeSnapshot)
     }
+
+    func test_setTitle() throws {
+        let patch = Patch.setTitle("Spaghetti Carbonara")
+        XCTAssertEqual(try roundTrip(patch), patch)
+    }
 }

@@ -225,6 +225,9 @@ struct PatchSetDecoder: Sendable {
             case "add_note":
                 guard let text = obj["text"] as? String else { return .schemaInvalid(.patchOpMissingField) }
                 patches.append(.addNote(text: text))
+            case "set_title":
+                guard let title = obj["title"] as? String else { return .schemaInvalid(.patchOpMissingField) }
+                patches.append(.setTitle(title: title))
             default:
                 return .schemaInvalid(.patchOpUnknownType)
             }
