@@ -11,11 +11,23 @@ import SousCore
 /// temporary path and avoid touching the real session file.
 enum SessionPersistence {
 
-    static var defaultFileURL: URL {
-        FileManager.default
-            .urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("sous_session.json")
+    /// The Documents directory used as the default sessions location.
+    static var sessionsDirectory: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
     }
+
+    /// Legacy single-session file (M10/M11). Used only for migration.
+    static var defaultFileURL: URL {
+        sessionsDirectory.appendingPathComponent("sous_session.json")
+    }
+
+    /// Returns the canonical file URL for a recipe's per-recipe session file.
+    static func fileURL(for recipeId: UUID, in directory: URL? = nil) -> URL {
+        (directory ?? sessionsDirectory)
+            .appendingPathComponent("sous_session_\(recipeId.uuidString).json")
+    }
+
+    // MARK: - Single-file API (used by existing tests and migration)
 
     /// Encodes `snapshot` and writes it atomically to `url`.
     /// Throws on encoding or file-system errors.
@@ -37,9 +49,39 @@ enum SessionPersistence {
         return try? decoder.decode(SessionSnapshot.self, from: data)
     }
 
-    /// Removes the session file.  Used in tests and when starting fresh.
+    /// Removes a session file.
     static func clear(at url: URL? = nil) {
         let target = url ?? defaultFileURL
         try? FileManager.default.removeItem(at: target)
+    }
+
+    // MARK: - Multi-session API
+
+    /// Lists all valid recipe sessions in `directory`, sorted by `savedAt` descending.
+    /// Only returns sessions with a committed recipe canvas and the current schema version.
+    static func listAll(in directory: URL? = nil) -> [SessionSnapshot] {
+        let dir = directory ?? sessionsDirectory
+        guard let files = try? FileManager.default.contentsOfDirectory(
+            at: dir, includingPropertiesForKeys: nil
+        ) else { return [] }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return files
+            .filter {
+                $0.lastPathComponent.hasPrefix("sous_session_") && $0.pathExtension == "json"
+            }
+            .compactMap { url -> SessionSnapshot? in
+                guard let data = try? Data(contentsOf: url) else { return nil }
+                return try? decoder.decode(SessionSnapshot.self, from: data)
+            }
+            .filter {
+                $0.schemaVersion == SessionSnapshot.currentSchemaVersion
+            }
+            .sorted { $0.savedAt > $1.savedAt }
+    }
+
+    /// Deletes the per-recipe session file for `recipeId`.
+    static func delete(recipeId: UUID, in directory: URL? = nil) {
+        try? FileManager.default.removeItem(at: fileURL(for: recipeId, in: directory))
     }
 }

@@ -165,12 +165,14 @@ final class SessionPersistenceTests: XCTestCase {
 
     // MARK: - AppStore restore integration
 
-    func test_appStore_startsBlank_whenNoSnapshot() async {
-        // Point AppStore at a nonexistent temp URL so it never finds a snapshot.
-        // M11: first launch should produce blank/exploration state, not seed data.
-        let noFile = FileManager.default.temporaryDirectory
-            .appendingPathComponent("sous_nosnapshot_\(UUID().uuidString).json")
-        let store = AppStore(sessionFileURL: noFile)
+    func test_appStore_startsBlank_whenNoSnapshot() async throws {
+        // Point AppStore at an empty temp directory so it never finds a snapshot.
+        // M12: sessions are per-recipe files; an empty directory means first launch.
+        let emptyDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sous_empty_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: emptyDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: emptyDir) }
+        let store = AppStore(sessionsDirectory: emptyDir)
         XCTAssertFalse(store.hasCanvas,
                        "AppStore must start in blank state when no snapshot is on disk")
         if case .chatOpen = store.uiState {} else {

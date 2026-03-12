@@ -7,6 +7,7 @@ struct ChatSheetView: View {
     /// The Close button is hidden; a Settings button appears instead.
     var isFullscreen: Bool = false
     var onOpenSettings: () -> Void = {}
+    var onOpenRecents: () -> Void = {}
     @StateObject private var photoSend = PhotoSendCoordinator()
     @State private var composerText = ""
     @State private var debugExpanded = false
@@ -58,10 +59,17 @@ struct ChatSheetView: View {
                 }
                 Spacer()
                 if isFullscreen {
-                    Button { onOpenSettings() } label: {
-                        Image(systemName: "gearshape")
-                            .font(.title3)
-                            .foregroundStyle(.secondary)
+                    HStack(spacing: 16) {
+                        Button { onOpenRecents() } label: {
+                            Image(systemName: "clock")
+                                .font(.title3)
+                                .foregroundStyle(.secondary)
+                        }
+                        Button { onOpenSettings() } label: {
+                            Image(systemName: "gearshape")
+                                .font(.title3)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 } else {
                     Button("Close") { store.send(.closeChat) }

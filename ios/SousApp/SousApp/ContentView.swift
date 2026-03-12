@@ -11,14 +11,20 @@ struct ContentView: View {
                 PatchReviewView(recipe: recipe, patchSet: patchSet, validation: validation, store: store)
             } else if !store.hasCanvas {
                 // Blank/exploration state: full-screen chat with no recipe canvas behind it.
-                ChatSheetView(store: store, isFullscreen: true, onOpenSettings: { showSettings = true })
+                ChatSheetView(
+                    store: store,
+                    isFullscreen: true,
+                    onOpenSettings: { showSettings = true },
+                    onOpenRecents: { store.showRecentRecipes = true }
+                )
             } else {
                 RecipeCanvasView(
                     recipe: store.uiState.recipe,
                     onOpenChat: { store.send(.openChat) },
                     onMarkStepDone: { id in store.send(.markStepDone(stepId: id)) },
                     onOpenSettings: { showSettings = true },
-                    onStartNew: { store.startNewSession() },
+                    onStartNew: { store.requestNewSession() },
+                    onOpenRecents: { store.showRecentRecipes = true },
                     llmDebugStatus: store.llmDebugStatus
                 )
 
@@ -39,6 +45,9 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showSettings) {
             SettingsView(keyProvider: store.keyProvider)
+        }
+        .sheet(isPresented: $store.showRecentRecipes) {
+            RecentRecipesView(store: store, onDismiss: { store.showRecentRecipes = false })
         }
     }
 }

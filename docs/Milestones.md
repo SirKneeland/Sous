@@ -236,6 +236,7 @@ Core capabilities:
 - Tap to resume a previous recipe session
 - New recipe replaces current session or prompts if one is in progress
 - Persistent storage of multiple recipe sessions
+- Each saved recipe is a self-contained session with its own recipe canvas and chat history. Resuming a recipe restores both.
 
 Explicit non-goals:
 - Search or filtering

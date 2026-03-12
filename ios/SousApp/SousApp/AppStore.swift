@@ -42,9 +42,11 @@ final class AppStore: ObservableObject {
     /// are isolated from the real session file and from each other.
     private let isPersistenceEnabled: Bool
 
-    /// Override in tests to avoid touching the real Documents directory.
-    /// Nil means use SessionPersistence.defaultFileURL.
-    private let sessionFileURL: URL?
+    /// Override in tests to point AppStore at a temp directory.
+    /// Nil means use SessionPersistence.sessionsDirectory (Documents).
+    private let sessionsDirectory: URL?
+
+    @Published var showRecentRecipes: Bool = false
 
     private let maxMessages = 200
     private let liveLLMModel = "gpt-4o-mini"
@@ -89,36 +91,61 @@ final class AppStore: ObservableObject {
     static let stepDoneId        = UUID(uuidString: "00000000-0000-0000-0001-000000000003")!
 
     init(testOrchestrator: (any LLMOrchestrator)? = nil,
-         sessionFileURL: URL? = nil,
+         sessionsDirectory: URL? = nil,
          keyProvider: any OpenAIKeyProviding = KeychainOpenAIKeyProvider()) {
         self.testOrchestrator = testOrchestrator
         self.keyProvider = keyProvider
-        self.sessionFileURL = sessionFileURL
+        self.sessionsDirectory = sessionsDirectory
         isPersistenceEnabled = (testOrchestrator == nil)
 
-        if testOrchestrator == nil,
-           let snapshot = SessionPersistence.load(from: sessionFileURL),
-           snapshot.schemaVersion == SessionSnapshot.currentSchemaVersion {
-            // Restore saved session
-            hasCanvas = snapshot.hasCanvas
-            chatTranscript = snapshot.chatMessages
-            nextLLMContext = snapshot.nextLLMContext
-            if snapshot.hasCanvas {
-                if let patch = snapshot.pendingPatchSet {
-                    uiState = .patchProposed(
-                        recipe: snapshot.recipe,
-                        patchSet: patch,
-                        validation: nil,
-                        hidden: HiddenContext()
-                    )
+        if testOrchestrator == nil {
+            // Try loading the most recent per-recipe session.
+            var snapshot = SessionPersistence.listAll(in: sessionsDirectory).first
+
+            // Migration from M10/M11: if no per-recipe sessions exist, check the legacy file.
+            if snapshot == nil {
+                let legacyURL = (sessionsDirectory ?? SessionPersistence.sessionsDirectory)
+                    .appendingPathComponent("sous_session.json")
+                if let legacy = SessionPersistence.load(from: legacyURL),
+                   legacy.schemaVersion == SessionSnapshot.currentSchemaVersion {
+                    let newURL = SessionPersistence.fileURL(for: legacy.recipe.id, in: sessionsDirectory)
+                    try? SessionPersistence.save(legacy, to: newURL)
+                    SessionPersistence.clear(at: legacyURL)
+                    snapshot = legacy
+                }
+            }
+
+            if let snapshot {
+                // Restore saved session
+                hasCanvas = snapshot.hasCanvas
+                chatTranscript = snapshot.chatMessages
+                nextLLMContext = snapshot.nextLLMContext
+                if snapshot.hasCanvas {
+                    if let patch = snapshot.pendingPatchSet {
+                        uiState = .patchProposed(
+                            recipe: snapshot.recipe,
+                            patchSet: patch,
+                            validation: nil,
+                            hidden: HiddenContext()
+                        )
+                    } else {
+                        uiState = .recipeOnly(recipe: snapshot.recipe)
+                    }
                 } else {
-                    uiState = .recipeOnly(recipe: snapshot.recipe)
+                    // Restore blank/exploration state — preserve transcript for ongoing exploration
+                    uiState = .chatOpen(recipe: snapshot.recipe, draftUserText: "", hidden: HiddenContext())
                 }
             } else {
-                // Restore blank/exploration state — preserve transcript for ongoing exploration
-                uiState = .chatOpen(recipe: snapshot.recipe, draftUserText: "", hidden: HiddenContext())
+                // First launch (no valid session): blank/exploration state
+                hasCanvas = false
+                uiState = .chatOpen(
+                    recipe: Recipe(id: UUID(), version: 1, title: "New Recipe"),
+                    draftUserText: "",
+                    hidden: HiddenContext()
+                )
+                chatTranscript = []
             }
-        } else if testOrchestrator != nil {
+        } else {
             // Test mode: predictable seed data so existing tests remain stable
             hasCanvas = true
             let recipe = Recipe(
@@ -143,15 +170,6 @@ final class AppStore: ObservableObject {
                 ChatMessage(role: .assistant, text: "Hi! I'm looking at your Simple Bread recipe. What would you like to change?"),
                 ChatMessage(role: .assistant, text: "Tip: use the Debug panel to simulate a patch if you want to test the review flow."),
             ]
-        } else {
-            // First launch (no valid session): blank/exploration state
-            hasCanvas = false
-            uiState = .chatOpen(
-                recipe: Recipe(id: UUID(), version: 1, title: "New Recipe"),
-                draftUserText: "",
-                hidden: HiddenContext()
-            )
-            chatTranscript = []
         }
     }
 
@@ -162,7 +180,7 @@ final class AppStore: ObservableObject {
     // MARK: - New Session
 
     /// Clears the current session and returns to the blank starting state.
-    /// Called when the user taps "New Recipe".
+    /// The previous recipe stays on disk so it appears in Recent Recipes.
     func startNewSession() {
         cancelLiveLLM()
         hasCanvas = false
@@ -173,8 +191,51 @@ final class AppStore: ObservableObject {
         )
         chatTranscript = []
         nextLLMContext = nil
-        if isPersistenceEnabled {
-            SessionPersistence.clear(at: sessionFileURL)
+    }
+
+    /// Starts a new session immediately (previous session stays on disk in Recent Recipes).
+    func requestNewSession() {
+        startNewSession()
+    }
+
+    // MARK: - Recent Recipes
+
+    /// Returns all saved recipe sessions, most recent first (current recipe is always first slot).
+    func loadRecentSessions() -> [SessionSnapshot] {
+        guard isPersistenceEnabled else { return [] }
+        return Array(SessionPersistence.listAll(in: sessionsDirectory).prefix(20))
+    }
+
+    /// Deletes the on-disk session for `snapshot`.
+    func deleteRecentSession(_ snapshot: SessionSnapshot) {
+        guard isPersistenceEnabled else { return }
+        SessionPersistence.delete(recipeId: snapshot.recipe.id, in: sessionsDirectory)
+    }
+
+    /// Resumes a previous session immediately (switch is non-destructive — current session stays on disk).
+    func requestResumeSession(_ snapshot: SessionSnapshot) {
+        resumeSession(snapshot)
+    }
+
+    /// Loads `snapshot` into the store as the active session.
+    func resumeSession(_ snapshot: SessionSnapshot) {
+        cancelLiveLLM()
+        hasCanvas = snapshot.hasCanvas
+        chatTranscript = snapshot.chatMessages
+        nextLLMContext = snapshot.nextLLMContext
+        if snapshot.hasCanvas {
+            if let patch = snapshot.pendingPatchSet {
+                uiState = .patchProposed(
+                    recipe: snapshot.recipe,
+                    patchSet: patch,
+                    validation: nil,
+                    hidden: HiddenContext()
+                )
+            } else {
+                uiState = .recipeOnly(recipe: snapshot.recipe)
+            }
+        } else {
+            uiState = .chatOpen(recipe: snapshot.recipe, draftUserText: "", hidden: HiddenContext())
         }
     }
 
@@ -479,7 +540,8 @@ final class AppStore: ObservableObject {
     /// `Data.write(options: .atomic)` handles crash-safety via temp-file + rename.
     private func saveSession() {
         guard isPersistenceEnabled else { return }
-        try? SessionPersistence.save(makeSnapshot(), to: sessionFileURL)
+        let url = SessionPersistence.fileURL(for: uiState.recipe.id, in: sessionsDirectory)
+        try? SessionPersistence.save(makeSnapshot(), to: url)
     }
 
     private func makeSnapshot() -> SessionSnapshot {

@@ -7,6 +7,7 @@ struct RecipeCanvasView: View {
     var onMarkStepDone: (UUID) -> Void = { _ in }
     var onOpenSettings: () -> Void = {}
     var onStartNew: () -> Void = {}
+    var onOpenRecents: () -> Void = {}
     var llmDebugStatus: String? = nil
 
     var body: some View {
@@ -22,6 +23,11 @@ struct RecipeCanvasView: View {
                     Spacer()
                     Button { onStartNew() } label: {
                         Image(systemName: "plus")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                    }
+                    Button { onOpenRecents() } label: {
+                        Image(systemName: "clock")
                             .font(.title3)
                             .foregroundStyle(.secondary)
                     }
