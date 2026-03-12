@@ -345,14 +345,23 @@ private struct ChatBubbleView: View {
     var body: some View {
         HStack {
             if isUser { Spacer(minLength: 48) }
-            Text(message.text)
+            messageContent
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(isUser ? Color.accentColor : Color(.secondarySystemBackground))
-                .foregroundStyle(isUser ? Color.white : Color.primary)
                 .clipShape(RoundedRectangle(cornerRadius: 16))
-                .font(.body)
             if !isUser { Spacer(minLength: 48) }
+        }
+    }
+
+    @ViewBuilder
+    private var messageContent: some View {
+        if isUser {
+            Text(message.text)
+                .font(.body)
+                .foregroundStyle(Color.white)
+        } else {
+            MarkdownTextView(text: message.text, textColor: .primary)
         }
     }
 }

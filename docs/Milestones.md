@@ -12,15 +12,14 @@ Statuses:
 
 ## Project State
 
-**Current milestone:** Milestone 12 — Recent Recipes
+**Current milestone:** Milestone 13 — Chat Rendering
 
 **Recently completed:**
+- Milestone 12 — Recent Recipes
 - Milestone 11 — New Recipe Flow
-- Milestone 10 — Native iOS Migration: Local Session Persistence + Crash-Proofing
-- Milestone 9 — Native iOS Migration: Photo Capture + Multimodal Flow
 
 **Next milestone:**
-- Milestone 13 — Native iOS Migration: TestFlight Alpha + Instrumentation
+- Milestone 14 — Tone and Model Behavior
 
 This section exists to make the active project phase immediately visible to humans and AI agents without scanning the entire roadmap.
 
@@ -227,16 +226,16 @@ Explicit non-goals:
 ---
 
 ## Milestone 12 — Recent Recipes
-**Status:** CURRENT
+**Status:** DONE
 
 **Goal:** Let the user return to recipes they've worked on before.
 
 Core capabilities:
 - Recent recipes list (last N recipes, most recent first)
 - Tap to resume a previous recipe session
+- Each saved recipe is a self-contained session with its own recipe canvas and chat history. Resuming a recipe restores both.
 - New recipe replaces current session or prompts if one is in progress
 - Persistent storage of multiple recipe sessions
-- Each saved recipe is a self-contained session with its own recipe canvas and chat history. Resuming a recipe restores both.
 
 Explicit non-goals:
 - Search or filtering
@@ -246,7 +245,128 @@ Explicit non-goals:
 
 ---
 
-## Milestone 13 — Native iOS Migration: TestFlight Alpha + Instrumentation
+## Milestone 13 — Chat Rendering
+**Status:** CURRENT
+
+**Goal:** Make chat feel like a real messaging interface — formatted, readable, and expressive.
+
+Core capabilities:
+- Markdown rendered in chat bubbles (bold, italic, bullet lists, numbered lists, headers)
+- Long messages remain readable and scroll correctly
+- No visual regressions in existing chat UI
+
+Explicit non-goals:
+- Image display in chat (deferred to a future paid feature)
+- Custom fonts or branded typography (belongs in the design milestone)
+
+
+---
+
+## Milestone 14 — Tone and Model Behavior
+**Status:** PLANNED
+
+**Goal:** Make the AI feel like a genuinely helpful, warm, and opinionated cooking companion — not a corporate chatbot reading from a script.
+
+Core capabilities:
+- System prompt rewritten for natural, conversational tone
+- AI offers opinions and makes recommendations rather than presenting every option with equal weight
+- Exploration phase feels like talking to a knowledgeable friend, not selecting from a menu
+- Clarifying questions feel natural, not robotic
+- AI handles casual, incomplete, or messy user input gracefully without demanding rephrasing
+- Consistent personality across creation, editing, and cooking modes
+
+Explicit non-goals:
+- User-configurable tone settings (belongs in a later milestone)
+- Training or fine-tuning a custom model
+
+
+---
+
+## Milestone 15 — Persistent Preferences
+**Status:** PLANNED
+
+**Goal:** Let users tell Sous about themselves once, so they never have to repeat it.
+
+Core capabilities:
+- Preferences screen in Settings with the following fields:
+  - Ingredients or foods to always avoid (hard constraints)
+  - Default number of people to serve
+  - Kitchen tools and equipment available (e.g. cast iron, induction plate, air fryer, stand mixer)
+  - Free-form custom instructions (e.g. "always give me stove settings for both gas and induction")
+- Preferences applied silently to all new recipes
+- Preferences visible and editable at any time
+- Per-recipe overrides available via chat ("just for this one, fish is fine")
+- Preferences never retroactively modify completed recipe steps
+
+Explicit non-goals:
+- Inferred or learned preferences (always explicit and user-declared)
+- Preference sync across devices (belongs with accounts)
+
+
+---
+
+## Milestone 16 — Memories
+**Status:** PLANNED
+
+**Goal:** Let Sous remember things the user expresses in conversation, so preferences and context accumulate naturally over time.
+
+Core capabilities:
+- When the AI detects a memorable preference or fact in chat (e.g. "I hate cilantro", "I'm cooking for my kids tonight"), it proposes adding a memory
+- A non-disruptive toast notification appears at the top of the chat showing what is being remembered
+- User can immediately dismiss or edit the proposed memory before it is saved
+- Memories are visible and editable in a dedicated section in Settings
+- User can delete individual memories at any time
+- Memories are included as context in future AI requests
+
+Explicit non-goals:
+- Automatic memory application without user visibility
+- Memory sync across devices (belongs with accounts)
+- Memories that override hard preferences set in Milestone 15
+
+
+---
+
+## Milestone 17 — Design
+**Status:** PLANNED
+
+**Goal:** Make Sous look and feel like a product someone would want to use, not a functional prototype.
+
+Core capabilities:
+- Cohesive visual identity applied across all screens
+- Typography, color, spacing, and iconography treated as a system
+- Recipe canvas feels premium and readable
+- Chat feels warm and conversational
+- Onboarding and blank state have personality
+- Dark mode support
+
+Explicit non-goals:
+- Animations and transitions polish (can follow in a separate pass)
+- Marketing or App Store assets
+
+
+---
+
+## Milestone 18 — Post-Cook Ratings
+**Status:** PLANNED
+
+**Goal:** Let users reflect on how a cook went, creating a feedback loop that makes Sous more useful over time.
+
+Core capabilities:
+- After completing a recipe (all steps marked done), a rating prompt appears
+- Two separate ratings: recipe quality and the user's own execution
+- Optional free-text note
+- Ratings stored with the recipe session
+- Ratings visible when browsing recent recipes
+
+Explicit non-goals:
+- Using ratings to automatically alter future recipe generation
+- Sharing ratings publicly
+- Aggregate or community ratings
+
+
+---
+
+## Milestone 19 — TestFlight Alpha + Instrumentation
 **Status:** PLANNED
 
 **Goal:** Ship a usable alpha to real users with enough observability to fix issues quickly.
@@ -256,7 +376,7 @@ Core capabilities:
 - Basic instrumentation
 - Error logging
 - Performance signals
-- In‑app feedback
+- In-app feedback
 
 Explicit non-goals:
 - Monetization
@@ -265,58 +385,25 @@ Explicit non-goals:
 
 ---
 
-## Milestone 14 — Accounts + Cooking Defaults
+## Milestone 20 — Accounts + Sync
 **Status:** PLANNED
 
-**Goal:** Establish durable user accounts and persistent cooking defaults.
+**Goal:** Establish durable user accounts so preferences, memories, and recipes persist across devices and reinstalls.
 
 Core capabilities:
 - User accounts
-- Persistent cooking defaults
-- First-run setup flow
-- Editable defaults
-- Explicit override semantics
+- Preferences and memories synced to account
+- Recipe history synced to account
+- First-run account setup flow
 
 Explicit non-goals:
-- Preference inference
-- Soft preferences
-- Skill tracking
+- Social features
+- Sharing recipes with other users
 
 
 ---
 
-## Milestone 15 — LLM Behavior Calibration (Style + Adaptation)
-**Status:** PLANNED
-
-**Goal:** Align AI responses with the user's communication style while preserving correctness and safety.
-
-Core capabilities:
-- Style preferences
-- Bounded style inference
-- Consistent tone
-- Improved intent sensitivity
-
-Explicit non-goals:
-- Training custom models
-- Uncontrolled behavioral learning
-
-
----
-
-## Milestone 16 — Camera Reliability + Photo UX
-**Status:** PLANNED
-
-**Goal:** Make photo-based assistance reliable and confidence-inspiring.
-
-Core capabilities:
-- Permission handling
-- Image resizing/compression
-- Smooth preview → send flow
-
-
----
-
-## Milestone 17 — Planning, Shopping, and Prep
+## Milestone 21 — Planning, Shopping, and Prep
 **Status:** FUTURE
 
 Potential capabilities:
@@ -328,7 +415,7 @@ Potential capabilities:
 
 ---
 
-## Milestone 18 — Voice & Hands-Free Cooking
+## Milestone 22 — Voice & Hands-Free Cooking
 **Status:** FUTURE
 
 Potential capabilities:
@@ -340,9 +427,10 @@ Potential capabilities:
 
 ---
 
-## Milestone 19 — Monetization
+## Milestone 23 — Monetization
 **Status:** FUTURE
 
 Notes:
 - Monetization intentionally deferred
-- Possible Pro features later
+- Possible Pro features: inline image display, generated images, voice-first cooking mode, higher-fidelity models, longer context and history, advanced coaching
+    

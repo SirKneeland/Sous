@@ -81,6 +81,7 @@
   - `Views/RecipeCanvasView.swift` — Recipe display (ingredients + steps)
   - `Views/ChatSheetView.swift` — Chat interface overlay
   - `Views/PatchReviewView.swift` — Patch diff + Accept/Reject
+  - `Views/MarkdownTextView.swift` — Markdown renderer for assistant chat bubbles; `MarkdownParser` (internal, testable) + `MarkdownTextView` SwiftUI view
   - `Acquisition/PhotoAcquisitionSheet.swift` — SwiftUI sheet for camera/library picker
   - `Acquisition/CameraPickerView.swift`, `PhotoLibraryPickerView.swift` — Native pickers
   - `Acquisition/ImageAcquisitionState.swift` — Enum: idle | loading | success(UIImage) | failure(Error)
@@ -114,28 +115,25 @@
 
 - **App target tests:** `SousAppTests`
   - Location: `ios/SousApp/SousAppTests/`
-  - Key files: AppStoreTests.swift, UIStateMachineTests.swift, OpenAIClientTests.swift, OpenAIKeyProviderTests.swift, PhotoSendStateTests.swift, PhotoSendCoordinatorTests.swift, ImageAcquisitionStateTests.swift, LLMDebugExportTests.swift, SessionPersistenceTests.swift
+  - Key files: AppStoreTests.swift, UIStateMachineTests.swift, OpenAIClientTests.swift, OpenAIKeyProviderTests.swift, PhotoSendStateTests.swift, PhotoSendCoordinatorTests.swift, ImageAcquisitionStateTests.swift, LLMDebugExportTests.swift, SessionPersistenceTests.swift, MarkdownParserTests.swift
   - Run with: `xcodebuild test -scheme SousApp -destination 'platform=iOS Simulator,name=iPhone 17'`
 
 - **UI tests:** `SousAppUITests` — Minimal coverage, launch tests only
 
 ---
 
-## Current Milestone State (Milestone 10)
+## Current Milestone State (Milestone 13)
 
-**Milestone 10 — Native iOS Migration: Local Session Persistence + Crash-Proofing (CURRENT)**
+**Milestone 13 — Chat Rendering (CURRENT)**
 
 What is built and wired up:
-- `SessionSnapshot` — Codable struct persisted to `Documents/sous_session.json`; captures recipe (incl. step done/todo status), pending AI patch, last 20 chat messages, and last patch accept/reject decision
-- `SessionPersistence` — Crash-safe write via `Data.write(options: .atomic)`; silent load on startup; clear for test isolation
-- All SousCore models now Codable: `Ingredient`, `Step`, `Recipe`, `PatchSet`, `StepStatus`, `Patch` (all 7 cases), `PatchSetStatus`, `PatchDecision`, `NextLLMContext`
-- `AppStore` restores state silently on init: if a valid snapshot is found, recipe + chat + nextLLMContext are loaded; if a pending patch was in flight it re-enters patchProposed state
-- Save triggers: after `patchReceived`, `acceptPatch`, `rejectPatch`; after every user/assistant chat message appended
-- Schema versioning: `schemaVersion` checked on load; mismatch falls back to seed recipe
-- `isPersistenceEnabled` flag in AppStore: automatically `false` when a test orchestrator is injected — all existing tests remain fully isolated from disk I/O
-- 29 new tests: 13 in `RecipeCodableTests`, 16 in `PatchCodableTests`, 11 in `SessionPersistenceTests`
+- `MarkdownTextView` — SwiftUI view that renders a subset of Markdown in assistant chat bubbles; handles headings (`#`, `##`, `###`), bullet lists (`-`, `*`), numbered lists (`1.`), and inline bold/italic (via `AttributedString(markdown:)`)
+- `MarkdownParser` — internal enum with static `parse(_:)` and `numberedListItem(_:)` methods; processes text line-by-line into `MarkdownBlock` values; fully unit-tested
+- `MarkdownBlock` — internal struct with `id: Int` (positional, stable for SwiftUI ForEach), `kind: Kind` (equatable enum), and `content: String`
+- `ChatBubbleView` updated: user messages render as plain `Text` (white on blue, unchanged); assistant messages use `MarkdownTextView` (markdown-aware, primary on gray)
+- 20 new tests in `MarkdownParserTests.swift` covering all block types, edge cases, and helper function
 
-What is next (Milestone 11 — TBD):
+What is next (Milestone 14 — Tone and Model Behavior):
 - See Milestones.md for upcoming work
 
 ---
