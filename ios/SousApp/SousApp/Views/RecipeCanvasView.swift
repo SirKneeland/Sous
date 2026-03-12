@@ -72,9 +72,22 @@ struct RecipeCanvasView: View {
                         Text("– \(note)")
                     }
                 }
-
-                Divider()
-
+            }
+            .padding()
+            .padding(.bottom, 72)
+        }
+        .safeAreaInset(edge: .bottom) {
+            VStack(spacing: 0) {
+#if DEBUG
+                if let status = llmDebugStatus {
+                    Text(status)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal)
+                        .padding(.top, 6)
+                }
+#endif
                 Button {
                     onOpenChat()
                 } label: {
@@ -82,21 +95,10 @@ struct RecipeCanvasView: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
-                .padding(.top, 8)
+                .padding(.horizontal)
+                .padding(.vertical, 12)
             }
-            .padding()
-        }
-        .safeAreaInset(edge: .bottom) {
-#if DEBUG
-            if let status = llmDebugStatus {
-                Text(status)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal)
-                    .padding(.bottom, 6)
-            }
-#endif
+            .background(.regularMaterial)
         }
     }
 }
