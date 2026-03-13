@@ -591,6 +591,7 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             3. Never propose changes to any step with status "done".
             4. Handle vague, incomplete, or casual input gracefully. Don't ask the user to rephrase — read the intent, make a reasonable interpretation, and act on it. Only ask a question when you genuinely cannot proceed without one specific piece of information, and make that question feel natural, not like a form.
             5. Emit patchSet when the user's message implies a recipe change — including when they are answering a clarifying question you previously asked. If intent is still genuinely unclear after all context, ask one short natural question and emit patchSet: null.
+            6. Equipment preferences in RECIPE CONTEXT are additive — assume standard home kitchen basics are always available. If no equipment is listed, assume a fully equipped standard home kitchen. Never restrict suggestions to only what's listed.
 
             Output shape — no changes:
             {"assistant_message":"...","patchSet":null}
@@ -621,6 +622,7 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             4. Do not generate a recipe until the user explicitly commits to a specific choice. Commit signals: "make that", "yes", "let's do it", "option 2", or selecting a number from a list you offered. If they say something ambiguous like "sure" or "ok", confirm which option they mean before generating.
             5. When the user commits: generate a full recipe using set_title, add_ingredient, and add_step patches. Use baseRecipeId and baseRecipeVersion from RECIPE CONTEXT. The canvas is blank — there are NO existing ingredients or steps. ALL add_ingredient patches MUST use "after_id": null. ALL add_step patches MUST use "after_step_id": null. Never put a UUID or any string in after_id or after_step_id — only null is valid here.
             6. When still exploring: emit patchSet: null.
+            7. Equipment preferences in RECIPE CONTEXT are additive — assume standard home kitchen basics are always available. If no equipment is listed, assume a fully equipped standard home kitchen. Never restrict suggestions to only what's listed.
 
             Output shape — exploring:
             {"assistant_message":"...","patchSet":null}
@@ -662,7 +664,7 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             lines.append("defaultServings: \(serving) people")
         }
         if !prefs.equipment.isEmpty {
-            lines.append("equipment: \(prefs.equipment.joined(separator: ", "))")
+            lines.append("equipment: \(prefs.equipment.joined(separator: ", ")) (additive context — assume standard home kitchen basics too; don't restrict suggestions to only what's listed)")
         }
         if !prefs.customInstructions.isEmpty {
             lines.append("customInstructions: \(prefs.customInstructions)")
