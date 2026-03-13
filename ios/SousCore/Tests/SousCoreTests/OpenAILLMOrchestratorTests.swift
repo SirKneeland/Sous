@@ -103,7 +103,7 @@ struct OpenAILLMOrchestratorTests {
     func validPatchSet_returnsValid() async {
         let (orch, mock) = orchestrator([.success(validJSON())])
         let result = await orch.run(request())
-        guard case .valid(let ps, _, _, _) = result else {
+        guard case .valid(let ps, _, _, _, _) = result else {
             Issue.record("Expected .valid, got \(result)"); return
         }
         #expect(ps.patches.count == 1)
@@ -114,7 +114,7 @@ struct OpenAILLMOrchestratorTests {
     func nullPatchSet_returnsNoPatches() async {
         let (orch, mock) = orchestrator([.success(nullPatchSetJSON())])
         let result = await orch.run(request())
-        guard case .noPatches(let msg, _, _) = result else {
+        guard case .noPatches(let msg, _, _, _) = result else {
             Issue.record("Expected .noPatches, got \(result)"); return
         }
         #expect(msg == "What kind of spice?")
@@ -172,9 +172,9 @@ struct OpenAILLMOrchestratorTests {
         // 1. valid result: model/promptVersion set, outcome="valid", failureCategory=nil
         let (orch1, _) = orchestrator([.success(validJSON())])
         let r1 = await orch1.run(request())
-        guard case .valid(_, _, _, let d1) = r1 else { Issue.record("Expected .valid"); return }
+        guard case .valid(_, _, _, let d1, _) = r1 else { Issue.record("Expected .valid"); return }
         #expect(d1.model == "gpt-4o-mini")
-        #expect(d1.promptVersion == "v3")
+        #expect(d1.promptVersion == "v5")
         #expect(d1.outcome == "valid")
         #expect(d1.failureCategory == nil)
         #expect(d1.attemptCount == 1)
@@ -182,7 +182,7 @@ struct OpenAILLMOrchestratorTests {
         // 2. repair path: attemptCount=2, outcome="valid", repairUsed=true
         let (orch2, _) = orchestrator([.success(badStepIdJSON()), .success(validJSON())])
         let r2 = await orch2.run(request())
-        guard case .valid(_, _, _, let d2) = r2 else { Issue.record("Expected .valid after repair"); return }
+        guard case .valid(_, _, _, let d2, _) = r2 else { Issue.record("Expected .valid after repair"); return }
         #expect(d2.attemptCount == 2)
         #expect(d2.outcome == "valid")
         #expect(d2.repairUsed == true)
@@ -190,7 +190,7 @@ struct OpenAILLMOrchestratorTests {
         // 3. noPatches: outcome="noPatches", failureCategory=nil
         let (orch3, _) = orchestrator([.success(nullPatchSetJSON())])
         let r3 = await orch3.run(request())
-        guard case .noPatches(_, _, let d3) = r3 else { Issue.record("Expected .noPatches"); return }
+        guard case .noPatches(_, _, let d3, _) = r3 else { Issue.record("Expected .noPatches"); return }
         #expect(d3.outcome == "noPatches")
         #expect(d3.failureCategory == nil)
 
@@ -217,7 +217,7 @@ struct OpenAILLMOrchestratorTests {
         struct FakeNetworkError: Error {}
         let (orch, mock) = orchestrator([.failure(FakeNetworkError()), .success(validJSON())])
         let result = await orch.run(request())
-        guard case .valid(_, _, _, let d) = result else {
+        guard case .valid(_, _, _, let d, _) = result else {
             Issue.record("Expected .valid, got \(result)"); return
         }
         #expect(mock.callCount == 2)
@@ -242,7 +242,7 @@ struct OpenAILLMOrchestratorTests {
     func recoverableValidation_repairSucceeds_terminationSuccess() async {
         let (orch, mock) = orchestrator([.success(badStepIdJSON()), .success(validJSON())])
         let result = await orch.run(request())
-        guard case .valid(_, _, _, let d) = result else {
+        guard case .valid(_, _, _, let d, _) = result else {
             Issue.record("Expected .valid after repair, got \(result)"); return
         }
         #expect(mock.callCount == 2)
@@ -392,7 +392,7 @@ struct OpenAILLMOrchestratorTests {
         let result = await orch.run(req)
 
         #expect(mock.callCount == 1)
-        guard case .valid(let ps, _, _, _) = result else {
+        guard case .valid(let ps, _, _, _, _) = result else {
             Issue.record("Expected .valid, got \(result)"); return
         }
         #expect(ps.patches.count == 1)
@@ -418,5 +418,29 @@ struct OpenAILLMOrchestratorTests {
         }
         #expect(err == .auth)
         #expect(d.terminationReason == "fatal_auth")
+    }
+
+    @Test("proposed_memory field is decoded and returned in result")
+    func proposedMemory_isParsedFromJSON() async {
+        let json = """
+        {"assistant_message":"Got it!","patchSet":null,"proposed_memory":"I avoid cilantro"}
+        """
+        let (orch, _) = orchestrator([.success(json)])
+        let result = await orch.run(request())
+        guard case .noPatches(let msg, _, _, let memory) = result else {
+            Issue.record("Expected .noPatches, got \(result)"); return
+        }
+        #expect(msg == "Got it!")
+        #expect(memory == "I avoid cilantro")
+    }
+
+    @Test("absent proposed_memory field yields nil proposedMemory")
+    func proposedMemory_absent_isNil() async {
+        let (orch, _) = orchestrator([.success(nullPatchSetJSON())])
+        let result = await orch.run(request())
+        guard case .noPatches(_, _, _, let memory) = result else {
+            Issue.record("Expected .noPatches, got \(result)"); return
+        }
+        #expect(memory == nil)
     }
 }

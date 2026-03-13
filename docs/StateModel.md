@@ -11,23 +11,32 @@ Sous maintains multiple layers of state. These layers have different responsibil
    - All cooking progress that must be respected (e.g., completed steps) lives here.
    - Completed steps are immutable.
 
-2. **User Defaults State (persistent, non-authoritative)**
-   - Explicit, user-declared cooking invariants.
-   - Persisted across sessions and devices.
-   - Applied automatically to recipe creation and scaling.
+2. **User Preferences State (persistent, non-authoritative)**
+   - Explicit, user-declared cooking invariants and context.
+   - Persisted across sessions.
+   - Applied automatically to recipe creation.
    - Must never retroactively mutate Recipe State.
    - Can be overridden per recipe only by explicit user instruction.
 
-3. **Proposed PatchSet State (ephemeral)**
+3. **Memories State (persistent, non-authoritative)**
+   - Facts and preferences the user has expressed in conversation and chosen to save.
+   - Persisted across sessions.
+   - Included as silent context in LLM requests.
+   - Never override hard preferences from User Preferences State.
+   - Always user-visible and user-editable.
+
+4. **Proposed PatchSet State (ephemeral)**
    - AI-suggested changes that have not yet been approved by the user.
    - Represents intent (what the AI proposes), not fact (what the recipe is).
    - Applying a validated PatchSet mutates Recipe State; rejecting it leaves Recipe State unchanged.
-   - Proposed PatchSets may reference User Defaults when generating patches, but approving a PatchSet must never mutate User Defaults unless explicitly requested.
+   - Proposed PatchSets may reference User Preferences when generating patches, but approving a PatchSet must never mutate User Preferences unless explicitly requested.
 
-4. **Session/UI State (ephemeral)**
+5. **Session/UI State (ephemeral)**
    - Chat messages and interaction context.
    - UI focus (cooking vs editing) and panel expansion/collapse.
    - May be persisted locally to survive reloads, but is not the source of truth for the recipe itself.
+
+---
 
 ## Authoritative Recipe State
 
@@ -55,23 +64,59 @@ Step {
 }
 ```
 
-## User Defaults State
+---
 
-User Defaults represent explicit, persistent constraints provided by the user.
+## User Preferences State
+
+User Preferences represent explicit, persistent constraints and context provided by the user.
 They are not inferred and are not part of Recipe State.
 
 ```ts
-UserDefaults {
+UserPreferences {
   portions: number
   hardAvoids: string[]
+  kitchenEquipment: string[]
+  customInstructions: string
   updatedAt?: number
 }
 ```
 
 Rules:
-- UserDefaults are applied silently during recipe creation.
-- UserDefaults must never alter completed recipe steps.
+- UserPreferences are applied silently during recipe creation.
+- UserPreferences must never alter completed recipe steps.
 - Violations of hardAvoids require explicit user confirmation.
+- kitchenEquipment is additive context, not an exhaustive inventory. The absence of an item does not mean the user lacks it.
+- customInstructions are applied to every recipe unless explicitly overridden.
+
+---
+
+## Memories State
+
+Memories represent facts and preferences the user has expressed in conversation and explicitly chosen to save.
+
+```ts
+Memory {
+  id: string
+  text: string          // always third person, e.g. "hates cilantro"
+  createdAt: number
+  updatedAt?: number
+}
+
+MemoriesState {
+  memories: Memory[]
+}
+```
+
+Rules:
+- Memories are proposed by the AI, never saved automatically without user action.
+- Every proposed memory must be surfaced to the user via a toast before saving.
+- The user may save, edit, or skip any proposed memory.
+- A proposed memory that times out (10 seconds) is saved automatically only if the user has not dismissed it.
+- Memories are included as silent context in LLM requests.
+- Memories must never override hard preferences from UserPreferences.
+- Memories are always visible and editable by the user in Settings.
+
+---
 
 ## Proposed PatchSet State
 
@@ -125,6 +170,8 @@ PatchSet {
 // (See docs/PatchingRules.md for the full patch schema and constraints.)
 Patch { /* ... */ }
 ```
+
+---
 
 ## Session/UI State
 
@@ -186,3 +233,4 @@ PatchDecision {
 - Completed steps (`status === "done"`) are immutable.
 - nextLLMContext is included in exactly one subsequent LLM request and must then be cleared.
 - Session/UI State must never be treated as authoritative for recipe data.
+- Memories and Preferences are read-only inputs to the LLM — they never directly mutate Recipe State.

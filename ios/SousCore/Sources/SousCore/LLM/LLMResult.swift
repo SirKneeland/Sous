@@ -137,14 +137,16 @@ public enum LLMResult: Sendable {
         patchSet: PatchSet,
         assistantMessage: String,
         raw: LLMRawResponse?,
-        debug: LLMDebugBundle
+        debug: LLMDebugBundle,
+        proposedMemory: String?
     )
 
     /// The LLM responded conversationally with no patch proposal.
     case noPatches(
         assistantMessage: String,
         raw: LLMRawResponse?,
-        debug: LLMDebugBundle
+        debug: LLMDebugBundle,
+        proposedMemory: String?
     )
 
     /// All attempts failed. A fallback PatchSet may be present for DEBUG surfacing only;

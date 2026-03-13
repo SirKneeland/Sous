@@ -13,17 +13,21 @@ public struct LLMUserPrefs: Equatable, Sendable {
     public let equipment: [String]
     /// Free-form instructions applied to every recipe.
     public let customInstructions: String
+    /// User-declared memories to include as context (e.g. "I avoid cilantro").
+    public let memories: [String]
 
     public init(
         hardAvoids: [String],
         servingSize: Int? = nil,
         equipment: [String] = [],
-        customInstructions: String = ""
+        customInstructions: String = "",
+        memories: [String] = []
     ) {
         self.hardAvoids = hardAvoids
         self.servingSize = servingSize
         self.equipment = equipment
         self.customInstructions = customInstructions
+        self.memories = memories
     }
 }
 

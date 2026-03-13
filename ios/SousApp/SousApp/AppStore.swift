@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import SousCore
+import UIKit
 
 // MARK: - UIState projection helpers (app-layer only)
 
@@ -52,6 +53,10 @@ final class AppStore: ObservableObject {
 
     @Published var showRecentRecipes: Bool = false
     @Published var userPreferences: UserPreferences = UserPreferences()
+    /// User-declared memories included as context in every LLM request.
+    @Published var memories: [MemoryItem] = []
+    /// A memory text the LLM has proposed to save. Non-nil while the toast is showing.
+    @Published var pendingMemoryProposal: String? = nil
 
     private let maxMessages = 200
     private let liveLLMModel = "gpt-4o-mini"
@@ -107,6 +112,7 @@ final class AppStore: ObservableObject {
 
         if isPersistenceEnabled {
             userPreferences = UserPreferencesPersistence.load(from: preferencesDefaults ?? .standard)
+            memories = MemoriesPersistence.load(from: preferencesDefaults ?? .standard)
         }
 
         if testOrchestrator == nil {
@@ -197,6 +203,52 @@ final class AppStore: ObservableObject {
         userPreferences = prefs
         guard isPersistenceEnabled else { return }
         UserPreferencesPersistence.save(prefs, to: preferencesDefaults ?? .standard)
+    }
+
+    // MARK: - Memories
+
+    /// Adds a new memory and persists it.
+    func addMemory(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        memories.append(MemoryItem(text: trimmed))
+        saveMemories()
+    }
+
+    /// Replaces an existing memory (matched by id) and persists.
+    func updateMemory(_ item: MemoryItem) {
+        guard let idx = memories.firstIndex(where: { $0.id == item.id }) else { return }
+        memories[idx] = item
+        saveMemories()
+    }
+
+    /// Removes a memory and persists.
+    func deleteMemory(_ item: MemoryItem) {
+        memories.removeAll { $0.id == item.id }
+        saveMemories()
+    }
+
+    /// Sets the pending memory proposal shown in the toast. Replaces any existing proposal.
+    func proposeMemory(text: String) {
+        pendingMemoryProposal = text
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+    }
+
+    /// Saves the proposed memory (with optional edits) and clears the toast.
+    func confirmMemory(text: String) {
+        addMemory(text)
+        pendingMemoryProposal = nil
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+    }
+
+    /// Discards the pending memory proposal without saving.
+    func dismissMemoryProposal() {
+        pendingMemoryProposal = nil
+    }
+
+    private func saveMemories() {
+        guard isPersistenceEnabled else { return }
+        MemoriesPersistence.save(memories, to: preferencesDefaults ?? .standard)
     }
 
     // MARK: - New Session
@@ -303,6 +355,16 @@ final class AppStore: ObservableObject {
         }
     }
 
+    private func buildLLMUserPrefs() -> LLMUserPrefs {
+        LLMUserPrefs(
+            hardAvoids: userPreferences.hardAvoids,
+            servingSize: userPreferences.servingSize,
+            equipment: userPreferences.equipment,
+            customInstructions: userPreferences.customInstructions,
+            memories: memories.map { $0.text }
+        )
+    }
+
     private func sendWithLLM(_ userText: String, generation: Int) async {
         // Clear llmTask when this generation's call ends (natural or cancelled).
         // The generation guard prevents an old cancelled task from clearing a newer task's ref.
@@ -324,7 +386,7 @@ final class AppStore: ObservableObject {
             hasCanvas: hasCanvas,
             userMessage: LLMContextComposer.composeUserMessage(userText: userText, hidden: hidden),
             recipeSnapshotForPrompt: recipe,
-            userPrefs: userPreferences.toLLMUserPrefs(),
+            userPrefs: buildLLMUserPrefs(),
             nextLLMContext: nextLLMContext,
             conversationHistory: buildConversationHistory()
         )
@@ -343,7 +405,7 @@ final class AppStore: ObservableObject {
         }
 
         switch result {
-        case .valid(let patchSet, let assistantMessage, _, let debug):
+        case .valid(let patchSet, let assistantMessage, _, let debug, let proposedMemory):
             lastDebugBundle = debug
             // Receipt-time stale-state check against CURRENT recipe (not the request snapshot).
             // Guards races where the recipe was mutated while the LLM call was in flight.
@@ -362,12 +424,14 @@ final class AppStore: ObservableObject {
             send(.patchReceived(patchSet))
             append(ChatMessage(role: .assistant, text: assistantMessage))
             llmDebugStatus = "succeeded"
+            if let memory = proposedMemory { proposeMemory(text: memory) }
 
-        case .noPatches(let assistantMessage, _, let debug):
+        case .noPatches(let assistantMessage, _, let debug, let proposedMemory):
             lastDebugBundle = debug
             nextLLMContext = nil
             append(ChatMessage(role: .assistant, text: assistantMessage))
             llmDebugStatus = "succeeded"
+            if let memory = proposedMemory { proposeMemory(text: memory) }
 
         case .failure(let fallbackPatchSet, let assistantMessage, _, let debug, _):
             lastDebugBundle = debug
@@ -437,7 +501,7 @@ final class AppStore: ObservableObject {
                 hidden: hidden
             ),
             recipeSnapshotForPrompt: recipe,
-            userPrefs: LLMUserPrefs(hardAvoids: ["cilantro"]),
+            userPrefs: buildLLMUserPrefs(),
             nextLLMContext: nextLLMContext,
             conversationHistory: buildConversationHistory()
         )
@@ -455,7 +519,7 @@ final class AppStore: ObservableObject {
         }
 
         switch result {
-        case .valid(let patchSet, let assistantMessage, _, let debug):
+        case .valid(let patchSet, let assistantMessage, _, let debug, let proposedMemory):
             lastDebugBundle = debug
             let current = uiState.recipe
             if patchSet.baseRecipeId != current.id {
@@ -472,12 +536,14 @@ final class AppStore: ObservableObject {
             send(.patchReceived(patchSet))
             append(ChatMessage(role: .assistant, text: assistantMessage))
             llmDebugStatus = "succeeded"
+            if let memory = proposedMemory { proposeMemory(text: memory) }
 
-        case .noPatches(let assistantMessage, _, let debug):
+        case .noPatches(let assistantMessage, _, let debug, let proposedMemory):
             lastDebugBundle = debug
             nextLLMContext = nil
             append(ChatMessage(role: .assistant, text: assistantMessage))
             llmDebugStatus = "succeeded"
+            if let memory = proposedMemory { proposeMemory(text: memory) }
 
         case .failure(let fallbackPatchSet, let assistantMessage, _, let debug, _):
             lastDebugBundle = debug

@@ -95,11 +95,11 @@ private extension AppStoreTests {
     }
 
     func validResult(patchSet: PatchSet) -> LLMResult {
-        .valid(patchSet: patchSet, assistantMessage: "Done.", raw: nil, debug: minimalDebug())
+        .valid(patchSet: patchSet, assistantMessage: "Done.", raw: nil, debug: minimalDebug(), proposedMemory: nil)
     }
 
     func noPatchesResult() -> LLMResult {
-        .noPatches(assistantMessage: "Clarification needed: please elaborate.", raw: nil, debug: minimalDebug())
+        .noPatches(assistantMessage: "Clarification needed: please elaborate.", raw: nil, debug: minimalDebug(), proposedMemory: nil)
     }
 
     func failureDebug() -> LLMDebugBundle {

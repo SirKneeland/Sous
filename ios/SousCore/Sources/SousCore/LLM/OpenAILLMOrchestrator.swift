@@ -24,7 +24,7 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
     public let model: String
     public let timeout: TimeInterval
 
-    private static let promptVersion = "v3"
+    private static let promptVersion = "v5"
     private static let maxCalls = 3
 
     public init(client: LLMClient, model: String, timeout: TimeInterval = 30) {
@@ -312,7 +312,8 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                     debug: makeDebug(.succeeded, outcome: "noPatches", attempts: attempts, id: requestId,
                                     elapsed: nowMs() - startMs, networkMs: networkMs,
                                     extractionUsed: extractionUsed, repairUsed: context.repairUsed,
-                                    unknownKeys: unknownKeys, terminationReason: "success", raw: raw)
+                                    unknownKeys: unknownKeys, terminationReason: "success", raw: raw),
+                    proposedMemory: dto.proposedMemory
                 )
             }
 
@@ -399,7 +400,8 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                     debug: makeDebug(.succeeded, outcome: "valid", attempts: attempts, id: requestId,
                                     elapsed: nowMs() - startMs, networkMs: networkMs,
                                     extractionUsed: extractionUsed, repairUsed: context.repairUsed,
-                                    unknownKeys: unknownKeys, terminationReason: "success", raw: raw)
+                                    unknownKeys: unknownKeys, terminationReason: "success", raw: raw),
+                    proposedMemory: dto.proposedMemory
                 )
             case .invalid(let validationErrors):
                 let classified = classify(validationErrors)
@@ -592,9 +594,11 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             4. Handle vague, incomplete, or casual input gracefully. Don't ask the user to rephrase — read the intent, make a reasonable interpretation, and act on it. Only ask a question when you genuinely cannot proceed without one specific piece of information, and make that question feel natural, not like a form.
             5. Emit patchSet when the user's message implies a recipe change — including when they are answering a clarifying question you previously asked. If intent is still genuinely unclear after all context, ask one short natural question and emit patchSet: null.
             6. Equipment preferences in RECIPE CONTEXT are additive — assume standard home kitchen basics are always available. If no equipment is listed, assume a fully equipped standard home kitchen. Never restrict suggestions to only what's listed.
+            7. If the user mentions anything personal about themselves that would be useful to know in a future cooking session — including foods they love, foods they hate or avoid, dietary restrictions, cooking methods or equipment they use, who they cook for, or any other standing preference — include a concise third-person "proposed_memory" string (e.g. "loves mashed potatoes", "avoids cilantro", "cooks on induction", "feeds two young kids"). Write it as a short third-person phrase with no subject — not "I" or "User". Omit if it's a one-time request for this recipe ("add more salt to this"), a question, or already in the user's saved memories. When in doubt, propose it.
 
-            Output shape — no changes:
+            Output shape — no changes (proposed_memory is optional, omit when not relevant):
             {"assistant_message":"...","patchSet":null}
+            {"assistant_message":"...","patchSet":null,"proposed_memory":"loves mashed potatoes"}
 
             Output shape — with changes (patchSetId must be a new UUID you generate):
             {"assistant_message":"...","patchSet":{"patchSetId":"<new-uuid>","baseRecipeId":"<copy id from RECIPE CONTEXT>","baseRecipeVersion":<copy version from RECIPE CONTEXT>,"patches":[<operations>]}}
@@ -623,6 +627,7 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             5. When the user commits: generate a full recipe using set_title, add_ingredient, and add_step patches. Use baseRecipeId and baseRecipeVersion from RECIPE CONTEXT. The canvas is blank — there are NO existing ingredients or steps. ALL add_ingredient patches MUST use "after_id": null. ALL add_step patches MUST use "after_step_id": null. Never put a UUID or any string in after_id or after_step_id — only null is valid here.
             6. When still exploring: emit patchSet: null.
             7. Equipment preferences in RECIPE CONTEXT are additive — assume standard home kitchen basics are always available. If no equipment is listed, assume a fully equipped standard home kitchen. Never restrict suggestions to only what's listed.
+            8. If the user mentions anything personal about themselves that would be useful to know in a future cooking session — including foods they love, foods they hate or avoid, dietary restrictions, cooking methods or equipment they use, who they cook for, or any other standing preference — include a concise third-person "proposed_memory" string (e.g. "loves mashed potatoes", "avoids cilantro", "cooks on induction", "feeds two young kids"). Write it as a short third-person phrase with no subject — not "I" or "User". Omit if it's a one-time request for this recipe ("add more salt to this"), a question, or already in the user's saved memories. When in doubt, propose it.
 
             Output shape — exploring:
             {"assistant_message":"...","patchSet":null}
@@ -668,6 +673,10 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
         }
         if !prefs.customInstructions.isEmpty {
             lines.append("customInstructions: \(prefs.customInstructions)")
+        }
+        if !prefs.memories.isEmpty {
+            let formatted = prefs.memories.map { "• \($0)" }.joined(separator: "\n")
+            lines.append("memories (user context for all sessions):\n\(formatted)")
         }
 
         if let decision = request.nextLLMContext?.lastPatchDecision {

@@ -15,10 +15,13 @@ struct SettingsView: View {
                     NavigationLink("Preferences") {
                         PreferencesView(store: store)
                     }
+                    NavigationLink("Memories") {
+                        MemoriesView(store: store)
+                    }
                 } header: {
                     Text("Your Kitchen")
                 } footer: {
-                    Text("Dietary restrictions, default servings, equipment, and custom instructions.")
+                    Text("Dietary restrictions, default servings, equipment, custom instructions, and saved memories.")
                 }
 
                 // MARK: API Key

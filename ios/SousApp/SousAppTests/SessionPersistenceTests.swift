@@ -213,6 +213,6 @@ private actor SyncNoPatchOrchestrator: LLMOrchestrator {
         .noPatches(assistantMessage: "ok", raw: nil, debug: LLMDebugBundle(
             status: .succeeded, attemptCount: 1, maxAttempts: 2,
             requestId: "t", extractionUsed: false, repairUsed: false, timingTotalMs: 0
-        ))
+        ), proposedMemory: nil)
     }
 }

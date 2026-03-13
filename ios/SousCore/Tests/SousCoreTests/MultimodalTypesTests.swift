@@ -15,9 +15,9 @@ import Testing
 private func stubMap(_ payload: MultimodalAssistantPayload, debug: LLMDebugBundle) -> LLMResult {
     switch payload {
     case .suggestionsOnly(let msg, _):
-        return .noPatches(assistantMessage: msg, raw: nil, debug: debug)
+        return .noPatches(assistantMessage: msg, raw: nil, debug: debug, proposedMemory: nil)
     case .patchProposal(let msg, let patchSet):
-        return .valid(patchSet: patchSet, assistantMessage: msg, raw: nil, debug: debug)
+        return .valid(patchSet: patchSet, assistantMessage: msg, raw: nil, debug: debug, proposedMemory: nil)
     }
 }
 
@@ -58,7 +58,7 @@ struct MultimodalTypesTests {
         let result = stubMap(payload, debug: makeDebug())
 
         // Assert the mapped result is noPatches.
-        guard case .noPatches(let msg, _, _) = result else {
+        guard case .noPatches(let msg, _, _, _) = result else {
             Issue.record("Expected .noPatches, got \(result)")
             return
         }
@@ -66,14 +66,14 @@ struct MultimodalTypesTests {
 
         // Assert no PatchSet is reachable from a noPatches result.
         var extractedPatchSet: PatchSet? = nil
-        if case .valid(let ps, _, _, _) = result { extractedPatchSet = ps }
+        if case .valid(let ps, _, _, _, _) = result { extractedPatchSet = ps }
         #expect(extractedPatchSet == nil)
 
         // Simulate the store decision: noPatches must not create a pendingPatchSet.
         var pendingPatchSet: PatchSet? = nil
         if case .noPatches = result {
             // Correct: store adds a chat message, does not touch pendingPatchSet.
-        } else if case .valid(let ps, _, _, _) = result {
+        } else if case .valid(let ps, _, _, _, _) = result {
             pendingPatchSet = ps  // would be wrong path
         }
         #expect(pendingPatchSet == nil)
@@ -98,7 +98,7 @@ struct MultimodalTypesTests {
         let result = stubMap(payload, debug: makeDebug())
 
         // Assert result is .valid (proposed intent).
-        guard case .valid(let resultPatchSet, _, _, _) = result else {
+        guard case .valid(let resultPatchSet, _, _, _, _) = result else {
             Issue.record("Expected .valid, got \(result)")
             return
         }

@@ -1,3 +1,4 @@
+import Combine
 import SousCore
 import SwiftUI
 
@@ -79,6 +80,18 @@ struct ChatSheetView: View {
                 .onChange(of: store.isThinking) { _ in
                     withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
                 }
+                .overlay(alignment: .top) {
+                    if let proposal = store.pendingMemoryProposal {
+                        MemoryProposalToast(
+                            text: proposal,
+                            onSave: { text in store.confirmMemory(text: text) },
+                            onDismiss: { store.dismissMemoryProposal() }
+                        )
+                        .padding(.top, 4)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                    }
+                }
+                .animation(.easeInOut(duration: 0.25), value: store.pendingMemoryProposal != nil)
             }
 
             Divider()
@@ -308,6 +321,90 @@ private struct ThinkingBubbleView: View {
             .clipShape(RoundedRectangle(cornerRadius: 16))
             .font(.body)
             Spacer(minLength: 48)
+        }
+    }
+}
+
+// MARK: - Memory Proposal Toast
+
+private struct MemoryProposalToast: View {
+    let text: String
+    let onSave: (String) -> Void
+    let onDismiss: () -> Void
+
+    @State private var isEditing = false
+    @State private var editText: String
+    @State private var startDate = Date()
+    @State private var displayProgress: Double = 1.0
+    @State private var timerPaused = false
+    @State private var hasSaved = false
+
+    // 0.1s ticker drives smooth progress and auto-save without discrete jumps
+    private let ticker = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
+
+    init(text: String, onSave: @escaping (String) -> Void, onDismiss: @escaping () -> Void) {
+        self.text = text
+        self.onSave = onSave
+        self.onDismiss = onDismiss
+        _editText = State(initialValue: text)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if isEditing {
+                TextField("Memory text", text: $editText)
+                    .font(.caption)
+                    .textFieldStyle(.roundedBorder)
+                HStack(spacing: 6) {
+                    Button("Save") { hasSaved = true; onSave(editText) }
+                        .font(.caption2)
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.mini)
+                    Button("Cancel") { isEditing = false; editText = text }
+                        .font(.caption2)
+                        .buttonStyle(.bordered)
+                        .controlSize(.mini)
+                }
+            } else {
+                HStack(spacing: 8) {
+                    Image(systemName: "brain")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(text)
+                        .font(.caption)
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Button("Save") { timerPaused = true; hasSaved = true; onSave(text) }
+                        .font(.caption2)
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.mini)
+                    Button("Edit") { timerPaused = true; isEditing = true }
+                        .font(.caption2)
+                        .buttonStyle(.bordered)
+                        .controlSize(.mini)
+                    Button("Skip") { onDismiss() }
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                ProgressView(value: displayProgress)
+                    .tint(Color.secondary.opacity(0.4))
+            }
+        }
+        .padding(10)
+        .background(Color(.tertiarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .shadow(color: .black.opacity(0.08), radius: 4, y: 2)
+        .padding(.horizontal, 12)
+        .simultaneousGesture(TapGesture().onEnded { timerPaused = true })
+        .onReceive(ticker) { _ in
+            guard !timerPaused && !hasSaved && !isEditing else { return }
+            let elapsed = Date().timeIntervalSince(startDate)
+            displayProgress = max(0, 1.0 - elapsed / 10.0)
+            if elapsed >= 10 {
+                hasSaved = true
+                onSave(text)
+            }
         }
     }
 }

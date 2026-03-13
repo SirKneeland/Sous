@@ -13,6 +13,8 @@ struct LLMResponseDTO: Equatable, Sendable {
     let assistantMessage: String
     /// Proposed recipe mutations, or nil when the response is conversational only.
     let patchSet: LLMPatchSetDTO?
+    /// Optional memory the model proposes to save. Nil when the model does not suggest a memory.
+    let proposedMemory: String?
 }
 
 // MARK: - LLMPatchSetDTO

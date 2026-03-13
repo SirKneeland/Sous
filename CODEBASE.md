@@ -91,6 +91,8 @@
   - `Persistence/SessionSnapshot.swift` — Codable struct; schemaVersion, recipe, pendingPatchSet, chatMessages[], nextLLMContext, savedAt
   - `Persistence/SessionPersistence.swift` — Static helpers: save (atomic), load (nil on absent/corrupt), clear; all accept optional URL for test injection
   - `Preferences/UserPreferences.swift` — `UserPreferences` Codable struct (hardAvoids, servingSize, equipment, customInstructions) + `UserPreferencesPersistence` (UserDefaults-backed, injectable for tests)
+  - `Preferences/MemoryItem.swift` — `MemoryItem` Codable struct (id, text, createdAt) + `MemoriesPersistence` (UserDefaults-backed, injectable for tests)
+  - `Views/MemoriesView.swift` — List of saved memories with swipe-to-delete and tap-to-edit sheet
 
 ---
 
@@ -116,37 +118,43 @@
 
 - **App target tests:** `SousAppTests`
   - Location: `ios/SousApp/SousAppTests/`
-  - Key files: AppStoreTests.swift, UIStateMachineTests.swift, OpenAIClientTests.swift, OpenAIKeyProviderTests.swift, PhotoSendStateTests.swift, PhotoSendCoordinatorTests.swift, ImageAcquisitionStateTests.swift, LLMDebugExportTests.swift, SessionPersistenceTests.swift, MarkdownParserTests.swift, UserPreferencesTests.swift
+  - Key files: AppStoreTests.swift, UIStateMachineTests.swift, OpenAIClientTests.swift, OpenAIKeyProviderTests.swift, PhotoSendStateTests.swift, PhotoSendCoordinatorTests.swift, ImageAcquisitionStateTests.swift, LLMDebugExportTests.swift, SessionPersistenceTests.swift, MarkdownParserTests.swift, UserPreferencesTests.swift, MemoriesTests.swift
   - Run with: `xcodebuild test -scheme SousApp -destination 'platform=iOS Simulator,name=iPhone 17'`
 
 - **UI tests:** `SousAppUITests` — Minimal coverage, launch tests only
 
 ---
 
-## Current Milestone State (Milestone 15)
+## Current Milestone State (Milestone 16)
 
-**Milestone 15 — Persistent Preferences (CURRENT)**
+**Milestone 16 — Memories (CURRENT)**
 
 What is built and wired up:
-- `UserPreferences` struct (`ios/SousApp/SousApp/Preferences/UserPreferences.swift`) — Codable value type with 4 fields: `hardAvoids: [String]`, `servingSize: Int?`, `equipment: [String]`, `customInstructions: String`
-- `UserPreferencesPersistence` — reads/writes `UserPreferences` to `UserDefaults` as JSON under key `"sous_user_preferences"`; accepts an optional `UserDefaults` for test injection
-- `AppStore.userPreferences: UserPreferences` — `@Published`; loaded from UserDefaults on init (when persistence is enabled); updated via `updatePreferences(_:)` which also saves
-- `AppStore.init` now accepts `preferencesDefaults: UserDefaults? = nil` for test isolation
-- `AppStore.sendWithLLM` and `sendWithMultimodalLLM` both inject `userPreferences.toLLMUserPrefs()` into every LLM request (replaces the hardcoded cilantro placeholder)
-- `LLMUserPrefs` expanded with `servingSize: Int?`, `equipment: [String]`, `customInstructions: String` — all default to nil/empty so existing tests compile unchanged
-- `OpenAILLMOrchestrator.recipeContextMessage` includes serving size, equipment, and custom instructions (if set) in the recipe context block sent to the model
-- `promptVersion` bumped to `"v3"`
-- `PreferencesView` (`ios/SousApp/SousApp/Views/PreferencesView.swift`) — SwiftUI form with 4 sections; comma-separated text fields for hard avoids and equipment; stepper for serving size (toggle to enable/disable); multi-line TextEditor for custom instructions; saves on every change via `store.updatePreferences`
-- `SettingsView` updated: takes `store: AppStore` (was `keyProvider`); adds "Your Kitchen" section with NavigationLink to PreferencesView
-- `ContentView` updated: `SettingsView(store: store)` (was `SettingsView(keyProvider: store.keyProvider)`)
-- 10 new tests in `UserPreferencesTests.swift` covering default values, round-trip save/load, overwrite, clear, `toLLMUserPrefs` conversion, and AppStore integration
+- `MemoryItem` struct (`ios/SousApp/SousApp/Preferences/MemoryItem.swift`) — Codable, Equatable, Identifiable, Sendable; fields: `id: UUID`, `text: String`, `createdAt: Date`
+- `MemoriesPersistence` (same file) — reads/writes `[MemoryItem]` to `UserDefaults` under key `"sous_memories"`; accepts optional `UserDefaults` for test injection
+- `AppStore.memories: [MemoryItem]` — `@Published`; loaded from UserDefaults on init (when persistence is enabled)
+- `AppStore.pendingMemoryProposal: String?` — `@Published`; non-nil while the memory toast is showing
+- `AppStore` memory methods: `addMemory(_:)`, `updateMemory(_:)`, `deleteMemory(_:)`, `proposeMemory(text:)`, `confirmMemory(text:)`, `dismissMemoryProposal()`
+- `AppStore.buildLLMUserPrefs()` — private helper that assembles `LLMUserPrefs` with all preferences + memories; used in both text and multimodal send paths (replaces `userPreferences.toLLMUserPrefs()` call and the old hardcoded `cilantro` placeholder in multimodal path)
+- `LLMUserPrefs` expanded with `memories: [String]` — defaults to `[]` so existing tests compile unchanged
+- `LLMResponseDTO` expanded with `proposedMemory: String?` — nil when model does not suggest a memory
+- `LLMResult.valid` and `LLMResult.noPatches` now carry `proposedMemory: String?`
+- `PatchSetDecoder` recognises `"proposed_memory"` as a known top-level key and extracts it as an optional String
+- `OpenAILLMOrchestrator.recipeContextMessage` appends a bulleted memories block when `prefs.memories` is non-empty
+- `OpenAILLMOrchestrator.systemPrompt(hasCanvas: true)` — rule 7 added: propose a `"proposed_memory"` string when user states a personally memorable preference/constraint
+- `OpenAILLMOrchestrator.systemPrompt(hasCanvas: false)` — rule 8 added: same memory-proposal rule for the exploration state
+- `promptVersion` bumped from `"v3"` to `"v4"`
+- `MemoriesView` (`ios/SousApp/SousApp/Views/MemoriesView.swift`) — List of saved memories; swipe-to-delete; tap to edit via sheet
+- `SettingsView` updated: "Your Kitchen" section now has two NavigationLinks — Preferences and Memories; footer text updated
+- `ChatSheetView` — `MemoryProposalToast` (private struct) added; toast appears at top of transcript when `store.pendingMemoryProposal` is non-nil; supports Save, Edit, Dismiss actions with animated slide-in/out
+- 13 new tests in `MemoriesTests.swift` (MemoryItem, MemoriesPersistence, AppStore CRUD, proposal flow, UserDefaults init, LLM injection)
+
+Previously completed (Milestone 15 — Persistent Preferences — DONE):
+- `UserPreferences` struct with 4 fields + `UserPreferencesPersistence` + `PreferencesView`
+- `promptVersion` bumped to `"v3"` (now `"v4"` after M16 additions)
 
 Previously completed (Milestone 14 — Tone and Model Behavior — DONE):
-- Both system prompts in `OpenAILLMOrchestrator.systemPrompt(hasCanvas:)` rewritten with warm, opinionated personality
-- `promptVersion` bumped from `"v1"` to `"v2"` (now `"v3"` after M15 prompt additions)
-
-What is next (Milestone 16 — Memories):
-- See Milestones.md for upcoming work
+- Both system prompts rewritten with warm, opinionated personality
 
 ---
 
