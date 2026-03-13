@@ -41,7 +41,6 @@ struct ContentView: View {
             }
         )) {
             ChatSheetView(store: store)
-                .interactiveDismissDisabled(store.uiState.isPatchProposed)
         }
         .sheet(isPresented: $showSettings) {
             SettingsView(keyProvider: store.keyProvider)

@@ -47,7 +47,7 @@
   - `Models/Recipe.swift` — Sendable struct; UUID id, version (Int), title, ingredients[], steps[], notes[]
   - `Models/Ingredient.swift` — UUID id + text
   - `Models/Step.swift` — UUID id + text + status (StepStatus: todo | done)
-  - `Models/Patch.swift` — Enum with 7 cases: addIngredient, updateIngredient, removeIngredient, addStep, updateStep, removeStep, addNote
+  - `Models/Patch.swift` — Enum with 8 cases: addIngredient, updateIngredient, removeIngredient, addStep, updateStep, removeStep, addNote, setTitle
   - `Models/PatchSet.swift` — UUID patchSetId, baseRecipeId, baseRecipeVersion, status (pending|accepted|rejected), patches[], summary, baseRecipeSnapshot
   - `Validation/PatchValidator.swift` — Static `validate(patchSet:recipe:) -> PatchValidationResult`; checks version, IDs, step immutability, internal conflicts
   - `Application/PatchApplier.swift` — Static `apply(patchSet:recipe:) throws -> Recipe`; validates first, then applies atomically, increments recipe.version
@@ -122,18 +122,25 @@
 
 ---
 
-## Current Milestone State (Milestone 13)
+## Current Milestone State (Milestone 14)
 
-**Milestone 13 — Chat Rendering (CURRENT)**
+**Milestone 14 — Tone and Model Behavior (CURRENT)**
 
 What is built and wired up:
+- Both system prompts in `OpenAILLMOrchestrator.systemPrompt(hasCanvas:)` rewritten with warm, opinionated personality
+- No-canvas (exploration) prompt: Sous now speaks like a knowledgeable friend who makes real recommendations, asks 1–2 short questions at most, handles vague/messy input without demanding rephrasing, and holds off on generating a recipe until the user clearly commits
+- Canvas (editing) prompt: Sous now sounds direct and in-the-moment, makes calls rather than listing every option, and asks natural questions only when a specific piece of information is genuinely required
+- `promptVersion` bumped from `"v1"` to `"v2"` to signal the prompt change in debug bundles
+- All patch JSON shapes and patch operation types are unchanged — the architecture is identical
+
+Previously completed (Milestone 13 — Chat Rendering — DONE):
 - `MarkdownTextView` — SwiftUI view that renders a subset of Markdown in assistant chat bubbles; handles headings (`#`, `##`, `###`), bullet lists (`-`, `*`), numbered lists (`1.`), and inline bold/italic (via `AttributedString(markdown:)`)
 - `MarkdownParser` — internal enum with static `parse(_:)` and `numberedListItem(_:)` methods; processes text line-by-line into `MarkdownBlock` values; fully unit-tested
 - `MarkdownBlock` — internal struct with `id: Int` (positional, stable for SwiftUI ForEach), `kind: Kind` (equatable enum), and `content: String`
 - `ChatBubbleView` updated: user messages render as plain `Text` (white on blue, unchanged); assistant messages use `MarkdownTextView` (markdown-aware, primary on gray)
 - 20 new tests in `MarkdownParserTests.swift` covering all block types, edge cases, and helper function
 
-What is next (Milestone 14 — Tone and Model Behavior):
+What is next (Milestone 15 — Persistent Preferences):
 - See Milestones.md for upcoming work
 
 ---

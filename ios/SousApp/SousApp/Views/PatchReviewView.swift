@@ -9,74 +9,80 @@ struct PatchReviewView: View {
     @ObservedObject var store: AppStore
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                // Canonical header — identical to RecipeCanvasView
-                Text(recipe.title)
-                    .font(.title).bold()
-                Text("Version: \(recipe.version)")
-                    .font(.caption).foregroundStyle(.secondary)
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    // Canonical header — identical to RecipeCanvasView
+                    Text(recipe.title)
+                        .font(.title).bold()
+                    Text("Version: \(recipe.version)")
+                        .font(.caption).foregroundStyle(.secondary)
 
-                Divider()
+                    Divider()
 
-                if !ingredientRows.isEmpty {
-                    sectionView(title: "Ingredients", rows: ingredientRows, isSteps: false)
-                }
-                if !stepRows.isEmpty {
-                    sectionView(title: "Steps", rows: stepRows, isSteps: true)
-                }
+                    if !ingredientRows.isEmpty {
+                        sectionView(title: "Ingredients", rows: ingredientRows, isSteps: false)
+                    }
+                    if !stepRows.isEmpty {
+                        sectionView(title: "Steps", rows: stepRows, isSteps: true)
+                    }
 
-                Divider()
+                    Divider()
 
-                switch validation {
-                case .valid:
-                    Text("✓ Valid").foregroundStyle(.green)
-                case .invalid(let errors):
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("✗ Invalid").foregroundStyle(.red)
-                        ForEach(Array(errors.enumerated()), id: \.offset) { _, error in
-                            Text(errorDescription(error))
-                                .font(.caption)
-                                .foregroundStyle(.red)
+                    switch validation {
+                    case .valid:
+                        Text("✓ Valid").foregroundStyle(.green)
+                    case .invalid(let errors):
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("✗ Invalid").foregroundStyle(.red)
+                            ForEach(Array(errors.enumerated()), id: \.offset) { _, error in
+                                Text(errorDescription(error))
+                                    .font(.caption)
+                                    .foregroundStyle(.red)
+                            }
                         }
                     }
-                }
-
-                HStack {
-                    Button("Reject") {
-                        store.send(.rejectPatch(userText: ""))
-                    }
-                    .buttonStyle(.bordered)
-
-                    Spacer()
-
-                    Button("Accept") {
-                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                        withAnimation(.easeInOut(duration: 0.15)) {
-                            store.send(.acceptPatch)
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!isValid)
-                }
 
 #if DEBUG
-                DisclosureGroup("Debug") {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("patches: \(patchSet.patches.count)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-
-                        ForEach(Array(patchSet.patches.enumerated()), id: \.offset) { _, patch in
-                            Text(String(describing: patch))
-                                .font(.caption2)
+                    DisclosureGroup("Debug") {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("patches: \(patchSet.patches.count)")
+                                .font(.caption)
                                 .foregroundStyle(.secondary)
-                                .textSelection(.enabled)
+
+                            ForEach(Array(patchSet.patches.enumerated()), id: \.offset) { _, patch in
+                                Text(String(describing: patch))
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .textSelection(.enabled)
+                            }
                         }
+                        .padding(.top, 4)
                     }
-                    .padding(.top, 4)
-                }
 #endif
+                }
+                .padding()
+            }
+
+            Divider()
+
+            // Pinned action bar — always visible regardless of recipe length
+            HStack {
+                Button("Reject") {
+                    store.send(.rejectPatch(userText: ""))
+                }
+                .buttonStyle(.bordered)
+
+                Spacer()
+
+                Button("Accept") {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        store.send(.acceptPatch)
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!isValid)
             }
             .padding()
         }

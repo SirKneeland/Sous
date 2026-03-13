@@ -12,14 +12,15 @@ Statuses:
 
 ## Project State
 
-**Current milestone:** Milestone 13 — Chat Rendering
+**Current milestone:** Milestone 14 — Tone and Model Behavior
 
 **Recently completed:**
+- Milestone 13 — Chat Rendering
 - Milestone 12 — Recent Recipes
 - Milestone 11 — New Recipe Flow
 
 **Next milestone:**
-- Milestone 14 — Tone and Model Behavior
+- Milestone 15 — Persistent Preferences
 
 This section exists to make the active project phase immediately visible to humans and AI agents without scanning the entire roadmap.
 
@@ -246,7 +247,7 @@ Explicit non-goals:
 ---
 
 ## Milestone 13 — Chat Rendering
-**Status:** CURRENT
+**Status:** DONE
 
 **Goal:** Make chat feel like a real messaging interface — formatted, readable, and expressive.
 
@@ -263,7 +264,7 @@ Explicit non-goals:
 ---
 
 ## Milestone 14 — Tone and Model Behavior
-**Status:** PLANNED
+**Status:** CURRENT
 
 **Goal:** Make the AI feel like a genuinely helpful, warm, and opinionated cooking companion — not a corporate chatbot reading from a script.
 

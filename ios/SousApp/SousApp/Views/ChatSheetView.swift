@@ -16,34 +16,8 @@ struct ChatSheetView: View {
     @State private var debugCopied = false
 #endif
 
-    private var hasPendingPatch: Bool {
-        store.uiState.isPatchProposed
-    }
-
     var body: some View {
-        if hasPendingPatch {
-            patchPendingView
-        } else {
-            chatView
-        }
-    }
-
-    // MARK: - Patch pending
-
-    private var patchPendingView: some View {
-        VStack(spacing: 12) {
-            Text("Chat").font(.headline)
-            Spacer()
-            Text("Patch received — pending validation")
-                .foregroundStyle(.orange)
-                .multilineTextAlignment(.center)
-            Button("Validate Patch") {
-                store.send(.validatePatch)
-            }
-            .buttonStyle(.borderedProminent)
-            Spacer()
-        }
-        .padding()
+        chatView
     }
 
     // MARK: - Chat view
@@ -95,6 +69,9 @@ struct ChatSheetView: View {
                     }
                     .padding(.horizontal)
                     .padding(.vertical, 8)
+                }
+                .onAppear {
+                    proxy.scrollTo("bottom", anchor: .bottom)
                 }
                 .onChange(of: store.chatTranscript.count) { _ in
                     withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }

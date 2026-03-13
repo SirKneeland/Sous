@@ -236,13 +236,13 @@ final class AppStoreTests: XCTestCase {
         store.sendUserMessage("add a note")
         await drainMain()
 
-        // Must be in patchProposed; recipe not yet mutated
-        XCTAssertTrue(store.uiState.isPatchProposed, "Must be in patchProposed after valid LLM result")
+        // Must be in patchReview (auto-advanced from patchProposed); recipe not yet mutated
+        XCTAssertTrue(store.uiState.isPatchReview, "Must be in patchReview after valid LLM result (auto-advanced)")
         XCTAssertEqual(store.uiState.recipe, original, "Recipe must not change before Accept")
 
-        // Validate → patchReview; recipe still unchanged
+        // validatePatch is now a no-op (already in patchReview); recipe still unchanged
         store.send(.validatePatch)
-        XCTAssertTrue(store.uiState.isPatchReview, "Must be in patchReview after validatePatch")
+        XCTAssertTrue(store.uiState.isPatchReview, "Must remain in patchReview")
         XCTAssertEqual(store.uiState.recipe, original, "Recipe must not change during patchReview")
 
         // Accept → recipe mutates deterministically
@@ -461,14 +461,14 @@ final class AppStoreTests: XCTestCase {
         store.sendUserMessage("make it spicy")
         await drainMain()
 
-        // Fallback patch enters proposed path — recipe still unchanged
+        // Fallback patch auto-advances to patchReview — recipe still unchanged
         XCTAssertEqual(store.uiState.recipe, original,
                        "Recipe must not mutate before Accept even with fallbackPatchSet")
-        XCTAssertTrue(store.uiState.isPatchProposed,
-                      "Fallback patchSet must enter patchProposed")
+        XCTAssertTrue(store.uiState.isPatchReview,
+                      "Fallback patchSet must auto-advance to patchReview")
         XCTAssertEqual(store.llmDebugStatus, "failed")
 
-        // Accept → recipe mutates
+        // Accept → recipe mutates (validatePatch is a no-op, already in patchReview)
         store.send(.validatePatch)
         store.send(.acceptPatch)
         let updated = store.uiState.recipe
@@ -525,7 +525,7 @@ final class AppStoreTests: XCTestCase {
         store.send(.openChat)
         store.sendUserMessage("add a note")
         await drainMain()
-        XCTAssertTrue(store.uiState.isPatchProposed, "Pre-condition: must be in patchProposed")
+        XCTAssertTrue(store.uiState.isPatchReview, "Pre-condition: must be in patchReview (auto-advanced)")
 
         let callCountBefore = await mock.callCount
         let req = try makeMultimodalRequest()
@@ -535,8 +535,8 @@ final class AppStoreTests: XCTestCase {
         let callCountAfter = await mock.callCount
         XCTAssertEqual(callCountAfter, callCountBefore,
                        "No additional orchestrator call must be made when a patch is pending")
-        XCTAssertTrue(store.uiState.isPatchProposed,
-                      "State must remain patchProposed after a blocked multimodal send")
+        XCTAssertTrue(store.uiState.isPatchReview,
+                      "State must remain patchReview after a blocked multimodal send")
     }
 
     // MARK: (m9-d) multimodal valid patch — no mutation before Accept
@@ -551,12 +551,12 @@ final class AppStoreTests: XCTestCase {
         store.sendMultimodalRequest(req)
         await drainMain()
 
-        XCTAssertTrue(store.uiState.isPatchProposed,
-                      "Valid multimodal result must enter patchProposed")
+        XCTAssertTrue(store.uiState.isPatchReview,
+                      "Valid multimodal result must auto-advance to patchReview")
         XCTAssertEqual(store.uiState.recipe, original,
                        "Recipe must not change before Accept")
 
-        store.send(.validatePatch)
+        store.send(.validatePatch)  // no-op (already in patchReview)
         store.send(.acceptPatch)
         let updated = store.uiState.recipe
         XCTAssertEqual(updated.version, original.version + 1,

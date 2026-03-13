@@ -122,12 +122,14 @@ final class AppStore: ObservableObject {
                 nextLLMContext = snapshot.nextLLMContext
                 if snapshot.hasCanvas {
                     if let patch = snapshot.pendingPatchSet {
-                        uiState = .patchProposed(
+                        // Auto-advance past patchProposed: restore directly into patchReview.
+                        let proposed = UIState.patchProposed(
                             recipe: snapshot.recipe,
                             patchSet: patch,
                             validation: nil,
                             hidden: HiddenContext()
                         )
+                        uiState = UIStateMachine.reduce(proposed, .validatePatch)
                     } else {
                         uiState = .recipeOnly(recipe: snapshot.recipe)
                     }
@@ -225,12 +227,14 @@ final class AppStore: ObservableObject {
         nextLLMContext = snapshot.nextLLMContext
         if snapshot.hasCanvas {
             if let patch = snapshot.pendingPatchSet {
-                uiState = .patchProposed(
+                // Auto-advance past patchProposed: restore directly into patchReview.
+                let proposed = UIState.patchProposed(
                     recipe: snapshot.recipe,
                     patchSet: patch,
                     validation: nil,
                     hidden: HiddenContext()
                 )
+                uiState = UIStateMachine.reduce(proposed, .validatePatch)
             } else {
                 uiState = .recipeOnly(recipe: snapshot.recipe)
             }
@@ -497,6 +501,14 @@ final class AppStore: ObservableObject {
     func send(_ event: UIEvent) {
         let prev = uiState
         uiState = UIStateMachine.reduce(uiState, event)
+
+        // Auto-advance: skip the patchProposed intermediate state.
+        // Any transition that lands in patchProposed immediately runs validation
+        // and enters patchReview — no separate user action required.
+        if case .patchProposed = uiState {
+            uiState = UIStateMachine.reduce(uiState, .validatePatch)
+        }
+
         // When the first recipe is accepted from blank state, reveal the canvas.
         if case .acceptPatch = event, !hasCanvas, case .recipeOnly = uiState {
             hasCanvas = true
