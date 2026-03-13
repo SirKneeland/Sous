@@ -12,15 +12,15 @@ Statuses:
 
 ## Project State
 
-**Current milestone:** Milestone 14 — Tone and Model Behavior
+**Current milestone:** Milestone 16 — Memories
 
 **Recently completed:**
+- Milestone 15 — Persistent Preferences
+- Milestone 14 — Tone and Model Behavior
 - Milestone 13 — Chat Rendering
-- Milestone 12 — Recent Recipes
-- Milestone 11 — New Recipe Flow
 
 **Next milestone:**
-- Milestone 15 — Persistent Preferences
+- Milestone 17 — Design
 
 This section exists to make the active project phase immediately visible to humans and AI agents without scanning the entire roadmap.
 
@@ -264,7 +264,7 @@ Explicit non-goals:
 ---
 
 ## Milestone 14 — Tone and Model Behavior
-**Status:** CURRENT
+**Status:** DONE
 
 **Goal:** Make the AI feel like a genuinely helpful, warm, and opinionated cooking companion — not a corporate chatbot reading from a script.
 
@@ -284,7 +284,7 @@ Explicit non-goals:
 ---
 
 ## Milestone 15 — Persistent Preferences
-**Status:** PLANNED
+**Status:** DONE
 
 **Goal:** Let users tell Sous about themselves once, so they never have to repeat it.
 
@@ -292,7 +292,7 @@ Core capabilities:
 - Preferences screen in Settings with the following fields:
   - Ingredients or foods to always avoid (hard constraints)
   - Default number of people to serve
-  - Kitchen tools and equipment available (e.g. cast iron, induction plate, air fryer, stand mixer)
+  - Kitchen tools and equipment available (e.g. cast iron, induction plate, air fryer, stand mixer). 
   - Free-form custom instructions (e.g. "always give me stove settings for both gas and induction")
 - Preferences applied silently to all new recipes
 - Preferences visible and editable at any time
@@ -307,12 +307,12 @@ Explicit non-goals:
 ---
 
 ## Milestone 16 — Memories
-**Status:** PLANNED
+**Status:** CURRENT
 
 **Goal:** Let Sous remember things the user expresses in conversation, so preferences and context accumulate naturally over time.
 
 Core capabilities:
-- When the AI detects a memorable preference or fact in chat (e.g. "I hate cilantro", "I'm cooking for my kids tonight"), it proposes adding a memory
+- When the AI detects a memorable preference or fact in chat (e.g. "I hate cilantro", "I'm cooking for my kids tonight"), it proposes adding a memory. The proposal is not done in-line in the chat, it is done via a non-disruptive toast element
 - A non-disruptive toast notification appears at the top of the chat showing what is being remembered
 - User can immediately dismiss or edit the proposed memory before it is saved
 - Memories are visible and editable in a dedicated section in Settings

@@ -174,7 +174,7 @@ struct OpenAILLMOrchestratorTests {
         let r1 = await orch1.run(request())
         guard case .valid(_, _, _, let d1) = r1 else { Issue.record("Expected .valid"); return }
         #expect(d1.model == "gpt-4o-mini")
-        #expect(d1.promptVersion == "v2")
+        #expect(d1.promptVersion == "v3")
         #expect(d1.outcome == "valid")
         #expect(d1.failureCategory == nil)
         #expect(d1.attemptCount == 1)

@@ -3,14 +3,27 @@ import Foundation
 // MARK: - LLMUserPrefs
 
 /// Value-type snapshot of the user preferences the LLM prompt needs.
-/// Minimal: only fields actually used in prompt construction today.
 /// The adapter that reads Foundation.UserDefaults → LLMUserPrefs lives at call-site in SousApp.
 public struct LLMUserPrefs: Equatable, Sendable {
     /// Hard dietary constraints. The LLM must never propose patches that introduce these.
     public let hardAvoids: [String]
+    /// Default number of people to serve. Nil means not set.
+    public let servingSize: Int?
+    /// Kitchen tools and equipment available to the user.
+    public let equipment: [String]
+    /// Free-form instructions applied to every recipe.
+    public let customInstructions: String
 
-    public init(hardAvoids: [String]) {
+    public init(
+        hardAvoids: [String],
+        servingSize: Int? = nil,
+        equipment: [String] = [],
+        customInstructions: String = ""
+    ) {
         self.hardAvoids = hardAvoids
+        self.servingSize = servingSize
+        self.equipment = equipment
+        self.customInstructions = customInstructions
     }
 }
 

@@ -90,6 +90,7 @@
   - `Debug/LLMDebugExport.swift` — Exports LLMDebugBundle for analysis
   - `Persistence/SessionSnapshot.swift` — Codable struct; schemaVersion, recipe, pendingPatchSet, chatMessages[], nextLLMContext, savedAt
   - `Persistence/SessionPersistence.swift` — Static helpers: save (atomic), load (nil on absent/corrupt), clear; all accept optional URL for test injection
+  - `Preferences/UserPreferences.swift` — `UserPreferences` Codable struct (hardAvoids, servingSize, equipment, customInstructions) + `UserPreferencesPersistence` (UserDefaults-backed, injectable for tests)
 
 ---
 
@@ -115,32 +116,36 @@
 
 - **App target tests:** `SousAppTests`
   - Location: `ios/SousApp/SousAppTests/`
-  - Key files: AppStoreTests.swift, UIStateMachineTests.swift, OpenAIClientTests.swift, OpenAIKeyProviderTests.swift, PhotoSendStateTests.swift, PhotoSendCoordinatorTests.swift, ImageAcquisitionStateTests.swift, LLMDebugExportTests.swift, SessionPersistenceTests.swift, MarkdownParserTests.swift
+  - Key files: AppStoreTests.swift, UIStateMachineTests.swift, OpenAIClientTests.swift, OpenAIKeyProviderTests.swift, PhotoSendStateTests.swift, PhotoSendCoordinatorTests.swift, ImageAcquisitionStateTests.swift, LLMDebugExportTests.swift, SessionPersistenceTests.swift, MarkdownParserTests.swift, UserPreferencesTests.swift
   - Run with: `xcodebuild test -scheme SousApp -destination 'platform=iOS Simulator,name=iPhone 17'`
 
 - **UI tests:** `SousAppUITests` — Minimal coverage, launch tests only
 
 ---
 
-## Current Milestone State (Milestone 14)
+## Current Milestone State (Milestone 15)
 
-**Milestone 14 — Tone and Model Behavior (CURRENT)**
+**Milestone 15 — Persistent Preferences (CURRENT)**
 
 What is built and wired up:
+- `UserPreferences` struct (`ios/SousApp/SousApp/Preferences/UserPreferences.swift`) — Codable value type with 4 fields: `hardAvoids: [String]`, `servingSize: Int?`, `equipment: [String]`, `customInstructions: String`
+- `UserPreferencesPersistence` — reads/writes `UserPreferences` to `UserDefaults` as JSON under key `"sous_user_preferences"`; accepts an optional `UserDefaults` for test injection
+- `AppStore.userPreferences: UserPreferences` — `@Published`; loaded from UserDefaults on init (when persistence is enabled); updated via `updatePreferences(_:)` which also saves
+- `AppStore.init` now accepts `preferencesDefaults: UserDefaults? = nil` for test isolation
+- `AppStore.sendWithLLM` and `sendWithMultimodalLLM` both inject `userPreferences.toLLMUserPrefs()` into every LLM request (replaces the hardcoded cilantro placeholder)
+- `LLMUserPrefs` expanded with `servingSize: Int?`, `equipment: [String]`, `customInstructions: String` — all default to nil/empty so existing tests compile unchanged
+- `OpenAILLMOrchestrator.recipeContextMessage` includes serving size, equipment, and custom instructions (if set) in the recipe context block sent to the model
+- `promptVersion` bumped to `"v3"`
+- `PreferencesView` (`ios/SousApp/SousApp/Views/PreferencesView.swift`) — SwiftUI form with 4 sections; comma-separated text fields for hard avoids and equipment; stepper for serving size (toggle to enable/disable); multi-line TextEditor for custom instructions; saves on every change via `store.updatePreferences`
+- `SettingsView` updated: takes `store: AppStore` (was `keyProvider`); adds "Your Kitchen" section with NavigationLink to PreferencesView
+- `ContentView` updated: `SettingsView(store: store)` (was `SettingsView(keyProvider: store.keyProvider)`)
+- 10 new tests in `UserPreferencesTests.swift` covering default values, round-trip save/load, overwrite, clear, `toLLMUserPrefs` conversion, and AppStore integration
+
+Previously completed (Milestone 14 — Tone and Model Behavior — DONE):
 - Both system prompts in `OpenAILLMOrchestrator.systemPrompt(hasCanvas:)` rewritten with warm, opinionated personality
-- No-canvas (exploration) prompt: Sous now speaks like a knowledgeable friend who makes real recommendations, asks 1–2 short questions at most, handles vague/messy input without demanding rephrasing, and holds off on generating a recipe until the user clearly commits
-- Canvas (editing) prompt: Sous now sounds direct and in-the-moment, makes calls rather than listing every option, and asks natural questions only when a specific piece of information is genuinely required
-- `promptVersion` bumped from `"v1"` to `"v2"` to signal the prompt change in debug bundles
-- All patch JSON shapes and patch operation types are unchanged — the architecture is identical
+- `promptVersion` bumped from `"v1"` to `"v2"` (now `"v3"` after M15 prompt additions)
 
-Previously completed (Milestone 13 — Chat Rendering — DONE):
-- `MarkdownTextView` — SwiftUI view that renders a subset of Markdown in assistant chat bubbles; handles headings (`#`, `##`, `###`), bullet lists (`-`, `*`), numbered lists (`1.`), and inline bold/italic (via `AttributedString(markdown:)`)
-- `MarkdownParser` — internal enum with static `parse(_:)` and `numberedListItem(_:)` methods; processes text line-by-line into `MarkdownBlock` values; fully unit-tested
-- `MarkdownBlock` — internal struct with `id: Int` (positional, stable for SwiftUI ForEach), `kind: Kind` (equatable enum), and `content: String`
-- `ChatBubbleView` updated: user messages render as plain `Text` (white on blue, unchanged); assistant messages use `MarkdownTextView` (markdown-aware, primary on gray)
-- 20 new tests in `MarkdownParserTests.swift` covering all block types, edge cases, and helper function
-
-What is next (Milestone 15 — Persistent Preferences):
+What is next (Milestone 16 — Memories):
 - See Milestones.md for upcoming work
 
 ---

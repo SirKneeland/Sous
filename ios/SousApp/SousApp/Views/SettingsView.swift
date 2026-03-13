@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct SettingsView: View {
-    let keyProvider: any OpenAIKeyProviding
+    let store: AppStore
 
     @State private var keyInput = ""
     @State private var keyIsPresent: Bool = false
@@ -10,6 +10,18 @@ struct SettingsView: View {
     var body: some View {
         NavigationView {
             Form {
+                // MARK: Preferences
+                Section {
+                    NavigationLink("Preferences") {
+                        PreferencesView(store: store)
+                    }
+                } header: {
+                    Text("Your Kitchen")
+                } footer: {
+                    Text("Dietary restrictions, default servings, equipment, and custom instructions.")
+                }
+
+                // MARK: API Key
                 Section {
                     HStack {
                         Text("Status")
@@ -25,9 +37,9 @@ struct SettingsView: View {
 
                     HStack {
                         Button("Save Key") {
-                            keyProvider.setKey(keyInput)
+                            store.keyProvider.setKey(keyInput)
                             keyInput = ""
-                            keyIsPresent = keyProvider.currentKey() != nil
+                            keyIsPresent = store.keyProvider.currentKey() != nil
                         }
                         .buttonStyle(.borderedProminent)
                         .disabled(keyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -36,8 +48,8 @@ struct SettingsView: View {
 
                         if keyIsPresent {
                             Button("Clear Key", role: .destructive) {
-                                keyProvider.clearKey()
-                                keyIsPresent = keyProvider.currentKey() != nil
+                                store.keyProvider.clearKey()
+                                keyIsPresent = store.keyProvider.currentKey() != nil
                             }
                         }
                     }
@@ -55,7 +67,7 @@ struct SettingsView: View {
                 }
             }
             .onAppear {
-                keyIsPresent = keyProvider.currentKey() != nil
+                keyIsPresent = store.keyProvider.currentKey() != nil
             }
         }
     }

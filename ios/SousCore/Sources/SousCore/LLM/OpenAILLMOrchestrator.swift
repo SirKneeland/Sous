@@ -24,7 +24,7 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
     public let model: String
     public let timeout: TimeInterval
 
-    private static let promptVersion = "v2"
+    private static let promptVersion = "v3"
     private static let maxCalls = 3
 
     public init(client: LLMClient, model: String, timeout: TimeInterval = 30) {
@@ -646,7 +646,8 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             .map { #"{"id":"\#($0.id.uuidString)","text":"\#($0.text)","status":"\#($0.status == .done ? "done" : "todo")"}"# }
             .joined(separator: ",")
         let doneIds = r.steps.filter { $0.status == .done }.map { $0.id.uuidString }.joined(separator: ", ")
-        let avoids = request.userPrefs.hardAvoids.isEmpty ? "none" : request.userPrefs.hardAvoids.joined(separator: ", ")
+        let prefs = request.userPrefs
+        let avoids = prefs.hardAvoids.isEmpty ? "none" : prefs.hardAvoids.joined(separator: ", ")
 
         var lines = [
             "--- RECIPE CONTEXT ---",
@@ -656,6 +657,16 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             "done step IDs (immutable): [\(doneIds)]",
             "hardAvoids: \(avoids)"
         ]
+
+        if let serving = prefs.servingSize {
+            lines.append("defaultServings: \(serving) people")
+        }
+        if !prefs.equipment.isEmpty {
+            lines.append("equipment: \(prefs.equipment.joined(separator: ", "))")
+        }
+        if !prefs.customInstructions.isEmpty {
+            lines.append("customInstructions: \(prefs.customInstructions)")
+        }
 
         if let decision = request.nextLLMContext?.lastPatchDecision {
             lines.append("last patch decision: id=\(decision.patchSetId) decision=\(decision.decision.rawValue)")

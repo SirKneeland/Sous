@@ -43,7 +43,7 @@ struct ContentView: View {
             ChatSheetView(store: store)
         }
         .sheet(isPresented: $showSettings) {
-            SettingsView(keyProvider: store.keyProvider)
+            SettingsView(store: store)
         }
         .sheet(isPresented: $store.showRecentRecipes) {
             RecentRecipesView(store: store, onDismiss: { store.showRecentRecipes = false })

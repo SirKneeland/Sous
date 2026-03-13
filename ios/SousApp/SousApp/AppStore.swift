@@ -46,7 +46,12 @@ final class AppStore: ObservableObject {
     /// Nil means use SessionPersistence.sessionsDirectory (Documents).
     private let sessionsDirectory: URL?
 
+    /// Override in tests to isolate UserDefaults reads/writes.
+    /// Nil means use UserDefaults.standard.
+    private let preferencesDefaults: UserDefaults?
+
     @Published var showRecentRecipes: Bool = false
+    @Published var userPreferences: UserPreferences = UserPreferences()
 
     private let maxMessages = 200
     private let liveLLMModel = "gpt-4o-mini"
@@ -92,11 +97,17 @@ final class AppStore: ObservableObject {
 
     init(testOrchestrator: (any LLMOrchestrator)? = nil,
          sessionsDirectory: URL? = nil,
+         preferencesDefaults: UserDefaults? = nil,
          keyProvider: any OpenAIKeyProviding = KeychainOpenAIKeyProvider()) {
         self.testOrchestrator = testOrchestrator
         self.keyProvider = keyProvider
         self.sessionsDirectory = sessionsDirectory
+        self.preferencesDefaults = preferencesDefaults
         isPersistenceEnabled = (testOrchestrator == nil)
+
+        if isPersistenceEnabled {
+            userPreferences = UserPreferencesPersistence.load(from: preferencesDefaults ?? .standard)
+        }
 
         if testOrchestrator == nil {
             // Try loading the most recent per-recipe session.
@@ -177,6 +188,15 @@ final class AppStore: ObservableObject {
 
     deinit {
         llmTask?.cancel()
+    }
+
+    // MARK: - Preferences
+
+    /// Updates in-memory preferences and persists them to UserDefaults.
+    func updatePreferences(_ prefs: UserPreferences) {
+        userPreferences = prefs
+        guard isPersistenceEnabled else { return }
+        UserPreferencesPersistence.save(prefs, to: preferencesDefaults ?? .standard)
     }
 
     // MARK: - New Session
@@ -304,8 +324,7 @@ final class AppStore: ObservableObject {
             hasCanvas: hasCanvas,
             userMessage: LLMContextComposer.composeUserMessage(userText: userText, hidden: hidden),
             recipeSnapshotForPrompt: recipe,
-            // TODO: wire real user prefs (Prompt 8)
-            userPrefs: LLMUserPrefs(hardAvoids: ["cilantro"]),
+            userPrefs: userPreferences.toLLMUserPrefs(),
             nextLLMContext: nextLLMContext,
             conversationHistory: buildConversationHistory()
         )
