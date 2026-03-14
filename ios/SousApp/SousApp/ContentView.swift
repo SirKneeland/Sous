@@ -7,10 +7,11 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
+            Color.sousBackground.ignoresSafeArea()
+
             if case .patchReview(let recipe, let patchSet, let validation, _) = store.uiState {
                 PatchReviewView(recipe: recipe, patchSet: patchSet, validation: validation, store: store)
             } else if !store.hasCanvas {
-                // Blank/exploration state: full-screen chat with no recipe canvas behind it.
                 ChatSheetView(
                     store: store,
                     isFullscreen: true,

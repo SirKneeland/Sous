@@ -78,10 +78,10 @@ enum MarkdownParser {
 /// Supports: headings, bullet lists, numbered lists, bold (**text**), and italic (*text*).
 struct MarkdownTextView: View {
     let text: String
-    var textColor: Color = .primary
+    var textColor: Color = .sousText
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 4) {
             ForEach(MarkdownParser.parse(text)) { block in
                 blockView(for: block)
             }
@@ -99,29 +99,28 @@ struct MarkdownTextView: View {
                 .padding(.top, level == 1 ? 6 : 2)
 
         case .bulletItem:
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("•")
-                    .font(.body)
-                    .foregroundStyle(textColor)
+                    .font(.sousBody)
+                    .foregroundStyle(Color.sousTerracotta)
                 inlineText(block.content)
-                    .font(.body)
+                    .font(.sousBody)
                     .foregroundStyle(textColor)
             }
 
         case .numberedItem(let number):
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text("\(number).")
-                    .font(.body)
-                    .monospacedDigit()
-                    .foregroundStyle(textColor)
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(String(format: "%02d.", number))
+                    .font(.sousBody)
+                    .foregroundStyle(Color.sousTerracotta)
                 inlineText(block.content)
-                    .font(.body)
+                    .font(.sousBody)
                     .foregroundStyle(textColor)
             }
 
         case .paragraph:
             inlineText(block.content)
-                .font(.body)
+                .font(.sousBody)
                 .foregroundStyle(textColor)
 
         case .empty:
@@ -130,9 +129,6 @@ struct MarkdownTextView: View {
     }
 
     /// Renders content with inline Markdown (bold, italic) via AttributedString.
-    /// Block-level elements (headings, lists) have already been stripped by the parser,
-    /// so the remaining content is safe to pass through full Markdown parsing.
-    /// Falls back to plain Text if parsing fails.
     private func inlineText(_ content: String) -> Text {
         if let attributed = try? AttributedString(markdown: content) {
             return Text(attributed)
@@ -142,9 +138,9 @@ struct MarkdownTextView: View {
 
     private func headingFont(_ level: Int) -> Font {
         switch level {
-        case 1: return .title3.bold()
-        case 2: return .headline
-        default: return .subheadline.bold()
+        case 1: return .system(size: 17, weight: .bold, design: .monospaced)
+        case 2: return .system(size: 15, weight: .bold, design: .monospaced)
+        default: return .system(size: 14, weight: .semibold, design: .monospaced)
         }
     }
 }

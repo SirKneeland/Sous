@@ -12,15 +12,15 @@ Statuses:
 
 ## Project State
 
-**Current milestone:** Milestone 16 — Memories
+**Current milestone:** Milestone 17 — Design
 
 **Recently completed:**
+- Milestone 16 — Memories
 - Milestone 15 — Persistent Preferences
 - Milestone 14 — Tone and Model Behavior
-- Milestone 13 — Chat Rendering
 
 **Next milestone:**
-- Milestone 17 — Design
+- Milestone 18 — Post-Cook Ratings
 
 This section exists to make the active project phase immediately visible to humans and AI agents without scanning the entire roadmap.
 
@@ -328,7 +328,7 @@ Explicit non-goals:
 ---
 
 ## Milestone 17 — Design
-**Status:** PLANNED
+**Status:** CURRENT
 
 **Goal:** Make Sous look and feel like a product someone would want to use, not a functional prototype.
 

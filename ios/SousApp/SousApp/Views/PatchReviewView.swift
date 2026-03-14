@@ -11,223 +11,249 @@ struct PatchReviewView: View {
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    // Canonical header — identical to RecipeCanvasView
-                    Text(recipe.title)
-                        .font(.title).bold()
-                    Text("Version: \(recipe.version)")
-                        .font(.caption).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 0) {
 
-                    Divider()
-
-                    if !ingredientRows.isEmpty {
-                        sectionView(title: "Ingredients", rows: ingredientRows, isSteps: false)
+                    // MARK: Header
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(recipe.title.uppercased())
+                            .font(.sousTitle)
+                            .foregroundStyle(Color.sousText)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text("REV. \(recipe.version) → \(recipe.version + 1)")
+                            .font(.sousCaption)
+                            .foregroundStyle(Color.sousMuted)
                     }
-                    if !stepRows.isEmpty {
-                        sectionView(title: "Steps", rows: stepRows, isSteps: true)
-                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 20)
+                    .padding(.bottom, 16)
 
-                    Divider()
+                    SousRule()
 
-                    switch validation {
-                    case .valid:
-                        Text("✓ Valid").foregroundStyle(.green)
-                    case .invalid(let errors):
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("✗ Invalid").foregroundStyle(.red)
-                            ForEach(Array(errors.enumerated()), id: \.offset) { _, error in
-                                Text(errorDescription(error))
-                                    .font(.caption)
-                                    .foregroundStyle(.red)
+                    VStack(alignment: .leading, spacing: 0) {
+
+                        // MARK: Changes
+                        let changes = allChangedRows
+                        if !changes.isEmpty {
+                            SousSectionLabel(title: "Changes")
+                                .padding(.top, 20)
+                                .padding(.bottom, 12)
+
+                            ForEach(changes) { row in
+                                changeRowView(row)
+                                SousRule()
                             }
                         }
-                    }
+
+                        // MARK: Step Status
+                        SousSectionLabel(title: "Step Status")
+                            .padding(.top, changes.isEmpty ? 20 : 24)
+                            .padding(.bottom, 12)
+
+                        ForEach(recipe.steps, id: \.id) { step in
+                            HStack(spacing: 12) {
+                                statusBadge(for: step)
+                                Text(step.text)
+                                    .font(.sousBody)
+                                    .foregroundStyle(step.status == .done ? Color.sousMuted : Color.sousText)
+                                    .strikethrough(step.status == .done, color: Color.sousMuted)
+                                    .lineLimit(2)
+                                Spacer()
+                            }
+                            .padding(.vertical, 10)
+                            SousRule()
+                        }
 
 #if DEBUG
-                    DisclosureGroup("Debug") {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("patches: \(patchSet.patches.count)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-
-                            ForEach(Array(patchSet.patches.enumerated()), id: \.offset) { _, patch in
-                                Text(String(describing: patch))
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                                    .textSelection(.enabled)
+                        DisclosureGroup("Debug") {
+                            VStack(alignment: .leading, spacing: 6) {
+                                switch validation {
+                                case .valid:
+                                    Text("✓ VALID")
+                                        .font(.sousCaption)
+                                        .foregroundStyle(Color.sousGreen)
+                                case .invalid(let errors):
+                                    Text("✗ INVALID")
+                                        .font(.sousCaption)
+                                        .foregroundStyle(Color.sousTerracotta)
+                                    ForEach(Array(errors.enumerated()), id: \.offset) { _, error in
+                                        Text(errorDescription(error))
+                                            .font(.sousCaption)
+                                            .foregroundStyle(Color.sousTerracotta)
+                                    }
+                                }
+                                Divider()
+                                Text("patches: \(patchSet.patches.count)")
+                                    .font(.sousCaption)
+                                    .foregroundStyle(Color.sousMuted)
+                                ForEach(Array(patchSet.patches.enumerated()), id: \.offset) { _, patch in
+                                    Text(String(describing: patch))
+                                        .font(.sousCaption)
+                                        .foregroundStyle(Color.sousMuted)
+                                        .textSelection(.enabled)
+                                }
                             }
+                            .padding(.top, 4)
                         }
-                        .padding(.top, 4)
-                    }
+                        .font(.sousCaption)
+                        .foregroundStyle(Color.sousMuted)
+                        .padding(.top, 16)
 #endif
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 80)
                 }
-                .padding()
             }
+            .background(Color.sousBackground)
 
-            Divider()
-
-            // Pinned action bar — always visible regardless of recipe length
-            HStack {
-                Button("Reject") {
+            // MARK: Action Bar
+            SousRule()
+            HStack(spacing: 0) {
+                Button {
                     store.send(.rejectPatch(userText: ""))
+                } label: {
+                    Text("REJECT")
+                        .font(.sousButton)
+                        .foregroundStyle(Color.sousTerracotta)
+                        .frame(maxWidth: .infinity, minHeight: 56)
+                        .background(Color.sousBackground)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.plain)
 
-                Spacer()
+                Rectangle()
+                    .fill(Color.sousSeparator)
+                    .frame(width: 1, height: 56)
 
-                Button("Accept") {
+                Button {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     withAnimation(.easeInOut(duration: 0.15)) {
                         store.send(.acceptPatch)
                     }
+                } label: {
+                    Text("ACCEPT")
+                        .font(.sousButton)
+                        .foregroundStyle(Color.sousBackground)
+                        .frame(maxWidth: .infinity, minHeight: 56)
+                        .background(isValid ? Color.sousText : Color.sousMuted)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.plain)
                 .disabled(!isValid)
             }
-            .padding()
+            .background(Color.sousBackground)
         }
     }
 
-    // MARK: - Section rendering
+    // MARK: - Change Row View
 
-    // Group is layout-transparent: its children become direct VStack children,
-    // inheriting the parent's spacing (12pt) — matching RecipeCanvasView exactly.
     @ViewBuilder
-    private func sectionView(title: String, rows: [DiffRow], isSteps: Bool) -> some View {
-        Group {
-            Text(title)
-                .font(.headline)
-            ForEach(rows) { row in
-                if isSteps {
-                    stepRowView(row)
-                } else {
-                    ingredientRowView(row)
-                }
-            }
-        }
-    }
-
-    // Ingredient rows — exact RecipeCanvasView markup for .unchanged; diff styling layered on top
-    @ViewBuilder
-    private func ingredientRowView(_ row: DiffRow) -> some View {
+    private func changeRowView(_ row: DiffRow) -> some View {
         switch row {
-        case .unchanged(_, let text):
-            Text("• \(text)")
-
         case .added(_, let text):
-            Text("• \(text)")
-                .foregroundStyle(.green)
-
-        case .updated(_, let oldText, let newText):
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text("•")
-                Text(oldText)
-                    .strikethrough()
-                    .foregroundStyle(.secondary)
-                Text("→")
-                    .foregroundStyle(.secondary)
-                Text(newText)
-                    .foregroundStyle(.blue)
+            HStack(spacing: 0) {
+                Rectangle().fill(Color.sousGreen).frame(width: 2)
+                Text(text)
+                    .font(.sousBody)
+                    .foregroundStyle(Color.sousGreen)
+                    .padding(.leading, 12)
+                    .padding(.vertical, 10)
+                Spacer()
             }
 
         case .removed(_, let text):
-            Text("• \(text)")
-                .strikethrough()
-                .foregroundStyle(.red)
+            HStack(spacing: 0) {
+                Rectangle().fill(Color.sousTerracotta).frame(width: 2)
+                Text(text)
+                    .font(.sousBody)
+                    .foregroundStyle(Color.sousTerracotta)
+                    .strikethrough(true, color: Color.sousTerracotta)
+                    .padding(.leading, 12)
+                    .padding(.vertical, 10)
+                Spacer()
+            }
+
+        case .updated(_, let oldText, let newText):
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 0) {
+                    Rectangle().fill(Color.sousTerracotta).frame(width: 2)
+                    Text(oldText)
+                        .font(.sousBody)
+                        .foregroundStyle(Color.sousTerracotta)
+                        .strikethrough(true, color: Color.sousTerracotta)
+                        .padding(.leading, 12)
+                        .padding(.vertical, 8)
+                    Spacer()
+                }
+                HStack(spacing: 0) {
+                    Rectangle().fill(Color.sousGreen).frame(width: 2)
+                    Text(newText)
+                        .font(.sousBody)
+                        .foregroundStyle(Color.sousGreen)
+                        .padding(.leading, 12)
+                        .padding(.vertical, 8)
+                    Spacer()
+                }
+            }
 
         case .doneImmutableViolation(_, let originalText, let attemptedText):
-            VStack(alignment: .leading, spacing: 4) {
-                Text("• \(originalText)")
-                Text("• \(attemptedText)")
-                    .foregroundStyle(.red)
-                Text("Immutable (Done step cannot be edited)")
-                    .font(.caption2)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.red)
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 0) {
+                    Rectangle().fill(Color.sousTerracotta).frame(width: 2)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(originalText)
+                            .font(.sousBody)
+                            .foregroundStyle(Color.sousMuted)
+                        Text(attemptedText)
+                            .font(.sousBody)
+                            .foregroundStyle(Color.sousTerracotta)
+                        Text("IMMUTABLE — DONE STEP CANNOT BE EDITED")
+                            .font(.sousCaption)
+                            .foregroundStyle(Color.sousTerracotta)
+                            .kerning(0.5)
+                    }
+                    .padding(.leading, 12)
+                    .padding(.vertical, 8)
+                    Spacer()
+                }
             }
-            .padding(8)
-            .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .stroke(Color.red.opacity(0.6), lineWidth: 1)
-            )
+
+        case .unchanged:
+            EmptyView()
         }
     }
 
-    // Step rows — exact RecipeCanvasView markup for .unchanged; diff styling layered on top
+    // MARK: - Status Badge
+
     @ViewBuilder
-    private func stepRowView(_ row: DiffRow) -> some View {
-        switch row {
-        case .unchanged(let id, let text):
-            HStack(alignment: .top, spacing: 8) {
-                Text(isStepDone(id) ? "[done]" : "[todo]")
-                    .font(.caption).monospaced()
-                    .foregroundStyle(isStepDone(id) ? Color.secondary : Color.primary)
-                Text(text)
-                    .strikethrough(isStepDone(id))
-            }
-
-        case .added(_, let text):
-            HStack(alignment: .top, spacing: 8) {
-                Text("[todo]")
-                    .font(.caption).monospaced()
-                    .foregroundStyle(Color.primary)
-                Text(text)
-                    .foregroundStyle(.green)
-            }
-
-        case .updated(let id, let oldText, let newText):
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(isStepDone(id) ? "[done]" : "[todo]")
-                    .font(.caption).monospaced()
-                    .foregroundStyle(isStepDone(id) ? Color.secondary : Color.primary)
-                Text(oldText)
-                    .strikethrough()
-                    .foregroundStyle(.secondary)
-                Text("→")
-                    .foregroundStyle(.secondary)
-                Text(newText)
-                    .foregroundStyle(.blue)
-            }
-
-        case .removed(let id, let text):
-            HStack(alignment: .top, spacing: 8) {
-                Text(isStepDone(id) ? "[done]" : "[todo]")
-                    .font(.caption).monospaced()
-                    .foregroundStyle(Color.secondary)
-                Text(text)
-                    .strikethrough()
-                    .foregroundStyle(.red)
-            }
-
-        case .doneImmutableViolation(_, let originalText, let attemptedText):
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(alignment: .top, spacing: 8) {
-                    Text("[done]")
-                        .font(.caption).monospaced()
-                        .foregroundStyle(Color.secondary)
-                    Text(originalText)
-                }
-                HStack(alignment: .top, spacing: 8) {
-                    Text("[done]")
-                        .font(.caption).monospaced()
-                        .foregroundStyle(Color.secondary)
-                    Text(attemptedText)
-                        .foregroundStyle(.red)
-                }
-                Text("Immutable (Done step cannot be edited)")
-                    .font(.caption2)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.red)
-            }
-            .padding(8)
-            .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .stroke(Color.red.opacity(0.6), lineWidth: 1)
-            )
+    private func statusBadge(for step: Step) -> some View {
+        if step.status == .done {
+            Text("DONE")
+                .font(.sousCaption)
+                .foregroundStyle(Color.sousBackground)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(Color.sousText)
+        } else {
+            Text("TODO")
+                .font(.sousCaption)
+                .foregroundStyle(Color.sousTerracotta)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .overlay(Rectangle().stroke(Color.sousTerracotta, lineWidth: 1))
         }
     }
 
-    // MARK: - Diff builders
+    // MARK: - Diff Builders
+
+    private var allChangedRows: [DiffRow] {
+        let ingredientChanges = ingredientRows.filter {
+            if case .unchanged = $0 { return false }
+            return true
+        }
+        let stepChanges = stepRows.filter {
+            if case .unchanged = $0 { return false }
+            return true
+        }
+        return ingredientChanges + stepChanges
+    }
 
     private var ingredientRows: [DiffRow] {
         var rows: [DiffRow] = recipe.ingredients.map { .unchanged(id: $0.id, text: $0.text) }
@@ -260,7 +286,6 @@ struct PatchReviewView: View {
     }
 
     private var stepRows: [DiffRow] {
-        // Pass 1: build structural diff rows
         var rows: [DiffRow] = recipe.steps.map { .unchanged(id: $0.id, text: $0.text) }
 
         for patch in patchSet.patches {
@@ -287,7 +312,6 @@ struct PatchReviewView: View {
             }
         }
 
-        // Pass 2: overlay validation errors — promote .updated → .doneImmutableViolation
         let immutableIds: Set<UUID> = {
             guard case .invalid(let errors) = validation else { return [] }
             return Set(errors.compactMap {
@@ -309,10 +333,6 @@ struct PatchReviewView: View {
     }
 
     // MARK: - Helpers
-
-    private func isStepDone(_ id: UUID) -> Bool {
-        recipe.steps.first(where: { $0.id == id })?.status == .done
-    }
 
     private var isValid: Bool {
         if case .valid = validation { return true }

@@ -10,95 +10,146 @@ struct RecipeCanvasView: View {
     var onOpenRecents: () -> Void = {}
     var llmDebugStatus: String? = nil
 
+    @State private var checkedIngredients: Set<UUID> = []
+
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(recipe.title)
-                            .font(.title).bold()
-                        Text("Version: \(recipe.version)")
-                            .font(.caption).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 0) {
+
+                // MARK: Header
+                HStack(alignment: .top, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(recipe.title.uppercased())
+                            .font(.sousTitle)
+                            .foregroundStyle(Color.sousText)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text("REV. \(recipe.version)")
+                            .font(.sousCaption)
+                            .foregroundStyle(Color.sousMuted)
                     }
                     Spacer()
-                    Button { onStartNew() } label: {
-                        Image(systemName: "plus")
-                            .font(.title3)
-                            .foregroundStyle(.secondary)
-                    }
-                    Button { onOpenRecents() } label: {
-                        Image(systemName: "clock")
-                            .font(.title3)
-                            .foregroundStyle(.secondary)
-                    }
-                    Button { onOpenSettings() } label: {
-                        Image(systemName: "gearshape")
-                            .font(.title3)
-                            .foregroundStyle(.secondary)
+                    HStack(spacing: 8) {
+                        SousIconButton(systemName: "plus") { onStartNew() }
+                        SousIconButton(systemName: "clock") { onOpenRecents() }
+                        SousIconButton(systemName: "gearshape") { onOpenSettings() }
                     }
                 }
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
+                .padding(.bottom, 16)
 
-                Divider()
+                SousRule()
 
-                Text("Ingredients").font(.headline)
-                ForEach(recipe.ingredients, id: \.id) { ingredient in
-                    Text("• \(ingredient.text)")
-                }
+                VStack(alignment: .leading, spacing: 0) {
 
-                Text("Steps").font(.headline)
-                ForEach(recipe.steps, id: \.id) { step in
-                    Button {
-                        if step.status == .todo { onMarkStepDone(step.id) }
-                    } label: {
-                        HStack(alignment: .top, spacing: 10) {
-                            Image(systemName: step.status == .done
-                                  ? "checkmark.circle.fill"
-                                  : "circle")
-                                .foregroundStyle(step.status == .done ? .secondary : .primary)
-                            Text(step.text)
-                                .strikethrough(step.status == .done)
-                                .foregroundStyle(step.status == .done ? .secondary : .primary)
-                                .multilineTextAlignment(.leading)
-                            Spacer()
+                    // MARK: Ingredients
+                    SousSectionLabel(title: "Ingredients")
+                        .padding(.top, 20)
+                        .padding(.bottom, 12)
+
+                    ForEach(recipe.ingredients, id: \.id) { ingredient in
+                        let isChecked = checkedIngredients.contains(ingredient.id)
+                        Button {
+                            if isChecked {
+                                checkedIngredients.remove(ingredient.id)
+                            } else {
+                                checkedIngredients.insert(ingredient.id)
+                            }
+                        } label: {
+                            HStack(alignment: .top, spacing: 12) {
+                                SousCheckbox(isChecked: isChecked)
+                                    .padding(.top, 2)
+                                Text(ingredient.text)
+                                    .font(.sousBody)
+                                    .foregroundStyle(isChecked ? Color.sousMuted : Color.sousText)
+                                    .strikethrough(isChecked, color: Color.sousMuted)
+                                    .multilineTextAlignment(.leading)
+                                Spacer()
+                            }
+                            .padding(.vertical, 10)
+                        }
+                        .buttonStyle(.plain)
+                        SousRule()
+                    }
+
+                    // MARK: Procedure
+                    SousSectionLabel(title: "Procedure")
+                        .padding(.top, 24)
+                        .padding(.bottom, 12)
+
+                    ForEach(recipe.steps, id: \.id) { step in
+                        let isDone = step.status == .done
+                        Button {
+                            if step.status == .todo { onMarkStepDone(step.id) }
+                        } label: {
+                            HStack(alignment: .top, spacing: 12) {
+                                SousCheckbox(isChecked: isDone)
+                                    .padding(.top, 2)
+                                Text(step.text)
+                                    .font(.sousBody)
+                                    .foregroundStyle(isDone ? Color.sousMuted : Color.sousText)
+                                    .strikethrough(isDone, color: Color.sousMuted)
+                                    .multilineTextAlignment(.leading)
+                                Spacer()
+                            }
+                            .padding(.vertical, 10)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isDone)
+                        SousRule()
+                    }
+
+                    // MARK: Notes
+                    if !recipe.notes.isEmpty {
+                        SousSectionLabel(title: "Notes")
+                            .padding(.top, 24)
+                            .padding(.bottom, 12)
+                        ForEach(recipe.notes, id: \.self) { note in
+                            Text("— \(note)")
+                                .font(.sousBody)
+                                .foregroundStyle(Color.sousText)
+                                .padding(.vertical, 4)
                         }
                     }
-                    .buttonStyle(.plain)
-                    .disabled(step.status == .done)
                 }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 100)
 
-                if !recipe.notes.isEmpty {
-                    Text("Notes").font(.headline)
-                    ForEach(recipe.notes, id: \.self) { note in
-                        Text("– \(note)")
-                    }
-                }
-            }
-            .padding()
-            .padding(.bottom, 72)
-        }
-        .safeAreaInset(edge: .bottom) {
-            VStack(spacing: 0) {
 #if DEBUG
                 if let status = llmDebugStatus {
                     Text(status)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .font(.sousCaption)
+                        .foregroundStyle(Color.sousMuted)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal)
-                        .padding(.top, 6)
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 8)
                 }
 #endif
+            }
+        }
+        .background(Color.sousBackground)
+        .safeAreaInset(edge: .bottom) {
+            VStack(spacing: 0) {
+                SousRule()
                 Button {
                     onOpenChat()
                 } label: {
-                    Label("Open Chat", systemImage: "bubble.left.and.bubble.right")
-                        .frame(maxWidth: .infinity)
+                    HStack(spacing: 8) {
+                        Image(systemName: "message")
+                            .font(.system(size: 14, weight: .semibold))
+                        Text("OPEN ASSISTANT")
+                            .font(.sousButton)
+                    }
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 52)
+                    .background(Color.sousTerracotta)
                 }
-                .buttonStyle(.borderedProminent)
-                .padding(.horizontal)
+                .buttonStyle(.plain)
+                .padding(.horizontal, 20)
                 .padding(.vertical, 12)
+                .background(Color.sousBackground)
             }
-            .background(.regularMaterial)
         }
     }
 }

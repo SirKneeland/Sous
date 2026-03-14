@@ -10,63 +10,107 @@ struct SettingsView: View {
     var body: some View {
         NavigationView {
             Form {
-                // MARK: Preferences
+                // MARK: Your Kitchen
                 Section {
-                    NavigationLink("Preferences") {
+                    NavigationLink {
                         PreferencesView(store: store)
+                    } label: {
+                        Text("Preferences")
+                            .font(.sousBody)
+                            .foregroundStyle(Color.sousText)
                     }
-                    NavigationLink("Memories") {
+                    NavigationLink {
                         MemoriesView(store: store)
+                    } label: {
+                        Text("Memories")
+                            .font(.sousBody)
+                            .foregroundStyle(Color.sousText)
                     }
                 } header: {
-                    Text("Your Kitchen")
+                    Text("YOUR KITCHEN")
+                        .font(.sousSectionHeader)
+                        .foregroundStyle(Color.sousTerracotta)
+                        .kerning(1.2)
+                        .textCase(nil)
                 } footer: {
                     Text("Dietary restrictions, default servings, equipment, custom instructions, and saved memories.")
+                        .font(.sousCaption)
+                        .foregroundStyle(Color.sousMuted)
                 }
+                .listRowBackground(Color.sousBackground)
+                .listRowSeparatorTint(Color.sousSeparator)
 
                 // MARK: API Key
                 Section {
                     HStack {
                         Text("Status")
+                            .font(.sousBody)
+                            .foregroundStyle(Color.sousText)
                         Spacer()
-                        Text(keyIsPresent ? "Key saved" : "Not configured")
-                            .foregroundStyle(keyIsPresent ? .green : .orange)
+                        Text(keyIsPresent ? "KEY SAVED" : "NOT CONFIGURED")
+                            .font(.sousCaption)
+                            .foregroundStyle(keyIsPresent ? Color.sousGreen : Color.sousTerracotta)
+                            .kerning(0.5)
                     }
 
                     SecureField("Paste API key (sk-…)", text: $keyInput)
+                        .font(.sousBody)
+                        .foregroundStyle(Color.sousText)
                         .textContentType(.password)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
 
                     HStack {
-                        Button("Save Key") {
+                        Button("SAVE KEY") {
                             store.keyProvider.setKey(keyInput)
                             keyInput = ""
                             keyIsPresent = store.keyProvider.currentKey() != nil
                         }
-                        .buttonStyle(.borderedProminent)
+                        .font(.sousButton)
+                        .foregroundStyle(Color.sousBackground)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(keyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                    ? Color.sousMuted
+                                    : Color.sousText)
+                        .buttonStyle(.plain)
                         .disabled(keyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
                         Spacer()
 
                         if keyIsPresent {
-                            Button("Clear Key", role: .destructive) {
+                            Button("CLEAR KEY") {
                                 store.keyProvider.clearKey()
                                 keyIsPresent = store.keyProvider.currentKey() != nil
                             }
+                            .font(.sousButton)
+                            .foregroundStyle(Color.sousTerracotta)
+                            .buttonStyle(.plain)
                         }
                     }
                 } header: {
-                    Text("OpenAI API Key")
+                    Text("OPENAI API KEY")
+                        .font(.sousSectionHeader)
+                        .foregroundStyle(Color.sousTerracotta)
+                        .kerning(1.2)
+                        .textCase(nil)
                 } footer: {
                     Text("Your key is stored in the device Keychain and never leaves your device.")
+                        .font(.sousCaption)
+                        .foregroundStyle(Color.sousMuted)
                 }
+                .listRowBackground(Color.sousBackground)
+                .listRowSeparatorTint(Color.sousSeparator)
             }
-            .navigationTitle("Settings")
+            .scrollContentBackground(.hidden)
+            .background(Color.sousBackground)
+            .navigationTitle("SETTINGS")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+                    Button("DONE") { dismiss() }
+                        .font(.sousButton)
+                        .foregroundStyle(Color.sousText)
                 }
             }
             .onAppear {

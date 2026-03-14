@@ -5,7 +5,6 @@ import SwiftUI
 struct PreferencesView: View {
     @ObservedObject var store: AppStore
 
-    /// Local text state for smooth typing. Synced from store on appear; saved to store on change.
     @State private var hardAvoidsText: String = ""
     @State private var equipmentText: String = ""
     @State private var customInstructionsText: String = ""
@@ -19,7 +18,6 @@ struct PreferencesView: View {
             .filter { !$0.isEmpty }
     }
 
-    /// A Binding that reads from and writes to a specific Int? field in store.userPreferences.
     private func servingSizeBinding() -> Binding<Int> {
         Binding(
             get: { store.userPreferences.servingSize ?? 2 },
@@ -39,18 +37,30 @@ struct PreferencesView: View {
                     "e.g. cilantro, shellfish, nuts",
                     text: $hardAvoidsText
                 )
+                .font(.sousBody)
+                .foregroundStyle(Color.sousText)
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
+                .padding(8)
+                .overlay(Rectangle().stroke(Color.sousText, lineWidth: 1))
                 .onChange(of: hardAvoidsText) { _, text in
                     var prefs = store.userPreferences
                     prefs.hardAvoids = parseList(text)
                     store.updatePreferences(prefs)
                 }
             } header: {
-                Text("Ingredients to Always Avoid")
+                Text("INGREDIENTS TO ALWAYS AVOID")
+                    .font(.sousSectionHeader)
+                    .foregroundStyle(Color.sousTerracotta)
+                    .kerning(1.2)
+                    .textCase(nil)
             } footer: {
                 Text("Separate items with commas. Sous will never suggest these.")
+                    .font(.sousCaption)
+                    .foregroundStyle(Color.sousMuted)
             }
+            .listRowBackground(Color.sousBackground)
+            .listRowSeparatorTint(Color.sousSeparator)
 
             // MARK: Serving Size
             Section {
@@ -62,6 +72,9 @@ struct PreferencesView: View {
                         store.updatePreferences(prefs)
                     }
                 ))
+                .font(.sousBody)
+                .foregroundStyle(Color.sousText)
+                .tint(Color.sousTerracotta)
 
                 if let size = store.userPreferences.servingSize {
                     Stepper(
@@ -69,12 +82,22 @@ struct PreferencesView: View {
                         value: servingSizeBinding(),
                         in: 1...20
                     )
+                    .font(.sousBody)
+                    .foregroundStyle(Color.sousText)
                 }
             } header: {
-                Text("Default Servings")
+                Text("DEFAULT SERVINGS")
+                    .font(.sousSectionHeader)
+                    .foregroundStyle(Color.sousTerracotta)
+                    .kerning(1.2)
+                    .textCase(nil)
             } footer: {
                 Text("Sous will scale new recipes to this size unless you say otherwise.")
+                    .font(.sousCaption)
+                    .foregroundStyle(Color.sousMuted)
             }
+            .listRowBackground(Color.sousBackground)
+            .listRowSeparatorTint(Color.sousSeparator)
 
             // MARK: Equipment
             Section {
@@ -82,40 +105,65 @@ struct PreferencesView: View {
                     "e.g. cast iron, air fryer, stand mixer",
                     text: $equipmentText
                 )
+                .font(.sousBody)
+                .foregroundStyle(Color.sousText)
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
+                .padding(8)
+                .overlay(Rectangle().stroke(Color.sousText, lineWidth: 1))
                 .onChange(of: equipmentText) { _, text in
                     var prefs = store.userPreferences
                     prefs.equipment = parseList(text)
                     store.updatePreferences(prefs)
                 }
             } header: {
-                Text("Kitchen Equipment")
+                Text("KITCHEN EQUIPMENT")
+                    .font(.sousSectionHeader)
+                    .foregroundStyle(Color.sousTerracotta)
+                    .kerning(1.2)
+                    .textCase(nil)
             } footer: {
                 Text("Separate items with commas. Sous will suggest techniques that match what you have.")
+                    .font(.sousCaption)
+                    .foregroundStyle(Color.sousMuted)
             }
+            .listRowBackground(Color.sousBackground)
+            .listRowSeparatorTint(Color.sousSeparator)
 
             // MARK: Custom Instructions
             Section {
                 TextEditor(text: $customInstructionsText)
+                    .font(.sousBody)
+                    .foregroundStyle(Color.sousText)
+                    .scrollContentBackground(.hidden)
                     .frame(minHeight: 80)
                     .autocorrectionDisabled()
+                    .padding(4)
+                    .overlay(Rectangle().stroke(Color.sousText, lineWidth: 1))
                     .onChange(of: customInstructionsText) { _, text in
                         var prefs = store.userPreferences
                         prefs.customInstructions = text
                         store.updatePreferences(prefs)
                     }
             } header: {
-                Text("Custom Instructions")
+                Text("CUSTOM INSTRUCTIONS")
+                    .font(.sousSectionHeader)
+                    .foregroundStyle(Color.sousTerracotta)
+                    .kerning(1.2)
+                    .textCase(nil)
             } footer: {
-                Text("Anything else you want Sous to always keep in mind — e.g. \"always give stove settings for both gas and induction\".")
+                Text("Anything else you want Sous to always keep in mind.")
+                    .font(.sousCaption)
+                    .foregroundStyle(Color.sousMuted)
             }
+            .listRowBackground(Color.sousBackground)
+            .listRowSeparatorTint(Color.sousSeparator)
         }
-        .navigationTitle("Preferences")
+        .scrollContentBackground(.hidden)
+        .background(Color.sousBackground)
+        .navigationTitle("PREFERENCES")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
-            // Sync text fields from store each time the view appears
-            // (handles both first launch and returning via navigation)
             hardAvoidsText = store.userPreferences.hardAvoids.joined(separator: ", ")
             equipmentText = store.userPreferences.equipment.joined(separator: ", ")
             customInstructionsText = store.userPreferences.customInstructions
