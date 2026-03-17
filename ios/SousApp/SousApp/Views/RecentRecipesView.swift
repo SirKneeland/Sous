@@ -31,50 +31,46 @@ struct RecentRecipesView: View {
                         .kerning(1.0)
                     Spacer()
                 } else {
-                    ScrollView {
-                        VStack(spacing: 0) {
-                            ForEach(Array(sessions.enumerated()), id: \.element.recipe.id) { index, snapshot in
-                                Button {
-                                    store.requestResumeSession(snapshot)
-                                    onDismiss()
-                                } label: {
-                                    HStack(spacing: 8) {
-                                        Text(snapshot.recipe.title)
-                                            .font(.sousBody)
-                                            .foregroundStyle(Color.sousText)
-                                            .multilineTextAlignment(.leading)
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                        Text(formatAge(snapshot.savedAt))
-                                            .font(.sousCaption)
-                                            .foregroundStyle(Color.sousMuted)
-                                        Image(systemName: "chevron.right")
-                                            .font(.system(size: 11, weight: .regular))
-                                            .foregroundStyle(Color.sousMuted)
-                                    }
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 14)
+                    List {
+                        ForEach(sessions, id: \.recipe.id) { snapshot in
+                            Button {
+                                store.requestResumeSession(snapshot)
+                                onDismiss()
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Text(snapshot.recipe.title)
+                                        .font(.sousBody)
+                                        .foregroundStyle(Color.sousText)
+                                        .multilineTextAlignment(.leading)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                    Text(formatAge(snapshot.savedAt))
+                                        .font(.sousCaption)
+                                        .foregroundStyle(Color.sousMuted)
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 11, weight: .regular))
+                                        .foregroundStyle(Color.sousMuted)
                                 }
-                                .buttonStyle(.plain)
-                                .swipeActions(edge: .trailing) {
-                                    Button(role: .destructive) {
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .listRowBackground(Color.sousBackground)
+                            .listRowSeparatorTint(Color.sousSeparator)
+                            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+                            .padding(.vertical, 14)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    if let index = sessions.firstIndex(where: { $0.recipe.id == snapshot.recipe.id }) {
                                         store.deleteRecentSession(snapshot)
                                         sessions.remove(at: index)
-                                    } label: {
-                                        Text("DELETE")
-                                            .font(.sousCaption)
                                     }
-                                }
-
-                                if index < sessions.count - 1 {
-                                    SousRule()
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
                                 }
                             }
                         }
-                        .overlay(Rectangle().stroke(Color.sousText, lineWidth: 1))
-                        .padding(.horizontal, 20)
-                        .padding(.top, 20)
-                        .padding(.bottom, 20)
                     }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
                 }
             }
             .navigationTitle("HISTORY")

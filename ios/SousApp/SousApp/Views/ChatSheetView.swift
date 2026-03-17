@@ -5,6 +5,7 @@ import SwiftUI
 struct ChatSheetView: View {
     @ObservedObject var store: AppStore
     var isFullscreen: Bool = false
+    var onStartNew: () -> Void = {}
     var onOpenSettings: () -> Void = {}
     var onOpenRecents: () -> Void = {}
     @StateObject private var photoSend = PhotoSendCoordinator()
@@ -33,6 +34,7 @@ struct ChatSheetView: View {
             HStack {
                 Spacer()
                 HStack(spacing: 8) {
+                    SousIconButton(systemName: "plus") { onStartNew() }
                     SousIconButton(systemName: "clock") { onOpenRecents() }
                     SousIconButton(systemName: "gearshape") { onOpenSettings() }
                 }
@@ -92,6 +94,7 @@ struct ChatSheetView: View {
             Spacer()
             if isFullscreen {
                 HStack(spacing: 8) {
+                    SousIconButton(systemName: "plus") { onStartNew() }
                     SousIconButton(systemName: "clock") { onOpenRecents() }
                     SousIconButton(systemName: "gearshape") { onOpenSettings() }
                 }

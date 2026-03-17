@@ -12,15 +12,15 @@ Statuses:
 
 ## Project State
 
-**Current milestone:** Milestone 18 — Streaming Chat Responses
+**Current milestone:** Milestone 19 — Personality Modes
 
 **Recently completed:**
+- Milestone 18 — Streaming Chat Responses
 - Milestone 17 — Design
 - Milestone 16 — Memories
-- Milestone 15 — Persistent Preferences
 
 **Next milestone:**
-- Milestone 19 — Post-Cook Ratings
+- Milestone 20 — Post-Cook Ratings
 
 This section exists to make the active project phase immediately visible to humans and AI agents without scanning the entire roadmap.
 
@@ -365,8 +365,33 @@ Explicit non-goals:
 - Streaming photo/multimodal responses
 
 ---
+## Milestone 19 — Personality Modes
+**Status:** DONE
+**Goal:** Let users choose how Sous talks to them.
 
-## Milestone 19 — Post-Cook Ratings
+Core capabilities:
+
+- A tone setting in the Preferences screen with three named modes: Minimal, Normal, and Playful
+- Default is Normal (current behavior)
+- Selected mode name passed explicitly to the LLM on every request alongside other preferences
+- System prompt has distinct behavioral instructions per mode:
+
+Minimal — no filler, no encouragement, no personality. Directions and direct answers only. Think a recipe card that talks.
+Normal — current behavior: warm, opinionated, conversational without being extra
+Playful — jokes, puns, irreverence, stronger opinions, allowed to chirp you when you burn the garlic
+
+
+- Mode applies across all phases: exploration, cooking, patch proposals, recovery
+- In Playful mode, the AI mirrors the user's vocabulary and humor when it appears naturally in conversation (e.g. invented words, recurring jokes, personal shorthand). Minimal mode suppresses this. Normal mode mirrors lightly.
+
+Explicit non-goals:
+
+- Per-recipe tone overrides (global setting only for now)
+- User-defined custom tone via free text (the existing custom instructions field covers that)
+- Visual or animated personality expression
+---
+
+## Milestone 20 — Post-Cook Ratings
 **Status:** PLANNED
 
 **Goal:** Let users reflect on how a cook went, creating a feedback loop that makes Sous more useful over time.
@@ -386,7 +411,7 @@ Explicit non-goals:
 
 ---
 
-## Milestone 20 — TestFlight Alpha + Instrumentation
+## Milestone 21 — TestFlight Alpha + Instrumentation
 **Status:** PLANNED
 
 **Goal:** Ship a usable alpha to real users with enough observability to fix issues quickly.
@@ -405,7 +430,7 @@ Explicit non-goals:
 
 ---
 
-## Milestone 21 — Accounts + Sync
+## Milestone 22 — Accounts + Sync
 **Status:** PLANNED
 
 **Goal:** Establish durable user accounts so preferences, memories, and recipes persist across devices and reinstalls.
@@ -423,7 +448,7 @@ Explicit non-goals:
 
 ---
 
-## Milestone 22 — Planning, Shopping, and Prep
+## Milestone 23 — Planning, Shopping, and Prep
 **Status:** FUTURE
 
 Potential capabilities:
@@ -435,7 +460,7 @@ Potential capabilities:
 
 ---
 
-## Milestone 23 — Voice & Hands-Free Cooking
+## Milestone 24 — Voice & Hands-Free Cooking
 **Status:** FUTURE
 
 Potential capabilities:
@@ -447,7 +472,7 @@ Potential capabilities:
 
 ---
 
-## Milestone 24 — Monetization
+## Milestone 25 — Monetization
 **Status:** FUTURE
 
 Notes:

@@ -15,19 +15,23 @@ public struct LLMUserPrefs: Equatable, Sendable {
     public let customInstructions: String
     /// User-declared memories to include as context (e.g. "I avoid cilantro").
     public let memories: [String]
+    /// Personality mode controlling AI communication style. Valid values: "minimal", "normal", "playful".
+    public let personalityMode: String
 
     public init(
         hardAvoids: [String],
         servingSize: Int? = nil,
         equipment: [String] = [],
         customInstructions: String = "",
-        memories: [String] = []
+        memories: [String] = [],
+        personalityMode: String = "normal"
     ) {
         self.hardAvoids = hardAvoids
         self.servingSize = servingSize
         self.equipment = equipment
         self.customInstructions = customInstructions
         self.memories = memories
+        self.personalityMode = personalityMode
     }
 }
 

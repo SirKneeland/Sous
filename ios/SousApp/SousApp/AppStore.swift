@@ -364,7 +364,8 @@ final class AppStore: ObservableObject {
             servingSize: userPreferences.servingSize,
             equipment: userPreferences.equipment,
             customInstructions: userPreferences.customInstructions,
-            memories: memories.map { $0.text }
+            memories: memories.map { $0.text },
+            personalityMode: userPreferences.personalityMode
         )
     }
 

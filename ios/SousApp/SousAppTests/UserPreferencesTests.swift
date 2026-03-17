@@ -28,6 +28,7 @@ final class UserPreferencesTests: XCTestCase {
         XCTAssertNil(prefs.servingSize)
         XCTAssertTrue(prefs.equipment.isEmpty)
         XCTAssertEqual(prefs.customInstructions, "")
+        XCTAssertEqual(prefs.personalityMode, "normal")
     }
 
     // MARK: - Persistence round-trips
@@ -38,6 +39,7 @@ final class UserPreferencesTests: XCTestCase {
         prefs.servingSize = 4
         prefs.equipment = ["cast iron", "air fryer"]
         prefs.customInstructions = "always give gas and induction stove settings"
+        prefs.personalityMode = "playful"
 
         UserPreferencesPersistence.save(prefs, to: testDefaults)
         let loaded = UserPreferencesPersistence.load(from: testDefaults)
@@ -46,6 +48,15 @@ final class UserPreferencesTests: XCTestCase {
         XCTAssertEqual(loaded.servingSize, 4)
         XCTAssertEqual(loaded.equipment, ["cast iron", "air fryer"])
         XCTAssertEqual(loaded.customInstructions, "always give gas and induction stove settings")
+        XCTAssertEqual(loaded.personalityMode, "playful")
+    }
+
+    func test_saveAndLoad_personalityMode_minimal() {
+        var prefs = UserPreferences()
+        prefs.personalityMode = "minimal"
+        UserPreferencesPersistence.save(prefs, to: testDefaults)
+        let loaded = UserPreferencesPersistence.load(from: testDefaults)
+        XCTAssertEqual(loaded.personalityMode, "minimal")
     }
 
     func test_load_returnsDefault_whenNothingSaved() {
@@ -97,6 +108,7 @@ final class UserPreferencesTests: XCTestCase {
         prefs.servingSize = 3
         prefs.equipment = ["stand mixer"]
         prefs.customInstructions = "metric units"
+        prefs.personalityMode = "playful"
 
         let llmPrefs = prefs.toLLMUserPrefs()
 
@@ -105,6 +117,7 @@ final class UserPreferencesTests: XCTestCase {
         XCTAssertEqual(llmPrefs.equipment, ["stand mixer"])
         XCTAssertEqual(llmPrefs.customInstructions, "metric units")
         XCTAssertTrue(llmPrefs.memories.isEmpty)
+        XCTAssertEqual(llmPrefs.personalityMode, "playful")
     }
 
     func test_toLLMUserPrefs_emptyFieldsMapCorrectly() {

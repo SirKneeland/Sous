@@ -15,6 +15,7 @@ struct ContentView: View {
                 ChatSheetView(
                     store: store,
                     isFullscreen: true,
+                    onStartNew: { store.requestNewSession() },
                     onOpenSettings: { showSettings = true },
                     onOpenRecents: { store.showRecentRecipes = true }
                 )

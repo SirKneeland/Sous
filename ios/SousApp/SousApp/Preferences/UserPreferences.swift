@@ -14,6 +14,8 @@ struct UserPreferences: Codable, Equatable, Sendable {
     var equipment: [String] = []
     /// Free-form instructions applied to every recipe.
     var customInstructions: String = ""
+    /// Personality mode controlling AI communication style. Valid values: "minimal", "normal", "playful", "unhinged".
+    var personalityMode: String = "normal"
 
     /// Converts to the SousCore value type used in LLMRequest.
     func toLLMUserPrefs() -> LLMUserPrefs {
@@ -21,7 +23,8 @@ struct UserPreferences: Codable, Equatable, Sendable {
             hardAvoids: hardAvoids,
             servingSize: servingSize,
             equipment: equipment,
-            customInstructions: customInstructions
+            customInstructions: customInstructions,
+            personalityMode: personalityMode
         )
     }
 }
