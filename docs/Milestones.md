@@ -12,15 +12,15 @@ Statuses:
 
 ## Project State
 
-**Current milestone:** Milestone 17 — Design
+**Current milestone:** Milestone 18 — Streaming Chat Responses
 
 **Recently completed:**
+- Milestone 17 — Design
 - Milestone 16 — Memories
 - Milestone 15 — Persistent Preferences
-- Milestone 14 — Tone and Model Behavior
 
 **Next milestone:**
-- Milestone 18 — Post-Cook Ratings
+- Milestone 19 — Post-Cook Ratings
 
 This section exists to make the active project phase immediately visible to humans and AI agents without scanning the entire roadmap.
 
@@ -307,7 +307,7 @@ Explicit non-goals:
 ---
 
 ## Milestone 16 — Memories
-**Status:** CURRENT
+**Status:** DONE
 
 **Goal:** Let Sous remember things the user expresses in conversation, so preferences and context accumulate naturally over time.
 
@@ -328,7 +328,7 @@ Explicit non-goals:
 ---
 
 ## Milestone 17 — Design
-**Status:** CURRENT
+**Status:** DONE
 
 **Goal:** Make Sous look and feel like a product someone would want to use, not a functional prototype.
 
@@ -347,7 +347,26 @@ Explicit non-goals:
 
 ---
 
-## Milestone 18 — Post-Cook Ratings
+## Milestone 18 — Streaming Chat Responses
+**Status:** DONE
+
+**Goal:** Make the AI feel responsive and alive by streaming chat replies word by word as they are generated, rather than displaying them all at once after a delay.
+
+Core capabilities:
+- Chat responses stream in token by token in real time using OpenAI's streaming API
+- The chat bubble appears immediately and fills in as text arrives
+- A visible indicator shows the assistant is typing before the first token arrives
+- Streaming applies to conversational replies only — recipe generation patches are still delivered as complete structured responses (streaming and JSON patch parsing are incompatible)
+- Errors and timeouts are handled gracefully mid-stream
+- No regression to existing patch flow, retry logic, or validation behavior
+
+Explicit non-goals:
+- Streaming recipe patch generation
+- Streaming photo/multimodal responses
+
+---
+
+## Milestone 19 — Post-Cook Ratings
 **Status:** PLANNED
 
 **Goal:** Let users reflect on how a cook went, creating a feedback loop that makes Sous more useful over time.
@@ -367,7 +386,7 @@ Explicit non-goals:
 
 ---
 
-## Milestone 19 — TestFlight Alpha + Instrumentation
+## Milestone 20 — TestFlight Alpha + Instrumentation
 **Status:** PLANNED
 
 **Goal:** Ship a usable alpha to real users with enough observability to fix issues quickly.
@@ -386,7 +405,7 @@ Explicit non-goals:
 
 ---
 
-## Milestone 20 — Accounts + Sync
+## Milestone 21 — Accounts + Sync
 **Status:** PLANNED
 
 **Goal:** Establish durable user accounts so preferences, memories, and recipes persist across devices and reinstalls.
@@ -404,7 +423,7 @@ Explicit non-goals:
 
 ---
 
-## Milestone 21 — Planning, Shopping, and Prep
+## Milestone 22 — Planning, Shopping, and Prep
 **Status:** FUTURE
 
 Potential capabilities:
@@ -416,7 +435,7 @@ Potential capabilities:
 
 ---
 
-## Milestone 22 — Voice & Hands-Free Cooking
+## Milestone 23 — Voice & Hands-Free Cooking
 **Status:** FUTURE
 
 Potential capabilities:
@@ -428,7 +447,7 @@ Potential capabilities:
 
 ---
 
-## Milestone 23 — Monetization
+## Milestone 24 — Monetization
 **Status:** FUTURE
 
 Notes:

@@ -33,10 +33,15 @@ struct OpenAIClient: LLMClient {
     /// Callers read from `ProcessInfo.processInfo.environment["OPENAI_API_KEY"]` at bootstrap.
     private let apiKey: String?
     private let session: any URLSessionProtocol
+    /// Used only for streaming (bytes(for:) is not on URLSessionProtocol).
+    private let streamSession: URLSession
 
-    init(apiKey: String?, session: any URLSessionProtocol = URLSession.shared) {
+    init(apiKey: String?,
+         session: any URLSessionProtocol = URLSession.shared,
+         streamSession: URLSession = .shared) {
         self.apiKey = apiKey
         self.session = session
+        self.streamSession = streamSession
     }
 
     // MARK: - LLMClient
@@ -225,5 +230,117 @@ struct OpenAIClient: LLMClient {
 #if DEBUG
         print("[OpenAIClient] \(message)")
 #endif
+    }
+}
+
+// MARK: - StreamingLLMClient (M18)
+
+extension OpenAIClient: StreamingLLMClient {
+
+    /// Calls the OpenAI streaming completions API and yields raw content delta tokens
+    /// as they arrive via Server-Sent Events. The stream finishes when `[DONE]` is
+    /// received or when the Task is cancelled.
+    func stream(_ request: LLMClientRequest) -> AsyncThrowingStream<String, Error> {
+        let capturedKey = apiKey
+        let capturedSession = streamSession
+        let capturedRequest = request
+
+        return AsyncThrowingStream { continuation in
+            let task = Task {
+                guard let key = capturedKey, !key.isEmpty else {
+                    continuation.finish(throwing: LLMError.missingAPIKey)
+                    return
+                }
+
+                var urlRequest = URLRequest(url: Self.endpoint)
+                urlRequest.httpMethod = "POST"
+                urlRequest.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+                urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                urlRequest.timeoutInterval = capturedRequest.timeout
+
+                var body: [String: Any] = [
+                    "model": capturedRequest.model,
+                    "messages": Self.buildStreamMessagePayload(from: capturedRequest),
+                    "stream": true
+                ]
+
+                switch capturedRequest.responseFormat {
+                case .text:
+                    break
+                case .jsonObject, .jsonSchema:
+                    body["response_format"] = ["type": "json_object"]
+                }
+
+                guard let httpBody = try? JSONSerialization.data(withJSONObject: body) else {
+                    continuation.finish(throwing: LLMError.network)
+                    return
+                }
+                urlRequest.httpBody = httpBody
+
+                do {
+                    let (asyncBytes, response) = try await capturedSession.bytes(for: urlRequest)
+
+                    guard let httpResp = response as? HTTPURLResponse else {
+                        continuation.finish(throwing: LLMError.network)
+                        return
+                    }
+
+                    let status = httpResp.statusCode
+                    guard status == 200 else {
+                        let err = Self.mapStreamHTTPError(status: status)
+                        continuation.finish(throwing: err)
+                        return
+                    }
+
+                    for try await line in asyncBytes.lines {
+                        if Task.isCancelled {
+                            continuation.finish(throwing: LLMError.cancelled)
+                            return
+                        }
+                        guard line.hasPrefix("data: ") else { continue }
+                        let payload = String(line.dropFirst(6))
+                        if payload == "[DONE]" { break }
+
+                        guard let jsonData = payload.data(using: .utf8),
+                              let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
+                              let choices = json["choices"] as? [[String: Any]],
+                              let first = choices.first,
+                              let delta = first["delta"] as? [String: Any],
+                              let content = delta["content"] as? String else {
+                            continue
+                        }
+                        continuation.yield(content)
+                    }
+                    continuation.finish()
+                } catch let urlError as URLError {
+                    switch urlError.code {
+                    case .timedOut:  continuation.finish(throwing: LLMError.timeout)
+                    case .cancelled: continuation.finish(throwing: LLMError.cancelled)
+                    default:         continuation.finish(throwing: LLMError.network)
+                    }
+                } catch {
+                    continuation.finish(throwing: LLMError.network)
+                }
+            }
+
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    // MARK: - Static helpers for streaming path
+
+    /// Builds the messages array for the streaming request body.
+    /// Streaming does not support multimodal (per M18 scope), so images are omitted.
+    private static func buildStreamMessagePayload(from request: LLMClientRequest) -> [[String: Any]] {
+        request.messages.map { ["role": $0.role.rawValue, "content": $0.content] }
+    }
+
+    private static func mapStreamHTTPError(status: Int) -> LLMError {
+        switch status {
+        case 429:       return .rateLimited(retryAfterSec: nil)
+        case 401, 403:  return .auth
+        case 400..<500: return .badRequest
+        default:        return .server
+        }
     }
 }

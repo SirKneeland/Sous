@@ -21,14 +21,22 @@ private struct AttemptContext {
 public struct OpenAILLMOrchestrator: LLMOrchestrator {
 
     public let client: LLMClient
+    /// Optional streaming-capable client for M18 streaming path. When nil, streaming
+    /// falls back to the runtime cast on `client`. Callers that know the concrete type
+    /// (e.g. AppStore) should set this explicitly to avoid relying on the runtime cast.
+    let streamingClient: (any StreamingLLMClient)?
     public let model: String
     public let timeout: TimeInterval
 
     private static let promptVersion = "v5"
     private static let maxCalls = 3
 
-    public init(client: LLMClient, model: String, timeout: TimeInterval = 30) {
+    public init(client: LLMClient,
+                streamingClient: (any StreamingLLMClient)? = nil,
+                model: String,
+                timeout: TimeInterval = 30) {
         self.client = client
+        self.streamingClient = streamingClient
         self.model = model
         self.timeout = timeout
     }
@@ -134,6 +142,94 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
         // Repair (on decode/validation error) is text-only — image is not re-sent.
         return await decodeAndValidate(
             raw: raw!, request: request.base,
+            requestId: requestId, startMs: startMs, isRepair: false,
+            networkMs: networkMs, context: &context
+        )
+    }
+
+    // MARK: - Streaming run (M18)
+
+    /// Streaming path: streams tokens from the OpenAI API, yielding extracted
+    /// `assistant_message` content to `onStreamToken` as each new character arrives.
+    /// After the full response is accumulated, runs the same decode + validate pipeline
+    /// as the non-streaming path. Falls back to the non-streaming path if the client
+    /// does not conform to `StreamingLLMClient` or if `onStreamToken` is nil.
+    public func run(_ request: LLMRequest, onStreamToken: (@Sendable (String) -> Void)?) async -> LLMResult {
+        // Prefer the explicitly-injected streaming client; fall back to a runtime cast
+        // on `client` for callers that don't supply one.
+        guard let onStreamToken,
+              let streamingClient = streamingClient ?? (client as? any StreamingLLMClient) else {
+            return await run(request)
+        }
+
+        let requestId = UUID().uuidString
+        let startMs = nowMs()
+        var context = AttemptContext()
+        context.totalCalls += 1
+
+        var accumulated = ""
+        var lastExtractedLength = 0
+        let netStart = nowMs()
+
+        do {
+            let stream = streamingClient.stream(LLMClientRequest(
+                requestId: requestId,
+                model: model,
+                messages: buildMessages(for: request),
+                responseFormat: .jsonObject,
+                timeout: timeout
+            ))
+
+            for try await rawToken in stream {
+                if Task.isCancelled { throw LLMError.cancelled }
+                accumulated += rawToken
+
+                // Extract and forward incremental assistant_message content.
+                if let partial = extractPartialAssistantMessage(from: accumulated),
+                   partial.count > lastExtractedLength {
+                    let newChars = String(partial.dropFirst(lastExtractedLength))
+                    onStreamToken(newChars)
+                    lastExtractedLength = partial.count
+                }
+            }
+        } catch let error as LLMError {
+            let networkMs = nowMs() - netStart
+            return .failure(
+                fallbackPatchSet: nil,
+                assistantMessage: assistantMessage(for: error),
+                raw: nil,
+                debug: makeDebug(.failed, outcome: "failure", attempts: context.totalCalls,
+                                 id: requestId, elapsed: nowMs() - startMs,
+                                 networkMs: networkMs, error: error,
+                                 terminationReason: error == .cancelled ? "cancelled" : "stream_error"),
+                error: error
+            )
+        } catch {
+            let networkMs = nowMs() - netStart
+            return .failure(
+                fallbackPatchSet: nil,
+                assistantMessage: assistantMessage(for: .network),
+                raw: nil,
+                debug: makeDebug(.failed, outcome: "failure", attempts: context.totalCalls,
+                                 id: requestId, elapsed: nowMs() - startMs,
+                                 networkMs: networkMs, error: .network,
+                                 terminationReason: "stream_error"),
+                error: .network
+            )
+        }
+
+        let networkMs = nowMs() - netStart
+        let raw = LLMRawResponse(
+            rawText: accumulated,
+            requestId: requestId,
+            attempt: 1,
+            timingMs: networkMs,
+            httpStatus: 200,
+            transport: .openAI
+        )
+
+        return await decodeAndValidate(
+            raw: raw, request: request,
             requestId: requestId, startMs: startMs, isRepair: false,
             networkMs: networkMs, context: &context
         )

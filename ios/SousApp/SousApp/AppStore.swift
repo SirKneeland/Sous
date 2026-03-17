@@ -31,6 +31,9 @@ final class AppStore: ObservableObject {
     @Published var llmDebugStatus: String? = nil
     /// True while any LLM call (text or multimodal) is in flight. Drives the thinking indicator.
     @Published var isThinking: Bool = false
+    /// Partial assistant message text being streamed in real time. Non-nil while streaming
+    /// is in progress and content has been received. Cleared when the result is processed.
+    @Published var streamingAssistantMessage: String? = nil
     /// The debug bundle from the most recent LLM run. Updated on every result path.
     @Published var lastDebugBundle: LLMDebugBundle? = nil
     /// True when a recipe canvas exists (user has at least one recipe). False in blank/exploration state.
@@ -372,9 +375,11 @@ final class AppStore: ObservableObject {
             if llmGeneration == generation {
                 llmTask = nil
                 isThinking = false
+                streamingAssistantMessage = nil
             }
         }
         isThinking = true
+        streamingAssistantMessage = nil
         llmDebugStatus = "calling"
         let recipe = uiState.recipe
         let hidden: HiddenContext
@@ -391,11 +396,23 @@ final class AppStore: ObservableObject {
             conversationHistory: buildConversationHistory()
         )
 
+        let llmClient = OpenAIClient(apiKey: resolvedAPIKey())
         let orchestrator: any LLMOrchestrator = testOrchestrator ?? OpenAILLMOrchestrator(
-            client: OpenAIClient(apiKey: resolvedAPIKey()),
+            client: llmClient,
+            streamingClient: llmClient,   // explicit injection avoids runtime existential cast
             model: liveLLMModel
         )
-        let result = await orchestrator.run(request)
+
+        // Each streaming token is dispatched directly to the main actor via a fire-and-forget
+        // Task. These tasks are enqueued on the main actor queue *before* orchestrator.run
+        // returns, so they execute before sendWithLLM's continuation resumes — no extra
+        // synchronisation needed.
+        let result = await orchestrator.run(request, onStreamToken: { [weak self] token in
+            guard let self else { return }
+            Task { @MainActor [self] in
+                self.streamingAssistantMessage = (self.streamingAssistantMessage ?? "") + token
+            }
+        })
 
         // Cancellation guard: if the task was cancelled while awaiting, discard the result.
         // nextLLMContext is intentionally NOT cleared so it applies to the next successful call.

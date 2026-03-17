@@ -97,6 +97,7 @@ struct MarkdownTextView: View {
                 .font(headingFont(level))
                 .foregroundStyle(textColor)
                 .padding(.top, level == 1 ? 6 : 2)
+                .contentTransition(.opacity)
 
         case .bulletItem:
             HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -106,6 +107,7 @@ struct MarkdownTextView: View {
                 inlineText(block.content)
                     .font(.sousBody)
                     .foregroundStyle(textColor)
+                    .contentTransition(.opacity)
             }
 
         case .numberedItem(let number):
@@ -116,12 +118,14 @@ struct MarkdownTextView: View {
                 inlineText(block.content)
                     .font(.sousBody)
                     .foregroundStyle(textColor)
+                    .contentTransition(.opacity)
             }
 
         case .paragraph:
             inlineText(block.content)
                 .font(.sousBody)
                 .foregroundStyle(textColor)
+                .contentTransition(.opacity)
 
         case .empty:
             Color.clear.frame(height: 4)

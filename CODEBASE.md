@@ -51,7 +51,8 @@
   - `Models/PatchSet.swift` — UUID patchSetId, baseRecipeId, baseRecipeVersion, status (pending|accepted|rejected), patches[], summary, baseRecipeSnapshot
   - `Validation/PatchValidator.swift` — Static `validate(patchSet:recipe:) -> PatchValidationResult`; checks version, IDs, step immutability, internal conflicts
   - `Application/PatchApplier.swift` — Static `apply(patchSet:recipe:) throws -> Recipe`; validates first, then applies atomically, increments recipe.version
-  - `LLM/LLMProtocols.swift` — `LLMClient` and `LLMOrchestrator` protocols (both Sendable)
+  - `LLM/LLMProtocols.swift` — `LLMClient`, `StreamingLLMClient`, and `LLMOrchestrator` protocols (both Sendable); `LLMOrchestrator` declares `run(_:onStreamToken:)` as a protocol requirement with a default no-op extension
+  - `LLM/StreamingJSONExtractor.swift` — package-internal `extractPartialAssistantMessage(from:)` function; incrementally extracts the `assistant_message` string value from a partial JSON buffer as tokens accumulate
   - `LLM/LLMRequest.swift` — Immutable snapshot: recipeId, recipeVersion, hasCanvas, userMessage, recipeSnapshotForPrompt, userPrefs, nextLLMContext; PatchDecision/NextLLMContext are Codable here
   - `LLM/LLMResult.swift` — Enum: `.valid(patchSet, assistantMessage, ...)` | `.noPatches(...)` | `.failure(...)`
   - `LLM/LLMRawResponse.swift` — Transport response: rawText, requestId, attempt, timingMs, httpStatus, token counts
@@ -70,13 +71,13 @@
 - **Purpose:** SwiftUI views, LLMClient (network transport), AppStore (app-level state machine)
 - **Location:** `ios/SousApp/SousApp/`
 - **Key files:**
-  - `AppStore.swift` — @MainActor ObservableObject; central state, LLM dispatch, single-flight enforcement, generation-based cancellation
+  - `AppStore.swift` — @MainActor ObservableObject; central state, LLM dispatch, single-flight enforcement, generation-based cancellation; `streamingAssistantMessage: String?` published property drives live streaming UI
   - `UIState.swift` — Enum: recipeOnly | chatOpen | patchProposed | patchReview; contains HiddenContext (accumulates rejection facts)
   - `UIStateMachine.swift` — Pure reducer: (UIState, UIEvent) → UIState; 8 defined transitions
   - `UIEvent.swift` — Enum: openChat, closeChat, userDraftChanged, patchReceived, validatePatch, acceptPatch, rejectPatch
   - `ChatModels.swift` — ChatMessage (UUID id, role, text, timestamp); MessageRole enum
   - `UIStateMachine/LLMContextComposer.swift` — Builds userMessage by appending HiddenContext silently
-  - `Networking/OpenAIClient.swift` — Concrete LLMClient; hits `api.openai.com/v1/chat/completions`; maps HTTP errors to LLMError cases (~200 lines)
+  - `Networking/OpenAIClient.swift` — Concrete LLMClient; hits `api.openai.com/v1/chat/completions`; maps HTTP errors to LLMError cases; also conforms to `StreamingLLMClient` via an extension that uses `URLSession.bytes(for:)` to parse SSE lines and yield raw delta tokens (~350 lines)
   - `Views/ContentView.swift` — Root view composition
   - `Views/RecipeCanvasView.swift` — Recipe display (ingredients + steps)
   - `Views/ChatSheetView.swift` — Chat interface overlay
@@ -125,36 +126,28 @@
 
 ---
 
-## Current Milestone State (Milestone 16)
+## Current Milestone State (Milestone 18)
 
-**Milestone 16 — Memories (CURRENT)**
+**Milestone 18 — Streaming Chat Responses (DONE)**
 
 What is built and wired up:
-- `MemoryItem` struct (`ios/SousApp/SousApp/Preferences/MemoryItem.swift`) — Codable, Equatable, Identifiable, Sendable; fields: `id: UUID`, `text: String`, `createdAt: Date`
-- `MemoriesPersistence` (same file) — reads/writes `[MemoryItem]` to `UserDefaults` under key `"sous_memories"`; accepts optional `UserDefaults` for test injection
-- `AppStore.memories: [MemoryItem]` — `@Published`; loaded from UserDefaults on init (when persistence is enabled)
-- `AppStore.pendingMemoryProposal: String?` — `@Published`; non-nil while the memory toast is showing
-- `AppStore` memory methods: `addMemory(_:)`, `updateMemory(_:)`, `deleteMemory(_:)`, `proposeMemory(text:)`, `confirmMemory(text:)`, `dismissMemoryProposal()`
-- `AppStore.buildLLMUserPrefs()` — private helper that assembles `LLMUserPrefs` with all preferences + memories; used in both text and multimodal send paths (replaces `userPreferences.toLLMUserPrefs()` call and the old hardcoded `cilantro` placeholder in multimodal path)
-- `LLMUserPrefs` expanded with `memories: [String]` — defaults to `[]` so existing tests compile unchanged
-- `LLMResponseDTO` expanded with `proposedMemory: String?` — nil when model does not suggest a memory
-- `LLMResult.valid` and `LLMResult.noPatches` now carry `proposedMemory: String?`
-- `PatchSetDecoder` recognises `"proposed_memory"` as a known top-level key and extracts it as an optional String
-- `OpenAILLMOrchestrator.recipeContextMessage` appends a bulleted memories block when `prefs.memories` is non-empty
-- `OpenAILLMOrchestrator.systemPrompt(hasCanvas: true)` — rule 7 added: propose a `"proposed_memory"` string when user states a personally memorable preference/constraint
-- `OpenAILLMOrchestrator.systemPrompt(hasCanvas: false)` — rule 8 added: same memory-proposal rule for the exploration state
-- `promptVersion` bumped from `"v3"` to `"v4"`
-- `MemoriesView` (`ios/SousApp/SousApp/Views/MemoriesView.swift`) — List of saved memories; swipe-to-delete; tap to edit via sheet
-- `SettingsView` updated: "Your Kitchen" section now has two NavigationLinks — Preferences and Memories; footer text updated
-- `ChatSheetView` — `MemoryProposalToast` (private struct) added; toast appears at top of transcript when `store.pendingMemoryProposal` is non-nil; supports Save, Edit, Dismiss actions with animated slide-in/out
-- 13 new tests in `MemoriesTests.swift` (MemoryItem, MemoriesPersistence, AppStore CRUD, proposal flow, UserDefaults init, LLM injection)
+- `StreamingLLMClient` protocol (`ios/SousCore/Sources/SousCore/LLM/LLMProtocols.swift`) — sub-protocol of `LLMClient`; adds `stream(_ request:) -> AsyncThrowingStream<String, Error>`
+- `LLMOrchestrator.run(_ request:, onStreamToken:)` — declared as a protocol requirement with a default extension that ignores the callback and delegates to `run(request)`; test mocks get this for free
+- `StreamingJSONExtractor` (`ios/SousCore/Sources/SousCore/LLM/StreamingJSONExtractor.swift`) — `extractPartialAssistantMessage(from buffer: String) -> String?`; incrementally extracts `assistant_message` from a partial JSON buffer; handles JSON escape sequences and mid-escape cuts
+- `OpenAILLMOrchestrator.run(_ request:, onStreamToken:)` — streaming path: detects `StreamingLLMClient` conformance on client, uses `stream(_:)`, accumulates tokens, calls `onStreamToken` with incremental assistant_message characters; after stream ends, passes full accumulated text through existing `decodeAndValidate` pipeline unchanged
+- `OpenAIClient: StreamingLLMClient` — extension on `OpenAIClient`; uses `URLSession.bytes(for:)` to read SSE lines; parses `data: {...}` events, yields `choices[0].delta.content` fragments; handles `[DONE]`, cancellation, and HTTP errors
+- `AppStore.streamingAssistantMessage: String?` — `@Published`; non-nil while tokens are arriving; cleared in defer block after LLM call completes
+- `AppStore.sendWithLLM`: uses `AsyncStream.makeStream` + `Task { @MainActor in }` consumer to safely bridge streaming tokens from the orchestrator's non-isolated context to the main actor; `await streamConsumer.value` ensures all tokens are drained before result processing
+- `ChatSheetView` — replaces the static `ThinkingBubbleView` with `StreamingBubbleView` when `store.streamingAssistantMessage != nil`; `StreamingBubbleView` renders partial text with a blinking cursor animation; scroll-on-change added for streaming updates
+- 16 new tests in `StreamingJSONExtractorTests.swift` covering nil before marker, partial/complete extraction, JSON escape sequences, and edge cases
+- 5 new tests in `AppStoreTests.swift` (m18-a through m18-e) verifying `streamingAssistantMessage` lifecycle
+- `drainMain()` in `AppStoreTests` bumped from 5 to 10 yields to account for the 2 additional async hops M18 added per `sendWithLLM` call
 
-Previously completed (Milestone 15 — Persistent Preferences — DONE):
-- `UserPreferences` struct with 4 fields + `UserPreferencesPersistence` + `PreferencesView`
-- `promptVersion` bumped to `"v3"` (now `"v4"` after M16 additions)
+Previously completed (Milestone 17 — Design — DONE):
+- Cohesive visual identity applied across all screens
 
-Previously completed (Milestone 14 — Tone and Model Behavior — DONE):
-- Both system prompts rewritten with warm, opinionated personality
+Previously completed (Milestone 16 — Memories — DONE):
+- `MemoryItem`, `MemoriesPersistence`, memory proposal toast in `ChatSheetView`, `MemoriesView` in Settings
 
 ---
 
@@ -187,6 +180,8 @@ Previously completed (Milestone 14 — Tone and Model Behavior — DONE):
 
 - **Swift version is 6.2** — strict concurrency checking is enabled. Any new code touching shared state must be @MainActor or Sendable-safe.
 - **Two LLM models in AppStore:** `liveLLMModel = "gpt-4o-mini"` (text path) and `multimodalLLMModel = "gpt-4o"` (vision path). The orchestrator always uses whatever model it is initialized with; the model choice lives in AppStore.
+- **Streaming is text-only (M18 scope):** The multimodal path (`sendWithMultimodalLLM`) does NOT stream. The streaming path in `OpenAIClient` omits the image even if one is present; this is correct for text-only streaming responses.
+- **Streaming token bridge pattern:** `AppStore.sendWithLLM` uses `AsyncStream.makeStream(of: String.self)` + a `Task { @MainActor in }` consumer to bridge streaming tokens from the orchestrator's non-isolated context to the main actor. `tokenContinuation` is `Sendable` and can be captured in the `@Sendable` `onStreamToken` callback safely.
 - **`nextLLMContext` in AppStore** — carries the last patch decision (accept/reject + summary) into the next LLM call as silent context, then clears. This is the only mechanism for cross-turn memory today. The multimodal path also injects `nextLLMContext` (rebuilt in `sendWithMultimodalLLM`).
 - **`HiddenContext` in UIState** — accumulates rejection facts across multiple rejections; fed back into the LLM prompt silently via `LLMContextComposer`. Not persisted across sessions.
 - **Session persistence is live (M10)** — `SessionPersistence` + `SessionSnapshot` are implemented. AppStore silently restores on launch from `Documents/sous_session.json`. The old `SessionStore.swift` skeleton has been replaced.

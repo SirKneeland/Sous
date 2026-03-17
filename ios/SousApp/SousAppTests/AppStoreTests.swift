@@ -123,8 +123,11 @@ private extension AppStoreTests {
     }
 
     /// Yields to the MainActor scheduler multiple times so enqueued tasks can complete.
+    /// M18 added two extra async hops per sendWithLLM (streamConsumer task creation +
+    /// await streamConsumer.value), raising the minimum yield count from ~3 to ~6.
+    /// 10 yields provides comfortable headroom without slowing the suite meaningfully.
     func drainMain() async {
-        for _ in 0..<5 { await Task.yield() }
+        for _ in 0..<10 { await Task.yield() }
     }
 }
 
@@ -695,5 +698,74 @@ final class AppStoreTests: XCTestCase {
         XCTAssertNotNil(requests[2].nextLLMContext,
                         "Call 3 must still carry context — failure did not clear it")
         XCTAssertEqual(store.uiState.recipe, original, "Recipe must be unchanged throughout")
+    }
+
+    // MARK: (m18-a) streamingAssistantMessage is nil before any send
+
+    func test_m18a_streamingAssistantMessage_nilAtStart() async {
+        let mock = ControlledOrchestrator()
+        let store = AppStore(testOrchestrator: mock)
+
+        XCTAssertNil(store.streamingAssistantMessage,
+                     "streamingAssistantMessage must be nil before any LLM call")
+    }
+
+    // MARK: (m18-b) streamingAssistantMessage is nil after noPatches result
+
+    func test_m18b_streamingAssistantMessage_nilAfterNoPatchesResult() async {
+        let mock = SyncOrchestrator(result: noPatchesResult())
+        let store = AppStore(testOrchestrator: mock)
+
+        store.send(.openChat)
+        store.sendUserMessage("what temperature?")
+        await drainMain()
+
+        XCTAssertNil(store.streamingAssistantMessage,
+                     "streamingAssistantMessage must be nil after LLM call completes")
+    }
+
+    // MARK: (m18-c) streamingAssistantMessage is nil after valid patch result
+
+    func test_m18c_streamingAssistantMessage_nilAfterValidPatch() async {
+        let mock = SyncOrchestrator(result: validResult(patchSet: seedPatchSet()))
+        let store = AppStore(testOrchestrator: mock)
+
+        store.send(.openChat)
+        store.sendUserMessage("add a note")
+        await drainMain()
+
+        XCTAssertNil(store.streamingAssistantMessage,
+                     "streamingAssistantMessage must be nil after patch result is processed")
+    }
+
+    // MARK: (m18-d) streamingAssistantMessage is nil after failure result
+
+    func test_m18d_streamingAssistantMessage_nilAfterFailure() async {
+        let mock = SyncOrchestrator(result: failureResult(fallbackPatchSet: nil))
+        let store = AppStore(testOrchestrator: mock)
+
+        store.send(.openChat)
+        store.sendUserMessage("make it spicy")
+        await drainMain()
+
+        XCTAssertNil(store.streamingAssistantMessage,
+                     "streamingAssistantMessage must be nil after failure result is processed")
+    }
+
+    // MARK: (m18-e) streamingAssistantMessage is nil after cancellation
+
+    func test_m18e_streamingAssistantMessage_nilAfterCancellation() async {
+        let mock = ControlledOrchestrator()
+        let store = AppStore(testOrchestrator: mock)
+
+        store.sendUserMessage("hello")
+        await Task.yield()
+
+        store.cancelLiveLLM()
+        await mock.resume(with: noPatchesResult())
+        await drainMain()
+
+        XCTAssertNil(store.streamingAssistantMessage,
+                     "streamingAssistantMessage must be nil after cancellation")
     }
 }

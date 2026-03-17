@@ -114,7 +114,9 @@ struct ChatSheetView: View {
                     ForEach(store.chatTranscript) { message in
                         ChatBubbleView(message: message)
                     }
-                    if store.isThinking {
+                    if let partial = store.streamingAssistantMessage {
+                        StreamingBubbleView(text: partial)
+                    } else if store.isThinking {
                         ThinkingBubbleView()
                     }
                     Color.clear.frame(height: 1).id("bottom")
@@ -130,6 +132,9 @@ struct ChatSheetView: View {
             }
             .onChange(of: store.isThinking) { _ in
                 withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
+            }
+            .onChange(of: store.streamingAssistantMessage) { _ in
+                proxy.scrollTo("bottom", anchor: .bottom)
             }
             .overlay(alignment: .top) {
                 if let proposal = store.pendingMemoryProposal {
@@ -385,6 +390,38 @@ private struct ThinkingBubbleView: View {
             .background(Color.sousBackground)
             .overlay(Rectangle().stroke(Color.sousSeparator, lineWidth: 1))
             Spacer(minLength: 48)
+        }
+    }
+}
+
+// MARK: - Streaming Bubble
+
+/// Shows the assistant's reply as it streams in, with a blinking cursor.
+/// Replaces ThinkingBubbleView once the first token has arrived.
+private struct StreamingBubbleView: View {
+    let text: String
+    @State private var cursorOpacity: Double = 1.0
+
+    var body: some View {
+        HStack {
+            HStack(alignment: .center, spacing: 2) {
+                MarkdownTextView(text: text.isEmpty ? " " : text, textColor: .sousText)
+                    .animation(.easeIn(duration: 0.15), value: text)
+                Rectangle()
+                    .fill(Color.sousText)
+                    .frame(width: 2, height: 14)
+                    .opacity(cursorOpacity)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color.sousBackground)
+            .overlay(Rectangle().stroke(Color.sousText, lineWidth: 1))
+            Spacer(minLength: 48)
+        }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true)) {
+                cursorOpacity = 0
+            }
         }
     }
 }
