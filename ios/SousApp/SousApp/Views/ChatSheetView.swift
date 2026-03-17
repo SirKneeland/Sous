@@ -9,6 +9,7 @@ struct ChatSheetView: View {
     var onOpenRecents: () -> Void = {}
     @StateObject private var photoSend = PhotoSendCoordinator()
     @State private var composerText = ""
+    @State private var composerHeight: CGFloat = 36
     @State private var debugExpanded = false
     @State private var showPhotoSheet = false
 #if DEBUG
@@ -304,6 +305,24 @@ struct ChatSheetView: View {
 
             // Text input
             ZStack(alignment: .topLeading) {
+                // Hidden text used to measure content height
+                Text(composerText.isEmpty ? " " : composerText)
+                    .font(.sousBody)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 8)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .hidden()
+                    .background(
+                        GeometryReader { geo in
+                            Color.clear.preference(
+                                key: ComposerHeightPreferenceKey.self,
+                                value: geo.size.height
+                            )
+                        }
+                    )
+                    .onPreferenceChange(ComposerHeightPreferenceKey.self) { height in
+                        composerHeight = max(height, 36)
+                    }
                 if composerText.isEmpty {
                     Text("Type command...")
                         .font(.sousBody)
@@ -317,7 +336,7 @@ struct ChatSheetView: View {
                     .foregroundStyle(Color.sousText)
                     .scrollContentBackground(.hidden)
                     .background(Color.clear)
-                    .frame(maxHeight: 80)
+                    .frame(height: composerHeight)
             }
             .padding(4)
             .background(Color.sousSurface)
@@ -369,6 +388,15 @@ struct ChatSheetView: View {
             store.sendUserMessage(composerText)
             composerText = ""
         }
+    }
+}
+
+// MARK: - Composer Height Preference Key
+
+private struct ComposerHeightPreferenceKey: PreferenceKey {
+    static let defaultValue: CGFloat = 36
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 
