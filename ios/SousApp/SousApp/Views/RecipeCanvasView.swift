@@ -1,10 +1,8 @@
 import SwiftUI
 import SousCore
-import UIKit
 
 struct RecipeCanvasView: View {
     let recipe: Recipe
-    let onOpenChat: () -> Void
     var onMarkStepDone: (UUID) -> Void = { _ in }
     var onOpenSettings: () -> Void = {}
     var onStartNew: () -> Void = {}
@@ -129,48 +127,5 @@ struct RecipeCanvasView: View {
             }
         }
         .background(Color.sousBackground)
-        .safeAreaInset(edge: .bottom) {
-            VStack(spacing: 0) {
-                SousRule()
-                Button {
-                    onOpenChat()
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "message")
-                            .font(.system(size: 14, weight: .semibold))
-                        Text("TALK TO SOUS")
-                            .font(.sousButton)
-                    }
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 52)
-                    .background(Color.sousTerracotta)
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
-                .background(Color.sousBackground)
-                // Swipe-down affordance hint
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 12, weight: .light))
-                    .foregroundStyle(Color.sousMuted)
-                    .frame(maxWidth: .infinity)
-                    .padding(.bottom, 8)
-                    .background(Color.sousBackground)
-                    .allowsHitTesting(false)
-            }
-            .simultaneousGesture(openChatGesture)
-        }
-    }
-
-    // MARK: - Open Chat Gesture
-
-    private var openChatGesture: some Gesture {
-        DragGesture(minimumDistance: 10)
-            .onEnded { value in
-                guard value.translation.height >= 20 else { return }
-                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                onOpenChat()
-            }
     }
 }

@@ -85,7 +85,7 @@ struct ChatSheetView: View {
                     .font(.sousButton)
                     .foregroundStyle(Color.sousText)
             } else {
-                Text("ASSISTANT")
+                Text("SOUS SAYS...")
                     .font(.sousButton)
                     .foregroundStyle(Color.sousText)
             }
@@ -103,7 +103,7 @@ struct ChatSheetView: View {
                     .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 20)
+        .padding(.horizontal, 32)
         .padding(.vertical, 14)
     }
 
@@ -301,11 +301,11 @@ struct ChatSheetView: View {
                         composerHeight = max(height, 36)
                     }
                 if composerText.isEmpty {
-                    Text("Type command...")
+                    Text("Ask Sous...")
                         .font(.sousBody)
                         .foregroundStyle(Color.sousMuted)
                         .padding(.horizontal, 6)
-                        .padding(.top, 6)
+                        .padding(.vertical, 8)
                         .allowsHitTesting(false)
                 }
                 TextEditor(text: $composerText)
