@@ -1,5 +1,6 @@
 import SwiftUI
 import SousCore
+import UIKit
 
 struct RecipeCanvasView: View {
     let recipe: Recipe
@@ -149,7 +150,27 @@ struct RecipeCanvasView: View {
                 .padding(.horizontal, 20)
                 .padding(.vertical, 12)
                 .background(Color.sousBackground)
+                // Swipe-down affordance hint
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 12, weight: .light))
+                    .foregroundStyle(Color.sousMuted)
+                    .frame(maxWidth: .infinity)
+                    .padding(.bottom, 8)
+                    .background(Color.sousBackground)
+                    .allowsHitTesting(false)
             }
+            .simultaneousGesture(openChatGesture)
         }
+    }
+
+    // MARK: - Open Chat Gesture
+
+    private var openChatGesture: some Gesture {
+        DragGesture(minimumDistance: 10)
+            .onEnded { value in
+                guard value.translation.height >= 20 else { return }
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                onOpenChat()
+            }
     }
 }
