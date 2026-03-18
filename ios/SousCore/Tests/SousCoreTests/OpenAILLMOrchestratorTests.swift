@@ -114,7 +114,7 @@ struct OpenAILLMOrchestratorTests {
     func nullPatchSet_returnsNoPatches() async {
         let (orch, mock) = orchestrator([.success(nullPatchSetJSON())])
         let result = await orch.run(request())
-        guard case .noPatches(let msg, _, _, _) = result else {
+        guard case .noPatches(let msg, _, _, _, _) = result else {
             Issue.record("Expected .noPatches, got \(result)"); return
         }
         #expect(msg == "What kind of spice?")
@@ -190,7 +190,7 @@ struct OpenAILLMOrchestratorTests {
         // 3. noPatches: outcome="noPatches", failureCategory=nil
         let (orch3, _) = orchestrator([.success(nullPatchSetJSON())])
         let r3 = await orch3.run(request())
-        guard case .noPatches(_, _, let d3, _) = r3 else { Issue.record("Expected .noPatches"); return }
+        guard case .noPatches(_, _, let d3, _, _) = r3 else { Issue.record("Expected .noPatches"); return }
         #expect(d3.outcome == "noPatches")
         #expect(d3.failureCategory == nil)
 
@@ -427,7 +427,7 @@ struct OpenAILLMOrchestratorTests {
         """
         let (orch, _) = orchestrator([.success(json)])
         let result = await orch.run(request())
-        guard case .noPatches(let msg, _, _, let memory) = result else {
+        guard case .noPatches(let msg, _, _, let memory, _) = result else {
             Issue.record("Expected .noPatches, got \(result)"); return
         }
         #expect(msg == "Got it!")
@@ -438,7 +438,7 @@ struct OpenAILLMOrchestratorTests {
     func proposedMemory_absent_isNil() async {
         let (orch, _) = orchestrator([.success(nullPatchSetJSON())])
         let result = await orch.run(request())
-        guard case .noPatches(_, _, _, let memory) = result else {
+        guard case .noPatches(_, _, _, let memory, _) = result else {
             Issue.record("Expected .noPatches, got \(result)"); return
         }
         #expect(memory == nil)

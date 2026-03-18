@@ -15,6 +15,9 @@ struct LLMResponseDTO: Equatable, Sendable {
     let patchSet: LLMPatchSetDTO?
     /// Optional memory the model proposes to save. Nil when the model does not suggest a memory.
     let proposedMemory: String?
+    /// When true (exploration phase only), the model has enough information to generate an
+    /// excellent recipe and is signalling readiness. Absence or false means not yet ready.
+    let suggestGenerate: Bool?
 }
 
 // MARK: - LLMPatchSetDTO

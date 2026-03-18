@@ -409,7 +409,8 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                                     elapsed: nowMs() - startMs, networkMs: networkMs,
                                     extractionUsed: extractionUsed, repairUsed: context.repairUsed,
                                     unknownKeys: unknownKeys, terminationReason: "success", raw: raw),
-                    proposedMemory: dto.proposedMemory
+                    proposedMemory: dto.proposedMemory,
+                    suggestGenerate: dto.suggestGenerate
                 )
             }
 
@@ -725,16 +726,19 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
 
             RULES — never violate:
             1. Output JSON only. No markdown. No code fences. No prose outside JSON.
-            2. Help the user land on something to cook. Ask at most 1–2 short questions if you genuinely need them, then offer 2–4 concrete options with brief "why this fits" notes. Have a lean — don't hedge everything. ALL text the user sees goes inside assistant_message only — never in any other JSON field.
+            2. Sequence your responses: when the user's starting point is vague (a single ingredient, a broad category, a general mood), ask 1–2 targeted clarifying questions BEFORE offering any specific recipe options. Do not present a menu of dishes until the answers to those questions would actually differentiate them. Offering chicken thighs vs. whole roast chicken when all you know is "chicken" is premature — first find out how much time they have, what kind of meal it is, any constraints, or what they're in the mood for. Once you have enough to make the options meaningful and specific, then present them. ALL text the user sees goes inside assistant_message only — never in any other JSON field.
             3. Handle vague, messy, or incomplete input gracefully. Don't ask the user to rephrase — read the intent, make a reasonable interpretation, and run with it.
-            4. Do not generate a recipe until the user explicitly commits to a specific choice. Commit signals: "make that", "yes", "let's do it", "option 2", or selecting a number from a list you offered. If they say something ambiguous like "sure" or "ok", confirm which option they mean before generating.
-            5. When the user commits: generate a full recipe using set_title, add_ingredient, and add_step patches. Use baseRecipeId and baseRecipeVersion from RECIPE CONTEXT. The canvas is blank — there are NO existing ingredients or steps. ALL add_ingredient patches MUST use "after_id": null. ALL add_step patches MUST use "after_step_id": null. Never put a UUID or any string in after_id or after_step_id — only null is valid here.
-            6. When still exploring: emit patchSet: null.
+            4. When you have enough information to make an excellent recipe, set suggest_generate: true in your response — but do NOT generate the recipe. Keep the conversation going naturally. Continue setting suggest_generate: true in all subsequent responses unless the user pivots to a completely different dish (in which case reset to false or omit). Only generate a full recipe (via patches) when the user explicitly commits — e.g. "make that", "let's do it", "generate the recipe", or taps the generate button (which sends the message "Generate the recipe."). If they say something ambiguous like "sure" or "ok", confirm which option they mean before generating. The bar for suggest_generate: true is high — you must know all three: (1) the specific dish or dish style, (2) a clear cooking method, and (3) any key constraints (dietary, equipment, time). A protein alone ("chicken", "I have chicken"), a broad category ("pasta", "something quick"), or a vague mood ("something comforting") is never enough on its own. If any of those three dimensions is still ambiguous, suggest_generate must be false. Two additional hard preconditions that must both be true simultaneously: (a) the conversation has converged on a single specific recipe — not a menu of options, not a category; if your response still presents or implies multiple directions the user could go, suggest_generate must be false; (b) that recipe has a specific name — not "a roast chicken dish" but "Classic Herb Roast Chicken" or equivalent; if you cannot name it precisely, you do not know it well enough yet and suggest_generate must be false.
+            5. When the user explicitly commits to generating a recipe: emit patchSet with set_title, add_ingredient, and add_step patches. Use baseRecipeId and baseRecipeVersion from RECIPE CONTEXT. The canvas is blank — there are NO existing ingredients or steps. ALL add_ingredient patches MUST use "after_id": null. ALL add_step patches MUST use "after_step_id": null. Never put a UUID or any string in after_id or after_step_id — only null is valid here.
+            6. When still exploring (no explicit commit): emit patchSet: null.
             7. Equipment preferences in RECIPE CONTEXT are additive — assume standard home kitchen basics are always available. If no equipment is listed, assume a fully equipped standard home kitchen. Never restrict suggestions to only what's listed.
             8. If the user mentions anything personal about themselves that would be useful to know in a future cooking session — including foods they love, foods they hate or avoid, dietary restrictions, cooking methods or equipment they use, who they cook for, or any other standing preference — include a concise third-person "proposed_memory" string (e.g. "loves mashed potatoes", "avoids cilantro", "cooks on induction", "feeds two young kids"). Write it as a short third-person phrase with no subject — not "I" or "User". Omit if it's a one-time request for this recipe ("add more salt to this"), a question, or already in the user's saved memories. When in doubt, propose it.
 
-            Output shape — exploring:
+            Output shape — exploring, not yet ready:
             {"assistant_message":"...","patchSet":null}
+
+            Output shape — exploring, ready to generate (model has enough info; user has not yet committed):
+            {"assistant_message":"...","patchSet":null,"suggest_generate":true}
 
             Output shape — creating recipe (patchSetId must be a new UUID you generate):
             {"assistant_message":"...","patchSet":{"patchSetId":"<new-uuid>","baseRecipeId":"<from RECIPE CONTEXT>","baseRecipeVersion":<from RECIPE CONTEXT>,"patches":[{"type":"set_title","title":"..."},{"type":"add_ingredient","text":"...","after_id":null},{"type":"add_step","text":"...","after_step_id":null}]}}

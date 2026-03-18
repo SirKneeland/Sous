@@ -38,6 +38,9 @@ final class AppStore: ObservableObject {
     @Published var lastDebugBundle: LLMDebugBundle? = nil
     /// True when a recipe canvas exists (user has at least one recipe). False in blank/exploration state.
     @Published var hasCanvas: Bool
+    /// True when the LLM has signalled readiness to generate a recipe (exploration phase only).
+    /// Drives the "Make this recipe" pill in the chat input bar.
+    @Published var canGenerateRecipe: Bool = false
 
     /// Toggle via setUseLiveLLM(_:) so cancellation side-effects are applied correctly.
     private(set) var useLiveLLM = true
@@ -261,6 +264,7 @@ final class AppStore: ObservableObject {
     func startNewSession() {
         cancelLiveLLM()
         hasCanvas = false
+        canGenerateRecipe = false
         uiState = .chatOpen(
             recipe: Recipe(id: UUID(), version: 1, title: "New Recipe"),
             draftUserText: "",
@@ -297,6 +301,7 @@ final class AppStore: ObservableObject {
     /// Loads `snapshot` into the store as the active session.
     func resumeSession(_ snapshot: SessionSnapshot) {
         cancelLiveLLM()
+        canGenerateRecipe = false
         hasCanvas = snapshot.hasCanvas
         chatTranscript = snapshot.chatMessages
         nextLLMContext = snapshot.nextLLMContext
@@ -346,6 +351,25 @@ final class AppStore: ObservableObject {
             llmDebugStatus = "blocked_inflight_llm"
             return
         }
+        #if DEBUG
+        switch trimmed.lowercased() {
+        case "trigger":
+            canGenerateRecipe = true
+            return
+        case "trigger lorem":
+            canGenerateRecipe = true
+            append(ChatMessage(role: .assistant, text: """
+                Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+
+                Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo. Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit, sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt. Neque porro quisquam est, qui dolorem ipsum quia dolor sit amet, consectetur, adipisci velit, sed quia non numquam eius modi tempora incidunt ut labore et dolore magnam aliquam quaerat voluptatem.
+
+                Ut enim ad minima veniam, quis nostrum exercitationem ullam corporis suscipit laboriosam, nisi ut aliquid ex ea commodi consequatur? Quis autem vel eum iure reprehenderit qui in ea voluptate velit esse quam nihil molestiae consequatur, vel illum qui dolorem eum fugiat quo voluptas nulla pariatur?
+                """))
+            return
+        default:
+            break
+        }
+        #endif
         append(ChatMessage(role: .user, text: trimmed))
         if useLiveLLM {
             llmGeneration += 1
@@ -444,12 +468,13 @@ final class AppStore: ObservableObject {
             llmDebugStatus = "succeeded"
             if let memory = proposedMemory { proposeMemory(text: memory) }
 
-        case .noPatches(let assistantMessage, _, let debug, let proposedMemory):
+        case .noPatches(let assistantMessage, _, let debug, let proposedMemory, let suggestGenerate):
             lastDebugBundle = debug
             nextLLMContext = nil
             append(ChatMessage(role: .assistant, text: assistantMessage))
             llmDebugStatus = "succeeded"
             if let memory = proposedMemory { proposeMemory(text: memory) }
+            if !hasCanvas, let sg = suggestGenerate { canGenerateRecipe = sg }
 
         case .failure(let fallbackPatchSet, let assistantMessage, _, let debug, _):
             lastDebugBundle = debug
@@ -458,6 +483,23 @@ final class AppStore: ObservableObject {
             }
             append(ChatMessage(role: .assistant, text: assistantMessage))
             llmDebugStatus = "failed"
+        }
+    }
+
+    // MARK: - Generate recipe silently
+
+    /// Sends "Generate the recipe." to the LLM without appending a user bubble to the transcript.
+    /// Used by the "Make this recipe" pill button.
+    func sendGenerateRecipeSilently() {
+        guard !hasPendingPatch else { return }
+        if useLiveLLM && llmTask != nil {
+            llmDebugStatus = "blocked_inflight_llm"
+            return
+        }
+        if useLiveLLM {
+            llmGeneration += 1
+            let gen = llmGeneration
+            llmTask = Task { await self.sendWithLLM("Generate the recipe.", generation: gen) }
         }
     }
 
@@ -556,7 +598,7 @@ final class AppStore: ObservableObject {
             llmDebugStatus = "succeeded"
             if let memory = proposedMemory { proposeMemory(text: memory) }
 
-        case .noPatches(let assistantMessage, _, let debug, let proposedMemory):
+        case .noPatches(let assistantMessage, _, let debug, let proposedMemory, _):
             lastDebugBundle = debug
             nextLLMContext = nil
             append(ChatMessage(role: .assistant, text: assistantMessage))

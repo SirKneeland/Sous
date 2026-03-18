@@ -15,7 +15,7 @@ import Testing
 private func stubMap(_ payload: MultimodalAssistantPayload, debug: LLMDebugBundle) -> LLMResult {
     switch payload {
     case .suggestionsOnly(let msg, _):
-        return .noPatches(assistantMessage: msg, raw: nil, debug: debug, proposedMemory: nil)
+        return .noPatches(assistantMessage: msg, raw: nil, debug: debug, proposedMemory: nil, suggestGenerate: nil)
     case .patchProposal(let msg, let patchSet):
         return .valid(patchSet: patchSet, assistantMessage: msg, raw: nil, debug: debug, proposedMemory: nil)
     }
@@ -58,7 +58,7 @@ struct MultimodalTypesTests {
         let result = stubMap(payload, debug: makeDebug())
 
         // Assert the mapped result is noPatches.
-        guard case .noPatches(let msg, _, _, _) = result else {
+        guard case .noPatches(let msg, _, _, _, _) = result else {
             Issue.record("Expected .noPatches, got \(result)")
             return
         }

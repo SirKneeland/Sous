@@ -11,11 +11,7 @@ struct ChatSheetView: View {
     @StateObject private var photoSend = PhotoSendCoordinator()
     @State private var composerText = ""
     @State private var composerHeight: CGFloat = 36
-    @State private var debugExpanded = false
     @State private var showPhotoSheet = false
-#if DEBUG
-    @State private var debugCopied = false
-#endif
 
     var body: some View {
         Group {
@@ -70,12 +66,13 @@ struct ChatSheetView: View {
             chatHeader
             SousRule()
             transcript
+                .overlay(alignment: .bottom) { generatePill }
             SousRule()
-            debugSection
             attachmentStrip
             composerBar
         }
         .background(isFullscreen ? Color.sousBackground : Color.sousSurface)
+        .animation(.easeOut(duration: 0.25), value: store.canGenerateRecipe)
     }
 
     // MARK: - Header
@@ -123,6 +120,11 @@ struct ChatSheetView: View {
                     } else if store.isThinking {
                         ThinkingBubbleView()
                     }
+                    // Reserves space equal to the generate button height so the last
+                    // message is never hidden under the floating overlay button.
+                    if !store.hasCanvas && store.canGenerateRecipe {
+                        Color.clear.frame(height: 52)
+                    }
                     Color.clear.frame(height: 1).id("bottom")
                 }
                 .padding(.horizontal, 16)
@@ -140,6 +142,9 @@ struct ChatSheetView: View {
             .onChange(of: store.streamingAssistantMessage) { _ in
                 proxy.scrollTo("bottom", anchor: .bottom)
             }
+            .onChange(of: store.canGenerateRecipe) { newValue in
+                if newValue { withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo("bottom", anchor: .bottom) } }
+            }
             .overlay(alignment: .top) {
                 if let proposal = store.pendingMemoryProposal {
                     MemoryProposalToast(
@@ -153,68 +158,6 @@ struct ChatSheetView: View {
             }
             .animation(.easeInOut(duration: 0.25), value: store.pendingMemoryProposal != nil)
         }
-    }
-
-    // MARK: - Debug Section
-
-    @ViewBuilder
-    private var debugSection: some View {
-        DisclosureGroup("Debug", isExpanded: $debugExpanded) {
-            HStack(spacing: 8) {
-                Button("Valid Patch") { store.simulateValidPatch() }
-                    .font(.sousCaption)
-                    .foregroundStyle(Color.sousText)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .overlay(Rectangle().stroke(Color.sousSeparator, lineWidth: 1))
-                Button("Invalid Patch") { store.simulateInvalidPatch() }
-                    .font(.sousCaption)
-                    .foregroundStyle(Color.sousText)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .overlay(Rectangle().stroke(Color.sousSeparator, lineWidth: 1))
-            }
-            .buttonStyle(.plain)
-            .padding(.top, 4)
-#if DEBUG
-            if let status = store.llmDebugStatus {
-                Text(status)
-                    .font(.sousCaption)
-                    .foregroundStyle(
-                        status.contains("missing") || status.contains("failed")
-                            ? Color.sousTerracotta
-                            : Color.sousMuted
-                    )
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.top, 4)
-            }
-            SousRule().padding(.vertical, 4)
-            HStack(spacing: 8) {
-                Button(debugCopied ? "COPIED" : "COPY DEBUG INFO") {
-                    let json: String
-                    if let bundle = store.lastDebugBundle {
-                        json = LLMDebugExport.make(from: bundle).jsonString()
-                    } else {
-                        json = "{}"
-                    }
-                    UIPasteboard.general.string = json
-                    debugCopied = true
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                        debugCopied = false
-                    }
-                }
-                .font(.sousCaption)
-                .foregroundStyle(Color.sousText)
-                .buttonStyle(.plain)
-            }
-#endif
-        }
-        .font(.sousCaption)
-        .foregroundStyle(Color.sousMuted)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-
-        SousRule()
     }
 
     // MARK: - Attachment Strip
@@ -281,6 +224,36 @@ struct ChatSheetView: View {
         }
     }
 
+    // MARK: - Generate Pill
+
+    @ViewBuilder
+    private var generatePill: some View {
+        if !store.hasCanvas && store.canGenerateRecipe {
+            Button {
+                store.sendGenerateRecipeSilently()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "wand.and.stars")
+                        .font(.system(size: 12, weight: .regular))
+                    Text("Make this recipe")
+                        .font(.sousButton)
+                }
+                .foregroundStyle(Color.sousBackground)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(Color.sousTerracotta)
+                .overlay(Rectangle().stroke(Color.sousTerracotta, lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            // 16 (composerBar outer padding) + 44 (camera/send button) + 8 (HStack spacing)
+            // = 68px each side — aligns exactly with the text input field edges
+            .padding(.horizontal, 68)
+            .padding(.bottom, 8)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+
     // MARK: - Composer
 
     private var composerBar: some View {
@@ -292,7 +265,7 @@ struct ChatSheetView: View {
                 Image(systemName: "camera")
                     .font(.system(size: 15, weight: .regular))
                     .foregroundStyle(Color.sousText)
-                    .frame(width: 36, height: 36)
+                    .frame(width: 44, height: 44)
                     .overlay(Rectangle().stroke(Color.sousText, lineWidth: 1))
             }
             .buttonStyle(.plain)
@@ -352,7 +325,7 @@ struct ChatSheetView: View {
                 Image(systemName: "paperplane.fill")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(canSend ? Color.sousBackground : Color.sousMuted)
-                    .frame(width: 36, height: 36)
+                    .frame(width: 44, height: 44)
                     .background(canSend ? Color.sousText : Color.clear)
                     .overlay(Rectangle().stroke(canSend ? Color.sousText : Color.sousMuted, lineWidth: 1))
             }

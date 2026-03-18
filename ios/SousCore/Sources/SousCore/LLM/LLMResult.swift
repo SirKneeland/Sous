@@ -146,7 +146,8 @@ public enum LLMResult: Sendable {
         assistantMessage: String,
         raw: LLMRawResponse?,
         debug: LLMDebugBundle,
-        proposedMemory: String?
+        proposedMemory: String?,
+        suggestGenerate: Bool?
     )
 
     /// All attempts failed. A fallback PatchSet may be present for DEBUG surfacing only;

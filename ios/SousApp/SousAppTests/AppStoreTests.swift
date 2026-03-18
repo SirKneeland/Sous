@@ -99,7 +99,7 @@ private extension AppStoreTests {
     }
 
     func noPatchesResult() -> LLMResult {
-        .noPatches(assistantMessage: "Clarification needed: please elaborate.", raw: nil, debug: minimalDebug(), proposedMemory: nil)
+        .noPatches(assistantMessage: "Clarification needed: please elaborate.", raw: nil, debug: minimalDebug(), proposedMemory: nil, suggestGenerate: nil)
     }
 
     func failureDebug() -> LLMDebugBundle {

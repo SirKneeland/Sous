@@ -31,7 +31,7 @@ struct LLMTypesTests {
 
         let results: [LLMResult] = [
             .valid(patchSet: patchSet, assistantMessage: "Done", raw: nil, debug: debug, proposedMemory: nil),
-            .noPatches(assistantMessage: "Nothing to change", raw: nil, debug: debug, proposedMemory: nil),
+            .noPatches(assistantMessage: "Nothing to change", raw: nil, debug: debug, proposedMemory: nil, suggestGenerate: nil),
             .failure(fallbackPatchSet: nil, assistantMessage: "Error", raw: nil, debug: debug, error: .network)
         ]
 
@@ -39,7 +39,7 @@ struct LLMTypesTests {
             switch result {
             case .valid(let ps, _, _, _, _):
                 #expect(ps.baseRecipeVersion == recipe.version)
-            case .noPatches(let msg, _, _, _):
+            case .noPatches(let msg, _, _, _, _):
                 #expect(!msg.isEmpty)
             case .failure(_, _, _, _, let error):
                 #expect(error == .network)
