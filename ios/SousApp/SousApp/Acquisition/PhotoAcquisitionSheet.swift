@@ -31,11 +31,25 @@ struct PhotoAcquisitionSheet: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             case .showingCamera:
-                CameraPickerView(
-                    onImage: { uiImage in handleAcquired(uiImage, source: .camera) },
-                    onCancel: { acquisitionState = .idle; onCancel() }
-                )
-                .ignoresSafeArea()
+                ZStack(alignment: .bottomLeading) {
+                    CameraPickerView(
+                        onImage: { uiImage in handleAcquired(uiImage, source: .camera) },
+                        onCancel: { acquisitionState = .idle; onCancel() }
+                    )
+                    .ignoresSafeArea()
+
+                    Button {
+                        acquisitionState = .showingLibraryPicker
+                    } label: {
+                        Image(systemName: "photo.on.rectangle")
+                            .font(.system(size: 22, weight: .medium))
+                            .foregroundStyle(.white)
+                            .padding(12)
+                            .background(.ultraThinMaterial, in: Circle())
+                    }
+                    .padding(.leading, 30)
+                    .padding(.bottom, 80)
+                }
 
             case .showingLibraryPicker:
                 PhotoLibraryPickerView(

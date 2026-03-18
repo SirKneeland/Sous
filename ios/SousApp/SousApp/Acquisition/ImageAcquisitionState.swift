@@ -20,6 +20,7 @@ enum ImageAcquisitionFailure: Equatable {
 /// - `.idle` → `.showingLibraryPicker` (status is `.denied`, `.restricted`, or `.unavailable`)
 /// - `.requestingPermission` → `.showingCamera` (user granted)
 /// - `.requestingPermission` → `.showingLibraryPicker` (user denied)
+/// - `.showingCamera` → `.showingLibraryPicker` (user tapped library button in camera view)
 /// - `.showingCamera` / `.showingLibraryPicker` → `.idle` (user cancelled — not an error)
 /// - `.showingCamera` / `.showingLibraryPicker` → `.idle` (acquisition succeeded; `onAcquired` called)
 /// - `.showingCamera` / `.showingLibraryPicker` → `.failed(.encodingFailed)` (encoding error)
