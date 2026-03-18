@@ -1,6 +1,7 @@
 import Combine
 import SousCore
 import SwiftUI
+import UIKit
 
 struct ChatSheetView: View {
     @ObservedObject var store: AppStore
@@ -334,6 +335,43 @@ struct ChatSheetView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
+        .overlay(alignment: .top) {
+            // Invisible extension strip: widens gesture zone 14pt above the input bar
+            // without affecting the input bar's layout or visual appearance.
+            Color.clear
+                .frame(height: 14)
+                .offset(y: -14)
+                .contentShape(Rectangle())
+                .simultaneousGesture(swipeDownGesture)
+        }
+        .overlay(alignment: .bottom) {
+            // Swipe-down affordance hint — only shown when a canvas exists
+            if !isFullscreen {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 12, weight: .light))
+                    .foregroundStyle(Color.sousMuted)
+                    .offset(y: 16)
+                    .allowsHitTesting(false)
+            }
+        }
+        .simultaneousGesture(swipeDownGesture)
+    }
+
+    // MARK: - Swipe-Down Gesture
+
+    private var swipeDownGesture: some Gesture {
+        DragGesture(minimumDistance: 10)
+            .onEnded { value in
+                guard !isFullscreen else { return }
+                let downward = value.translation.height >= 20
+                guard downward else { return }
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                UIApplication.shared.sendAction(
+                    #selector(UIResponder.resignFirstResponder),
+                    to: nil, from: nil, for: nil
+                )
+                store.send(.closeChat)
+            }
     }
 
     // MARK: - Send Logic

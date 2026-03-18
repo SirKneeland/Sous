@@ -137,7 +137,7 @@ struct RecipeCanvasView: View {
                     HStack(spacing: 8) {
                         Image(systemName: "message")
                             .font(.system(size: 14, weight: .semibold))
-                        Text("OPEN ASSISTANT")
+                        Text("TALK TO SOUS")
                             .font(.sousButton)
                     }
                     .foregroundStyle(.white)

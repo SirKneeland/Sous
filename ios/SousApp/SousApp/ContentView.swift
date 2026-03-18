@@ -43,6 +43,7 @@ struct ContentView: View {
             }
         )) {
             ChatSheetView(store: store)
+                .interactiveDismissDisabled(true)
         }
         .sheet(isPresented: $showSettings) {
             SettingsView(store: store)
