@@ -30,10 +30,6 @@
 │       ├── SousApp/       # App source
 │       ├── SousAppTests/
 │       └── SousAppUITests/
-├── src/                   # Web/TypeScript (unused in current milestone)
-├── api/                   # Backend infrastructure (unused in current milestone)
-├── server/                # Backend infrastructure (unused in current milestone)
-└── package.json           # Web tooling
 ```
 
 ---
@@ -185,7 +181,7 @@ Previously completed (Milestone 16 — Memories — DONE):
 - **`nextLLMContext` in AppStore** — carries the last patch decision (accept/reject + summary) into the next LLM call as silent context, then clears. This is the only mechanism for cross-turn memory today. The multimodal path also injects `nextLLMContext` (rebuilt in `sendWithMultimodalLLM`).
 - **`HiddenContext` in UIState** — accumulates rejection facts across multiple rejections; fed back into the LLM prompt silently via `LLMContextComposer`. Not persisted across sessions.
 - **Session persistence is live (M10)** — `SessionPersistence` + `SessionSnapshot` are implemented. AppStore silently restores on launch from `Documents/sous_session.json`. The old `SessionStore.swift` skeleton has been replaced.
-- **`src/`, `api/`, `server/` directories exist** but are not used in any current milestone. Do not touch them.
+- **`src/`, `api/`, `server/` directories have been removed** — they were web/backend infrastructure from an earlier prototype phase and are not part of the iOS project.
 - **Seed recipe** in AppStore is hardcoded: "Simple Bread" with 3 ingredients, 3 steps (1 marked done), 1 note. The done step is intentional — it tests immutability in the live app.
 - **Multimodal wiring is complete (M9):** `OpenAILLMOrchestrator` now has `run(MultimodalLLMRequest)` which attaches the image to the client request and uses `gpt-4o`. The `LLMOrchestrator` protocol carries a default extension that falls back to `run(request.base)` so test mocks require no changes.
 - **No external Swift dependencies** — pure stdlib + Foundation + SousCore SPM. Adding a dependency requires operator approval per CLAUDE.md.
@@ -195,6 +191,6 @@ Previously completed (Milestone 16 — Memories — DONE):
 
 ## Assumptions Made During Generation
 
-- The `src/`, `api/`, and `server/` directories are web/backend infrastructure not used in the iOS milestone and were not explored in depth.
+- The `src/`, `api/`, and `server/` directories were web/backend infrastructure from an earlier prototype phase and have been removed.
 - Milestone 8 is described as "in progress" in Milestones.md; the LLM integration appears substantially complete based on code inspection — the main outstanding item is device verification with a live key.
 - File paths use `ios/SousCore/` and `ios/SousApp/` as root-relative paths from the repo root.
