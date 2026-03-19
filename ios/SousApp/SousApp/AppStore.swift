@@ -63,6 +63,8 @@ final class AppStore: ObservableObject {
     @Published var memories: [MemoryItem] = []
     /// A memory text the LLM has proposed to save. Non-nil while the toast is showing.
     @Published var pendingMemoryProposal: String? = nil
+    /// True when a non-empty API key is stored in the Keychain. Drives the first-launch onboarding callout.
+    @Published var hasAPIKey: Bool
 
     private let maxMessages = 200
     private let liveLLMModel = "gpt-4o-mini"
@@ -115,6 +117,7 @@ final class AppStore: ObservableObject {
         self.sessionsDirectory = sessionsDirectory
         self.preferencesDefaults = preferencesDefaults
         isPersistenceEnabled = (testOrchestrator == nil)
+        hasAPIKey = keyProvider.currentKey() != nil
 
         if isPersistenceEnabled {
             userPreferences = UserPreferencesPersistence.load(from: preferencesDefaults ?? .standard)

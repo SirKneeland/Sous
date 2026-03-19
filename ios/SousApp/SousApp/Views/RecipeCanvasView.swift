@@ -31,6 +31,10 @@ struct RecipeCanvasView: View {
                         SousIconButton(systemName: "plus") { onStartNew() }
                         SousIconButton(systemName: "clock") { onOpenRecents() }
                         SousIconButton(systemName: "gearshape") { onOpenSettings() }
+                            .background(GeometryReader { geo in
+                                Color.clear.preference(key: GearButtonFrameKey.self,
+                                                       value: geo.frame(in: .named("contentRoot")))
+                            })
                     }
                 }
                 .padding(.horizontal, 20)

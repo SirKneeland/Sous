@@ -95,6 +95,7 @@ struct SettingsView: View {
                             store.keyProvider.setKey(keyInput)
                             keyInput = ""
                             keyIsPresent = store.keyProvider.currentKey() != nil
+                            store.hasAPIKey = keyIsPresent
                         }
                         .font(.sousButton)
                         .foregroundStyle(Color.sousBackground)
@@ -112,6 +113,7 @@ struct SettingsView: View {
                             Button("CLEAR KEY") {
                                 store.keyProvider.clearKey()
                                 keyIsPresent = store.keyProvider.currentKey() != nil
+                                store.hasAPIKey = keyIsPresent
                             }
                             .font(.sousButton)
                             .foregroundStyle(Color.sousTerracotta)

@@ -5,6 +5,7 @@ struct ContentView: View {
     @StateObject private var store = AppStore()
     @State private var showSettings = false
     @StateObject private var windowButtonModel = TalkToSousWindowModel()
+    @State private var gearFrame: CGRect = .zero
 
     private var shouldShowTalkToSousButton: Bool {
         store.hasCanvas && !store.uiState.isSheetPresented && !store.uiState.isPatchReview
@@ -40,6 +41,7 @@ struct ContentView: View {
                 }
             }
         }
+        .coordinateSpace(name: "contentRoot")
         // Installs the Talk to Sous bar directly into UIWindow — no SwiftUI ancestor can clip it
         .background(
             TalkToSousWindowHost(model: windowButtonModel)
@@ -66,6 +68,13 @@ struct ContentView: View {
         }
         .sheet(isPresented: $store.showRecentRecipes) {
             RecentRecipesView(store: store, onDismiss: { store.showRecentRecipes = false })
+        }
+        .onPreferenceChange(GearButtonFrameKey.self) { gearFrame = $0 }
+        .overlay {
+            if !store.hasAPIKey && gearFrame != .zero {
+                APIKeyCallout(gearFrame: gearFrame)
+                    .allowsHitTesting(false)
+            }
         }
     }
 }
