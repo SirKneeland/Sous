@@ -391,7 +391,25 @@ Explicit non-goals:
 - Visual or animated personality expression
 ---
 
-## Milestone 20 — Post-Cook Ratings
+## Milestone 20 — TestFlight Alpha + Instrumentation
+**Status:** CURRENT
+
+**Goal:** Ship a usable alpha to real users with enough observability to fix issues quickly.
+
+Core capabilities:
+- TestFlight distribution
+- Basic instrumentation
+- Error logging
+- Performance signals
+- In-app feedback
+
+Explicit non-goals:
+- Monetization
+- Growth loops
+
+---
+
+## Milestone 22 — Post-Cook Ratings
 **Status:** PLANNED
 
 **Goal:** Let users reflect on how a cook went, creating a feedback loop that makes Sous more useful over time.
@@ -411,21 +429,6 @@ Explicit non-goals:
 
 ---
 
-## Milestone 21 — TestFlight Alpha + Instrumentation
-**Status:** PLANNED
-
-**Goal:** Ship a usable alpha to real users with enough observability to fix issues quickly.
-
-Core capabilities:
-- TestFlight distribution
-- Basic instrumentation
-- Error logging
-- Performance signals
-- In-app feedback
-
-Explicit non-goals:
-- Monetization
-- Growth loops
 
 
 ---

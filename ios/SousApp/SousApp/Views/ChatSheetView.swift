@@ -13,6 +13,7 @@ struct ChatSheetView: View {
     @State private var composerText = ""
     @State private var composerHeight: CGFloat = 36
     @State private var showPhotoSheet = false
+    @State private var inputBarDragOffset: CGFloat = 0
 
     var body: some View {
         Group {
@@ -350,10 +351,10 @@ struct ChatSheetView: View {
                 .frame(height: 14)
                 .offset(y: -14)
                 .contentShape(Rectangle())
-                .simultaneousGesture(swipeDownGesture)
+                .simultaneousGesture(thumbDropGesture)
         }
         .overlay(alignment: .bottom) {
-            // Swipe-down affordance hint — only shown when a canvas exists
+            // ThumbDrop affordance hint — only shown when a canvas exists
             if !isFullscreen {
                 Image(systemName: "chevron.down")
                     .font(.system(size: 12, weight: .light))
@@ -362,17 +363,33 @@ struct ChatSheetView: View {
                     .allowsHitTesting(false)
             }
         }
-        .simultaneousGesture(swipeDownGesture)
+        .simultaneousGesture(thumbDropGesture)
+        .offset(y: inputBarDragOffset)
     }
 
-    // MARK: - Swipe-Down Gesture
+    // MARK: - ThumbDrop Gesture
 
-    private var swipeDownGesture: some Gesture {
+    private var thumbDropGesture: some Gesture {
         DragGesture(minimumDistance: 10)
+            .onChanged { value in
+                guard !isFullscreen else { return }
+                let raw = value.translation.height
+                guard raw > 0 else {
+                    inputBarDragOffset = 0
+                    return
+                }
+                inputBarDragOffset = min(raw * 0.65, 60)
+            }
             .onEnded { value in
                 guard !isFullscreen else { return }
                 let downward = value.translation.height >= 20
-                guard downward else { return }
+                guard downward else {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        inputBarDragOffset = 0
+                    }
+                    return
+                }
+                inputBarDragOffset = 0
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                 UIApplication.shared.sendAction(
                     #selector(UIResponder.resignFirstResponder),

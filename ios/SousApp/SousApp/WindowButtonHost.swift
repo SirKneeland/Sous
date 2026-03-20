@@ -125,7 +125,7 @@ struct TalkToSousBar: View {
             .background(Color.sousBackground)
             .offset(y: dragOffset)
             .zIndex(1) // keep button above the chevron strip during translation
-            // Swipe-down affordance hint
+            // ThumbDrop affordance hint
             Image(systemName: "chevron.down")
                 .font(.system(size: 12, weight: .light))
                 .foregroundStyle(Color.sousMuted)
@@ -135,10 +135,10 @@ struct TalkToSousBar: View {
                 .allowsHitTesting(false)
         }
         .background(Color.sousBackground.ignoresSafeArea(edges: .bottom)) // extends into safe area to prevent bleed-through
-        .simultaneousGesture(openChatGesture)
+        .simultaneousGesture(thumbDropGesture)
     }
 
-    private var openChatGesture: some Gesture {
+    private var thumbDropGesture: some Gesture {
         DragGesture(minimumDistance: 10)
             .onChanged { value in
                 let raw = value.translation.height
