@@ -951,3 +951,17 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
         }
     }
 }
+
+// MARK: - Debug Prompt Exposure
+
+#if DEBUG
+public extension OpenAILLMOrchestrator {
+    /// Returns the system prompt and recipe context message that would be sent for
+    /// the given request. Used by the debug diagnostic exporter only — not called in
+    /// production code paths.
+    func buildDebugPromptStrings(for request: LLMRequest) -> (system: String, context: String) {
+        (systemPrompt(hasCanvas: request.hasCanvas, personalityMode: request.userPrefs.personalityMode),
+         recipeContextMessage(for: request))
+    }
+}
+#endif

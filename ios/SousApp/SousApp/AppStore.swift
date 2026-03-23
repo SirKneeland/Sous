@@ -36,6 +36,11 @@ final class AppStore: ObservableObject {
     @Published var streamingAssistantMessage: String? = nil
     /// The debug bundle from the most recent LLM run. Updated on every result path.
     @Published var lastDebugBundle: LLMDebugBundle? = nil
+#if DEBUG
+    /// The LLMRequest most recently dispatched to the orchestrator. Used by the
+    /// 5-tap diagnostic exporter to reconstruct the exact system prompt snapshot.
+    var lastDebugLLMRequest: LLMRequest? = nil
+#endif
     /// True when a recipe canvas exists (user has at least one recipe). False in blank/exploration state.
     @Published var hasCanvas: Bool
     /// True when the LLM has signalled readiness to generate a recipe (exploration phase only).
@@ -423,6 +428,9 @@ final class AppStore: ObservableObject {
             nextLLMContext: nextLLMContext,
             conversationHistory: buildConversationHistory()
         )
+#if DEBUG
+        lastDebugLLMRequest = request
+#endif
 
         let llmClient = OpenAIClient(apiKey: resolvedAPIKey())
         let orchestrator: any LLMOrchestrator = testOrchestrator ?? OpenAILLMOrchestrator(

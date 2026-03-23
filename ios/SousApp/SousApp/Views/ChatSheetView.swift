@@ -23,6 +23,9 @@ struct ChatSheetView: View {
                 mainChatView
             }
         }
+#if DEBUG
+        .modifier(DebugTapExportModifier(store: store))
+#endif
     }
 
     // MARK: - Blank State
