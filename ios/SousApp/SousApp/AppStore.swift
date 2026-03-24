@@ -312,6 +312,15 @@ final class AppStore: ObservableObject {
         SessionPersistence.delete(recipeId: snapshot.recipe.id, in: sessionsDirectory)
     }
 
+    /// Deletes the currently active recipe's session from disk and transitions to a new blank session.
+    /// Called when the user confirms deletion of the active recipe from the History screen.
+    func deleteActiveSessionAndStartNew() {
+        if isPersistenceEnabled {
+            SessionPersistence.delete(recipeId: uiState.recipe.id, in: sessionsDirectory)
+        }
+        startNewSession()
+    }
+
     /// Resumes a previous session immediately (switch is non-destructive — current session stays on disk).
     func requestResumeSession(_ snapshot: SessionSnapshot) {
         resumeSession(snapshot)

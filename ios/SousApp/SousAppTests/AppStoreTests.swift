@@ -905,4 +905,64 @@ final class AppStoreTests: XCTestCase {
         XCTAssertFalse(store.hasCanvas, "hasCanvas must remain false after noPatches import")
         XCTAssertNotNil(store.importError, "importError must be set when LLM returns noPatches")
     }
+
+    // MARK: (m22-a) deleteActiveSessionAndStartNew — transitions to blank state
+
+    func test_m22a_deleteActiveSessionAndStartNew_clearsToBlankState() async {
+        let mock = SyncOrchestrator(result: noPatchesResult())
+        let store = AppStore(testOrchestrator: mock)
+
+        // Pre-condition: test mode starts with seed recipe and hasCanvas = true
+        XCTAssertTrue(store.hasCanvas, "Pre-condition: hasCanvas must be true in test mode")
+        let activeId = store.uiState.recipe.id
+
+        store.deleteActiveSessionAndStartNew()
+
+        XCTAssertFalse(store.hasCanvas, "hasCanvas must be false after deleteActiveSessionAndStartNew")
+        XCTAssertTrue(store.chatTranscript.isEmpty, "Chat transcript must be empty after deleteActiveSessionAndStartNew")
+        if case .chatOpen = store.uiState {} else {
+            XCTFail("Expected chatOpen state after deleteActiveSessionAndStartNew, got \(store.uiState)")
+        }
+        XCTAssertNotEqual(store.uiState.recipe.id, activeId,
+                          "Blank recipe must have a new UUID, not the deleted recipe's ID")
+    }
+
+    // MARK: (m22-b) deleteActiveSessionAndStartNew — deletes session file from disk
+
+    func test_m22b_deleteActiveSessionAndStartNew_deletesSessionFromDisk() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sous_test_\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        // Pre-seed a session on disk so AppStore restores it on init
+        let recipe = Recipe(id: UUID(), version: 1, title: "To Be Deleted",
+                            ingredients: [], steps: [], notes: [])
+        let snapshot = SessionSnapshot(
+            schemaVersion: SessionSnapshot.currentSchemaVersion,
+            hasCanvas: true,
+            recipe: recipe,
+            pendingPatchSet: nil,
+            chatMessages: [],
+            nextLLMContext: nil,
+            savedAt: Date()
+        )
+        let fileURL = SessionPersistence.fileURL(for: recipe.id, in: tempDir)
+        try SessionPersistence.save(snapshot, to: fileURL)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: fileURL.path),
+                      "Pre-condition: session file must exist before deletion")
+
+        // Init with real persistence pointed at temp dir — loads the seeded snapshot
+        let testDefaults = UserDefaults(suiteName: "sous_test_m22b_\(UUID().uuidString)")
+        let store = AppStore(sessionsDirectory: tempDir, preferencesDefaults: testDefaults)
+        XCTAssertTrue(store.hasCanvas, "Pre-condition: store must have restored the seeded canvas")
+        XCTAssertEqual(store.uiState.recipe.id, recipe.id,
+                       "Pre-condition: active recipe must match the seeded recipe")
+
+        store.deleteActiveSessionAndStartNew()
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fileURL.path),
+                       "Session file must be deleted from disk after deleteActiveSessionAndStartNew")
+        XCTAssertFalse(store.hasCanvas, "hasCanvas must be false after deleteActiveSessionAndStartNew")
+    }
 }

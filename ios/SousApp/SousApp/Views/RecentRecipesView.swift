@@ -6,6 +6,7 @@ struct RecentRecipesView: View {
     var onDismiss: () -> Void
 
     @State private var sessions: [SessionSnapshot] = []
+    @State private var showDeleteActiveAlert = false
 
     private func formatAge(_ date: Date) -> String {
         let elapsed = Int(Date().timeIntervalSince(date))
@@ -59,7 +60,9 @@ struct RecentRecipesView: View {
                             .padding(.vertical, 14)
                             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                 Button(role: .destructive) {
-                                    if let index = sessions.firstIndex(where: { $0.recipe.id == snapshot.recipe.id }) {
+                                    if snapshot.recipe.id == store.uiState.recipe.id {
+                                        showDeleteActiveAlert = true
+                                    } else if let index = sessions.firstIndex(where: { $0.recipe.id == snapshot.recipe.id }) {
                                         store.deleteRecentSession(snapshot)
                                         sessions.remove(at: index)
                                     }
@@ -83,6 +86,16 @@ struct RecentRecipesView: View {
                 }
             }
             .background(Color.sousBackground.ignoresSafeArea())
+        }
+        .alert("Delete Recipe?", isPresented: $showDeleteActiveAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                let deletedId = store.uiState.recipe.id
+                store.deleteActiveSessionAndStartNew()
+                sessions.removeAll { $0.recipe.id == deletedId }
+            }
+        } message: {
+            Text("This will delete the recipe you are currently viewing.")
         }
         .onAppear {
             sessions = store.loadRecentSessions()
