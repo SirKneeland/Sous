@@ -67,7 +67,8 @@ public enum UIStateMachine {
                 title: recipe.title,
                 ingredients: recipe.ingredients,
                 steps: updatedSteps,
-                notes: recipe.notes
+                notes: recipe.notes,
+                miseEnPlace: recipe.miseEnPlace
             )
             return state.replacingRecipe(updated)
 

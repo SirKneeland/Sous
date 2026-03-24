@@ -53,6 +53,20 @@ private actor CapturingOrchestrator: LLMOrchestrator {
     }
 }
 
+// MARK: - MockMiseEnPlaceService
+
+/// Synchronous mock that returns a fixed result for mise en place tests.
+private struct MockMiseEnPlaceService: MiseEnPlaceServiceProtocol {
+    private let result: Result<MiseEnPlaceResponse, Error>
+
+    init(response: MiseEnPlaceResponse) { self.result = .success(response) }
+    init(error: Error) { self.result = .failure(error) }
+
+    func run(recipe: Recipe, apiKey: String) async throws -> MiseEnPlaceResponse {
+        try result.get()
+    }
+}
+
 // MARK: - DynamicImportOrchestrator
 
 /// Actor-based mock that generates a valid import PatchSet matching whatever recipe ID/version
@@ -904,6 +918,165 @@ final class AppStoreTests: XCTestCase {
 
         XCTAssertFalse(store.hasCanvas, "hasCanvas must remain false after noPatches import")
         XCTAssertNotNil(store.importError, "importError must be set when LLM returns noPatches")
+    }
+
+    // MARK: (mep-a) triggerMiseEnPlace — applies transformation to recipe
+
+    func test_mepa_triggerMiseEnPlace_populatesMiseEnPlaceAndUpdatesProcedure() async {
+        let mock = SyncOrchestrator(result: noPatchesResult())
+        let mepService = MockMiseEnPlaceService(response: MiseEnPlaceResponse(
+            miseEnPlace: ["Chop the onions", "Mince the garlic"],
+            updatedSteps: ["Saute until golden", "Add sauce and simmer"]
+        ))
+        let store = AppStore(testOrchestrator: mock, testMiseEnPlaceService: mepService)
+        let originalVersion = store.uiState.recipe.version
+
+        XCTAssertNil(store.uiState.recipe.miseEnPlace, "Pre-condition: miseEnPlace must be nil")
+
+        store.triggerMiseEnPlace()
+        await drainMain()
+
+        let recipe = store.uiState.recipe
+        XCTAssertNotNil(recipe.miseEnPlace, "miseEnPlace must be populated after trigger")
+        XCTAssertEqual(recipe.miseEnPlace?.count, 2, "Two prep steps must be in miseEnPlace")
+        XCTAssertEqual(recipe.miseEnPlace?[0].text, "Chop the onions")
+        XCTAssertEqual(recipe.miseEnPlace?[1].text, "Mince the garlic")
+        XCTAssertEqual(recipe.steps.count, 2, "Procedure must have the two cooking-only steps")
+        XCTAssertEqual(recipe.steps[0].text, "Saute until golden")
+        XCTAssertEqual(recipe.version, originalVersion + 1, "Version must increment after transformation")
+        XCTAssertNil(store.miseEnPlaceError, "No error on success")
+        XCTAssertFalse(store.miseEnPlaceIsLoading, "Loading flag must clear after completion")
+    }
+
+    // MARK: (mep-b) triggerMiseEnPlace with empty miseEnPlace — shows error, recipe unchanged
+
+    func test_mepb_triggerMiseEnPlace_emptyResult_setsErrorNoChange() async {
+        let mock = SyncOrchestrator(result: noPatchesResult())
+        let mepService = MockMiseEnPlaceService(response: MiseEnPlaceResponse(
+            miseEnPlace: [],
+            updatedSteps: ["Mix dry ingredients", "Bake at 375°F for 30 min"]
+        ))
+        let store = AppStore(testOrchestrator: mock, testMiseEnPlaceService: mepService)
+        let originalRecipe = store.uiState.recipe
+
+        store.triggerMiseEnPlace()
+        await drainMain()
+
+        XCTAssertEqual(store.miseEnPlaceError, "No prep steps found to separate",
+                       "Error message must be set when no prep steps are found")
+        XCTAssertNil(store.uiState.recipe.miseEnPlace,
+                     "miseEnPlace must remain nil when result is empty")
+        XCTAssertEqual(store.uiState.recipe.steps.count, originalRecipe.steps.count,
+                       "Steps must be unchanged when no prep steps found")
+        XCTAssertFalse(store.miseEnPlaceIsLoading, "Loading flag must clear")
+    }
+
+    // MARK: (mep-c) triggerMiseEnPlace — preserves done status on matching procedure steps
+
+    func test_mepc_triggerMiseEnPlace_preservesDoneStatusOnMatchingSteps() async {
+        let mock = SyncOrchestrator(result: noPatchesResult())
+        // Seed recipe has "Let cool on rack" as done. Simulate LLM returning it unchanged.
+        let mepService = MockMiseEnPlaceService(response: MiseEnPlaceResponse(
+            miseEnPlace: ["Mix dry ingredients"],
+            updatedSteps: ["Bake at 375°F for 30 min", "Let cool on rack"]
+        ))
+        let store = AppStore(testOrchestrator: mock, testMiseEnPlaceService: mepService)
+
+        store.triggerMiseEnPlace()
+        await drainMain()
+
+        let steps = store.uiState.recipe.steps
+        let coolStep = steps.first(where: { $0.text == "Let cool on rack" })
+        XCTAssertNotNil(coolStep, "Updated step must exist in procedure")
+        XCTAssertEqual(coolStep?.status, .done,
+                       "Done status must be preserved for steps whose text matches a done step")
+        let prepStep = store.uiState.recipe.miseEnPlace?.first
+        XCTAssertEqual(prepStep?.status, .todo,
+                       "Mise en place steps start as todo")
+    }
+
+    // MARK: (mep-d) triggerMiseEnPlace — service error sets error message, recipe unchanged
+
+    func test_mepd_triggerMiseEnPlace_serviceError_setsErrorMessage() async {
+        let mock = SyncOrchestrator(result: noPatchesResult())
+        let mepService = MockMiseEnPlaceService(error: MiseEnPlaceServiceError.networkError(
+            URLError(.notConnectedToInternet)
+        ))
+        let store = AppStore(testOrchestrator: mock, testMiseEnPlaceService: mepService)
+        let originalRecipe = store.uiState.recipe
+
+        store.triggerMiseEnPlace()
+        await drainMain()
+
+        XCTAssertEqual(store.miseEnPlaceError, "Couldn't generate mise en place — try again",
+                       "Error message must be set on service failure")
+        XCTAssertNil(store.uiState.recipe.miseEnPlace,
+                     "Recipe must be unchanged after service failure")
+        XCTAssertEqual(store.uiState.recipe.version, originalRecipe.version,
+                       "Version must not increment on failure")
+        XCTAssertFalse(store.miseEnPlaceIsLoading, "Loading flag must clear on failure")
+    }
+
+    // MARK: (mep-e) markMiseEnPlaceDone — marks the step done, recipe persists
+
+    func test_mepe_markMiseEnPlaceDone_marksStepAsDone() async {
+        let mock = SyncOrchestrator(result: noPatchesResult())
+        let mepService = MockMiseEnPlaceService(response: MiseEnPlaceResponse(
+            miseEnPlace: ["Chop the onions"],
+            updatedSteps: ["Saute and cook"]
+        ))
+        let store = AppStore(testOrchestrator: mock, testMiseEnPlaceService: mepService)
+
+        store.triggerMiseEnPlace()
+        await drainMain()
+
+        guard let mepStep = store.uiState.recipe.miseEnPlace?.first else {
+            XCTFail("Expected a miseEnPlace step to exist"); return
+        }
+        XCTAssertEqual(mepStep.status, .todo, "Pre-condition: step must start as todo")
+
+        store.markMiseEnPlaceDone(mepStep.id)
+
+        let updated = store.uiState.recipe.miseEnPlace?.first(where: { $0.id == mepStep.id })
+        XCTAssertEqual(updated?.status, .done, "Step must be marked done after markMiseEnPlaceDone")
+    }
+
+    // MARK: (mep-f) miseEnPlace persisted and restored across app launches
+
+    func test_mepf_miseEnPlace_persistedAndRestoredFromDisk() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sous_test_mep_f_\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let mepStep = Step(text: "Chop onions")
+        let recipe = Recipe(
+            id: UUID(), version: 2, title: "Test Recipe",
+            ingredients: [], steps: [Step(text: "Add onions and cook")],
+            notes: [], miseEnPlace: [mepStep]
+        )
+        let snapshot = SessionSnapshot(
+            schemaVersion: SessionSnapshot.currentSchemaVersion,
+            hasCanvas: true,
+            recipe: recipe,
+            pendingPatchSet: nil,
+            chatMessages: [],
+            nextLLMContext: nil,
+            savedAt: Date()
+        )
+        let fileURL = SessionPersistence.fileURL(for: recipe.id, in: tempDir)
+        try SessionPersistence.save(snapshot, to: fileURL)
+
+        let testDefaults = UserDefaults(suiteName: "sous_mep_f_\(UUID().uuidString)")
+        let store = AppStore(sessionsDirectory: tempDir, preferencesDefaults: testDefaults)
+
+        XCTAssertTrue(store.hasCanvas, "Store must restore canvas from seeded session")
+        XCTAssertNotNil(store.uiState.recipe.miseEnPlace,
+                        "miseEnPlace must be restored from disk")
+        XCTAssertEqual(store.uiState.recipe.miseEnPlace?.first?.text, "Chop onions",
+                       "miseEnPlace step text must match the saved value")
+        XCTAssertEqual(store.uiState.recipe.miseEnPlace?.first?.status, .todo,
+                       "miseEnPlace step status must be preserved")
     }
 
     // MARK: (m22-a) deleteActiveSessionAndStartNew — transitions to blank state

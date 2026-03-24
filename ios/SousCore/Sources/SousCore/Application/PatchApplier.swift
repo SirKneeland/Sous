@@ -71,7 +71,8 @@ public enum PatchApplier {
             title: newTitle,
             ingredients: ingredients,
             steps: steps,
-            notes: notes
+            notes: notes,
+            miseEnPlace: recipe.miseEnPlace
         )
     }
 }

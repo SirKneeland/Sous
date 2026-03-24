@@ -70,6 +70,10 @@ final class AppStore: ObservableObject {
     @Published var isShowingImportSheet: Bool = false
     /// Non-nil when an import attempt failed. Observed by RecipeImportSheet to switch into error state.
     @Published var importError: String? = nil
+    /// True while the mise en place LLM call is in flight. Drives the trigger loading state.
+    @Published var miseEnPlaceIsLoading: Bool = false
+    /// Non-nil when mise en place fails or finds nothing. Shown inline near the trigger.
+    @Published var miseEnPlaceError: String? = nil
     /// Fires once when import succeeds, so the loading view can animate to 100% before the sheet dismisses.
     @Published var importSuccess: Bool = false
     /// Tracks the active stage of the import pipeline for stage-aware loading UI.
@@ -92,8 +96,12 @@ final class AppStore: ObservableObject {
 
     /// Injected at init for testing; nil means use the live OpenAI orchestrator.
     private let testOrchestrator: (any LLMOrchestrator)?
+    /// Injected at init for testing mise en place; nil means use the live MiseEnPlaceService.
+    private let testMiseEnPlaceService: (any MiseEnPlaceServiceProtocol)?
     /// The active LLM Task. Non-nil while a call is in flight.
     private var llmTask: Task<Void, Never>?
+    /// Separate task slot for mise en place — independent of the chat LLM task.
+    private var miseEnPlaceTask: Task<Void, Never>?
     /// Monotonically incremented per send. Used by the deferred cleanup to avoid
     /// clearing a newer task's reference when an old (cancelled) task finishes.
     private var llmGeneration = 0
@@ -125,10 +133,12 @@ final class AppStore: ObservableObject {
     static let stepDoneId        = UUID(uuidString: "00000000-0000-0000-0001-000000000003")!
 
     init(testOrchestrator: (any LLMOrchestrator)? = nil,
+         testMiseEnPlaceService: (any MiseEnPlaceServiceProtocol)? = nil,
          sessionsDirectory: URL? = nil,
          preferencesDefaults: UserDefaults? = nil,
          keyProvider: any OpenAIKeyProviding = KeychainOpenAIKeyProvider()) {
         self.testOrchestrator = testOrchestrator
+        self.testMiseEnPlaceService = testMiseEnPlaceService
         self.keyProvider = keyProvider
         self.sessionsDirectory = sessionsDirectory
         self.preferencesDefaults = preferencesDefaults
@@ -219,6 +229,7 @@ final class AppStore: ObservableObject {
 
     deinit {
         llmTask?.cancel()
+        miseEnPlaceTask?.cancel()
     }
 
     // MARK: - Preferences
@@ -643,6 +654,91 @@ final class AppStore: ObservableObject {
             }
             append(ChatMessage(role: .assistant, text: assistantMessage))
             llmDebugStatus = "failed"
+        }
+    }
+
+    // MARK: - Mise en place
+
+    /// Triggers the mise en place transformation for the current recipe.
+    /// Single-flight: does nothing if a call is already in flight.
+    func triggerMiseEnPlace() {
+        guard miseEnPlaceTask == nil else { return }
+        miseEnPlaceError = nil
+        miseEnPlaceIsLoading = true
+        miseEnPlaceTask = Task { await self.runMiseEnPlaceLLM() }
+    }
+
+    /// Marks a mise en place step as done. One-way — matches the procedure step behavior.
+    func markMiseEnPlaceDone(_ id: UUID) {
+        var recipe = uiState.recipe
+        guard let current = recipe.miseEnPlace,
+              current.contains(where: { $0.id == id && $0.status == .todo }) else { return }
+        recipe.miseEnPlace = current.map { step in
+            guard step.id == id else { return step }
+            return Step(id: step.id, text: step.text, status: .done)
+        }
+        uiState = uiState.replacingRecipe(recipe)
+        saveSession()
+    }
+
+    private func runMiseEnPlaceLLM() async {
+        defer {
+            miseEnPlaceTask = nil
+            miseEnPlaceIsLoading = false
+        }
+
+        // When a test service is injected, bypass the API key check — the mock ignores it.
+        let service: any MiseEnPlaceServiceProtocol
+        let apiKey: String
+        if let testService = testMiseEnPlaceService {
+            service = testService
+            apiKey = "__test__"
+        } else {
+            guard let key = resolvedAPIKey() else {
+                miseEnPlaceError = "Couldn't generate mise en place — try again"
+                return
+            }
+            service = MiseEnPlaceService()
+            apiKey = key
+        }
+
+        let recipe = uiState.recipe
+
+        do {
+            let response = try await service.run(recipe: recipe, apiKey: apiKey)
+
+            guard !Task.isCancelled else { return }
+
+            if response.miseEnPlace.isEmpty {
+                miseEnPlaceError = "No prep steps found to separate"
+                return
+            }
+
+            let mepSteps = response.miseEnPlace.map { Step(text: $0) }
+            let updatedProcedure = preservingDoneStatus(
+                newTexts: response.updatedSteps,
+                existingSteps: recipe.steps
+            )
+
+            var updatedRecipe = recipe
+            updatedRecipe.version += 1
+            updatedRecipe.miseEnPlace = mepSteps
+            updatedRecipe.steps = updatedProcedure
+            uiState = uiState.replacingRecipe(updatedRecipe)
+            saveSession()
+
+        } catch {
+            guard !Task.isCancelled else { return }
+            miseEnPlaceError = "Couldn't generate mise en place — try again"
+        }
+    }
+
+    /// Re-creates procedure steps from the LLM-returned texts, preserving `done` status
+    /// where the step text matches an existing done step exactly.
+    private func preservingDoneStatus(newTexts: [String], existingSteps: [Step]) -> [Step] {
+        let doneTexts = Set(existingSteps.filter { $0.status == .done }.map { $0.text })
+        return newTexts.map { text in
+            Step(text: text, status: doneTexts.contains(text) ? .done : .todo)
         }
     }
 

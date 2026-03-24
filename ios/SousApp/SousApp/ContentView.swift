@@ -30,9 +30,13 @@ struct ContentView: View {
                 RecipeCanvasView(
                     recipe: store.uiState.recipe,
                     onMarkStepDone: { id in store.send(.markStepDone(stepId: id)) },
+                    onMarkMiseEnPlaceDone: { id in store.markMiseEnPlaceDone(id) },
+                    onTriggerMiseEnPlace: { store.triggerMiseEnPlace() },
                     onOpenSettings: { showSettings = true },
                     onStartNew: { store.requestNewSession() },
                     onOpenRecents: { store.showRecentRecipes = true },
+                    miseEnPlaceIsLoading: store.miseEnPlaceIsLoading,
+                    miseEnPlaceError: store.miseEnPlaceError,
                     llmDebugStatus: store.llmDebugStatus
                 )
 
