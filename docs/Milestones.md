@@ -12,15 +12,15 @@ Statuses:
 
 ## Project State
 
-**Current milestone:** Milestone 19 — Personality Modes
+**Current milestone:** Milestone 21 — Recipe Import
 
 **Recently completed:**
+- Milestone 20 — TestFlight Alpha + Instrumentation
+- Milestone 19 — Personality Modes
 - Milestone 18 — Streaming Chat Responses
-- Milestone 17 — Design
-- Milestone 16 — Memories
 
 **Next milestone:**
-- Milestone 20 — Post-Cook Ratings
+- Milestone 22 — Post-Cook Ratings
 
 This section exists to make the active project phase immediately visible to humans and AI agents without scanning the entire roadmap.
 
@@ -392,7 +392,7 @@ Explicit non-goals:
 ---
 
 ## Milestone 20 — TestFlight Alpha + Instrumentation
-**Status:** CURRENT
+**Status:** DONE
 
 **Goal:** Ship a usable alpha to real users with enough observability to fix issues quickly.
 
@@ -406,6 +406,28 @@ Core capabilities:
 Explicit non-goals:
 - Monetization
 - Growth loops
+
+---
+
+## Milestone 21 — Recipe Import
+**Status:** DONE
+
+**Goal:** Let users bring any existing recipe into Sous from a photo, screenshot, or pasted text, and immediately start cooking with it.
+
+**Core capabilities:**
+- "Talk to a recipe" CTA on the zero state screen as the primary entry point
+- Three import sources: camera, photo library, paste text
+- AI extracts the recipe faithfully — title, ingredients, steps — without editorializing
+- Uncertain or illegible lines flagged inline with `[??]`
+- Canvas generated immediately on extraction; no pre-generation confirmation step
+- First AI chat message after canvas load invites the user to adapt the recipe (serving size, substitutions, etc.)
+- All subsequent edits follow the existing patch flow
+- New routing intent: `import_existing_recipe` — skips exploration phase entirely
+
+**Explicit non-goals:**
+- URL import (pasting a recipe website link)
+- User-editable correction step before canvas generation
+- Batch import
 
 ---
 
@@ -433,7 +455,7 @@ Explicit non-goals:
 
 ---
 
-## Milestone 22 — Accounts + Sync
+## Milestone 23 — Accounts + Sync
 **Status:** PLANNED
 
 **Goal:** Establish durable user accounts so preferences, memories, and recipes persist across devices and reinstalls.
@@ -451,7 +473,7 @@ Explicit non-goals:
 
 ---
 
-## Milestone 23 — Planning, Shopping, and Prep
+## Milestone 24 — Planning, Shopping, and Prep
 **Status:** FUTURE
 
 Potential capabilities:
@@ -463,7 +485,7 @@ Potential capabilities:
 
 ---
 
-## Milestone 24 — Voice & Hands-Free Cooking
+## Milestone 25 — Voice & Hands-Free Cooking
 **Status:** FUTURE
 
 Potential capabilities:
@@ -475,7 +497,7 @@ Potential capabilities:
 
 ---
 
-## Milestone 25 — Monetization
+## Milestone 26 — Monetization
 **Status:** FUTURE
 
 Notes:

@@ -626,7 +626,11 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
 
     private func buildMessages(for request: LLMRequest) -> [LLMMessage] {
         var messages = [
-            LLMMessage(role: .system, content: systemPrompt(hasCanvas: request.hasCanvas, personalityMode: request.userPrefs.personalityMode)),
+            LLMMessage(role: .system, content: systemPrompt(
+                hasCanvas: request.hasCanvas,
+                isImportExtraction: request.isImportExtraction,
+                personalityMode: request.userPrefs.personalityMode
+            )),
             LLMMessage(role: .system, content: recipeContextMessage(for: request)),
         ]
         messages += request.conversationHistory
@@ -667,7 +671,11 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
         // Include the conversation history so the repair model has full context
         // for what the user was asking (critical for multi-turn clarification replies).
         var messages = [
-            LLMMessage(role: .system, content: systemPrompt(hasCanvas: request.hasCanvas, personalityMode: request.userPrefs.personalityMode)),
+            LLMMessage(role: .system, content: systemPrompt(
+                hasCanvas: request.hasCanvas,
+                isImportExtraction: request.isImportExtraction,
+                personalityMode: request.userPrefs.personalityMode
+            )),
             LLMMessage(role: .system, content: recipeContextMessage(for: request)),
         ]
         messages += request.conversationHistory
@@ -677,8 +685,37 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
 
     // MARK: - Prompt Text
 
-    private func systemPrompt(hasCanvas: Bool, personalityMode: String) -> String {
-        if hasCanvas {
+    private func systemPrompt(hasCanvas: Bool, isImportExtraction: Bool, personalityMode: String) -> String {
+        if isImportExtraction {
+            return """
+            You are Sous. The user has provided recipe text extracted from a photo or pasted directly. Your only job is faithful extraction — structure this text into a recipe canvas with no interpretation, substitution, or editorializing.
+
+            RULES — never violate:
+            1. Output JSON only. No markdown. No code fences. No prose outside JSON.
+            2. Extract faithfully. Copy title, ingredient amounts, units, and step wording exactly as they appear in the source text.
+            3. If a line is garbled, ambiguous, or clearly incomplete (e.g. OCR artifacts, cut-off text, illegible amounts), append [??] to that ingredient or step text — do not omit it or guess at a correction.
+            4. Take the title from the source text if detectable. If no title is present, generate a short reasonable one.
+            5. The canvas is blank — emit a full patchSet with set_title, all add_ingredient (after_id: null), and all add_step (after_step_id: null) patches.
+            6. Never add, remove, or substitute ingredients or steps. That comes later through the normal edit flow.
+            7. In assistant_message, briefly acknowledge the loaded recipe by name and invite the user to adapt it (serving size, substitutions, dietary changes, etc.). Keep it short — one or two sentences.
+
+            FORMATTING RULES — for richly-formatted sources (ChatGPT output, markdown, emoji-decorated text):
+            8. Nested bullet points and sub-items belong to their parent step. Fold them into the parent step's text rather than creating separate steps. Example: if a step says "When soft + lightly golden:" followed by indented sub-bullets, those sub-bullets are part of that step — not independent steps.
+            9. Emoji bullets used for tips or emphasis (e.g. 👉 Don't move too early) are annotations on their surrounding step context, not standalone steps. Incorporate them into the nearest logical step.
+            10. Omit non-actionable narrative sections entirely. This includes sections titled things like "What success looks like", "Common failure modes", "Game plan", closing remarks, and upgrade suggestions. Only extract ingredients and actionable cooking steps.
+            11. Section headers (e.g. "Meatloaf = crustmaxx", "Brioche = anti-sog system") are grouping labels, not steps. Omit them or fold their meaning into the first step of that section.
+            12. Inline context like heat settings (e.g. "Gas: medium-high / Induction: 400°F") belongs to the step it accompanies — incorporate it into that step's text, not as a separate step.
+
+            Output shape (patchSetId must be a new UUID you generate):
+            {"assistant_message":"...","patchSet":{"patchSetId":"<new-uuid>","baseRecipeId":"<copy id from RECIPE CONTEXT>","baseRecipeVersion":<copy version from RECIPE CONTEXT>,"patches":[{"type":"set_title","title":"..."},{"type":"add_ingredient","text":"...","after_id":null},{"type":"add_step","text":"...","after_step_id":null}]}}
+
+            Patch operations (blank canvas — always null for after_id and after_step_id):
+            {"type":"set_title","title":"..."}
+            {"type":"add_ingredient","text":"...","after_id":null}
+            {"type":"add_step","text":"...","after_step_id":null}
+            {"type":"add_note","text":"..."}
+            """
+        } else if hasCanvas {
             return """
             You are Sous, a cooking companion who loves food and has strong opinions about it. A recipe is on the canvas and the user is working with it.
 
@@ -960,7 +997,7 @@ public extension OpenAILLMOrchestrator {
     /// the given request. Used by the debug diagnostic exporter only — not called in
     /// production code paths.
     func buildDebugPromptStrings(for request: LLMRequest) -> (system: String, context: String) {
-        (systemPrompt(hasCanvas: request.hasCanvas, personalityMode: request.userPrefs.personalityMode),
+        (systemPrompt(hasCanvas: request.hasCanvas, isImportExtraction: request.isImportExtraction, personalityMode: request.userPrefs.personalityMode),
          recipeContextMessage(for: request))
     }
 }

@@ -173,3 +173,39 @@
 - When a new LLM request is made
 - Then the memories are included as silent context
 - And the AI uses them to inform its responses without explicitly announcing it
+
+### US-25: Import a Recipe (Zero State Entry Point)
+- Given the user has no active recipe canvas
+- When the user taps "Talk to a recipe" on the zero state screen
+- Then an import sheet appears offering three input methods: Camera, Photo Library, and Paste Text
+
+### US-26: Import via Photo or Screenshot
+- Given the import sheet is open
+- When the user captures a photo or selects one from their library
+- Then the AI extracts the recipe from the image
+- And generates a recipe canvas immediately
+- And any line where confidence is low is flagged with `[??]`
+
+### US-27: Import via Pasted Text
+- Given the import sheet is open
+- When the user pastes raw recipe text
+- Then the AI extracts the recipe from the text
+- And generates a recipe canvas immediately
+- And any line where confidence is low is flagged with `[??]`
+
+### US-28: Post-Import First Message
+- Given a recipe canvas has just been created via import
+- When the canvas appears
+- Then the AI sends a first chat message acknowledging the loaded recipe
+- And invites the user to make any adaptations (serving size, substitutions, dietary changes, etc.)
+
+### US-29: Import Skips Exploration Phase
+- Given the user initiates a recipe import
+- When the canvas is generated
+- Then no clarifying questions are asked and no option cards are shown
+- And the app routes directly into cooking/edit mode
+
+### US-30: Faithful Extraction
+- Given a recipe is being imported
+- Then the AI must not alter, substitute, or editorialize during extraction
+- And all subsequent changes must go through the normal patch flow

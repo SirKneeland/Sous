@@ -90,6 +90,8 @@
   - `Preferences/UserPreferences.swift` — `UserPreferences` Codable struct (hardAvoids, servingSize, equipment, customInstructions) + `UserPreferencesPersistence` (UserDefaults-backed, injectable for tests)
   - `Preferences/MemoryItem.swift` — `MemoryItem` Codable struct (id, text, createdAt) + `MemoriesPersistence` (UserDefaults-backed, injectable for tests)
   - `Views/MemoriesView.swift` — List of saved memories with swipe-to-delete and tap-to-edit sheet
+  - `Import/RecipeImportSheet.swift` — Full-screen import sheet; internal Mode enum (chooser | camera | library | paste | loading | error); observes `store.importError` via `.onChange`; success auto-dismisses via AppStore setting `isShowingImportSheet = false`
+  - `Import/RecipeOCRService.swift` — Static `recognizeText(in:)` using `VNRecognizeTextRequest` at `.accurate` level; returns extracted lines joined by `\n`, or `nil` on empty/unreadable input; Vision framework (first-party, no package dependency)
 
 ---
 
@@ -122,28 +124,27 @@
 
 ---
 
-## Current Milestone State (Milestone 18)
+## Current Milestone State (Milestone 21)
 
-**Milestone 18 — Streaming Chat Responses (DONE)**
+**Milestone 21 — Recipe Import (DONE)**
 
 What is built and wired up:
-- `StreamingLLMClient` protocol (`ios/SousCore/Sources/SousCore/LLM/LLMProtocols.swift`) — sub-protocol of `LLMClient`; adds `stream(_ request:) -> AsyncThrowingStream<String, Error>`
-- `LLMOrchestrator.run(_ request:, onStreamToken:)` — declared as a protocol requirement with a default extension that ignores the callback and delegates to `run(request)`; test mocks get this for free
-- `StreamingJSONExtractor` (`ios/SousCore/Sources/SousCore/LLM/StreamingJSONExtractor.swift`) — `extractPartialAssistantMessage(from buffer: String) -> String?`; incrementally extracts `assistant_message` from a partial JSON buffer; handles JSON escape sequences and mid-escape cuts
-- `OpenAILLMOrchestrator.run(_ request:, onStreamToken:)` — streaming path: detects `StreamingLLMClient` conformance on client, uses `stream(_:)`, accumulates tokens, calls `onStreamToken` with incremental assistant_message characters; after stream ends, passes full accumulated text through existing `decodeAndValidate` pipeline unchanged
-- `OpenAIClient: StreamingLLMClient` — extension on `OpenAIClient`; uses `URLSession.bytes(for:)` to read SSE lines; parses `data: {...}` events, yields `choices[0].delta.content` fragments; handles `[DONE]`, cancellation, and HTTP errors
-- `AppStore.streamingAssistantMessage: String?` — `@Published`; non-nil while tokens are arriving; cleared in defer block after LLM call completes
-- `AppStore.sendWithLLM`: uses `AsyncStream.makeStream` + `Task { @MainActor in }` consumer to safely bridge streaming tokens from the orchestrator's non-isolated context to the main actor; `await streamConsumer.value` ensures all tokens are drained before result processing
-- `ChatSheetView` — replaces the static `ThinkingBubbleView` with `StreamingBubbleView` when `store.streamingAssistantMessage != nil`; `StreamingBubbleView` renders partial text with a blinking cursor animation; scroll-on-change added for streaming updates
-- 16 new tests in `StreamingJSONExtractorTests.swift` covering nil before marker, partial/complete extraction, JSON escape sequences, and edge cases
-- 5 new tests in `AppStoreTests.swift` (m18-a through m18-e) verifying `streamingAssistantMessage` lifecycle
-- `drainMain()` in `AppStoreTests` bumped from 5 to 10 yields to account for the 2 additional async hops M18 added per `sendWithLLM` call
+- `RecipeOCRService` (`ios/SousApp/SousApp/Import/RecipeOCRService.swift`) — Static `recognizeText(in:)` using Apple Vision `VNRecognizeTextRequest` at `.accurate` level; returns extracted lines joined by `\n`, or `nil` if empty/unreadable
+- `RecipeImportSheet` (`ios/SousApp/SousApp/Import/RecipeImportSheet.swift`) — Full-screen import sheet with internal Mode enum (chooser | camera | library | paste | loading | error); camera path resolves permission inline via `resolveCameraPermission()`; success auto-dismisses; error state shows "TRY AGAIN" / "CANCEL"
+- `LLMRequest.isImportExtraction: Bool` — new field; routes orchestrator to a faithful-extraction system prompt (extract verbatim, flag uncertain lines with `[??]`, no editorializing)
+- `OpenAILLMOrchestrator.systemPrompt(hasCanvas:isImportExtraction:personalityMode:)` — new first branch when `isImportExtraction == true`; all call sites updated including `buildDebugPromptStrings`
+- `AppStore.isShowingImportSheet: Bool` + `AppStore.importError: String?` — `@Published`; control import sheet presentation and error signaling (mirrors `showRecentRecipes` pattern)
+- `AppStore.sendImportRequest(text:)` / `sendImportRequest(image:)` — public entry points; image path runs OCR first, then both paths call `runImportLLM`
+- `AppStore.runImportLLM(userText:generation:)` — shared body: builds `LLMRequest` with `isImportExtraction: true`, calls orchestrator, on `.valid` applies PatchSet directly via `PatchApplier.apply()` (bypasses patch review), sets `hasCanvas = true`, primes `chatTranscript`, sets `isShowingImportSheet = false`
+- `ChatSheetView` blank state — "TALK TO A RECIPE" primary CTA + "OR CREATE ONE" secondary text button added above the composer bar
+- `ContentView` — wired `onOpenImport` closure and import sheet presentation
+- 5 new tests in `AppStoreTests.swift` (m21-a through m21-e) using `DynamicImportOrchestrator` mock that generates matching PatchSets from incoming request's recipeId/recipeVersion
 
-Previously completed (Milestone 17 — Design — DONE):
-- Cohesive visual identity applied across all screens
+Previously completed (Milestone 20 — TestFlight Alpha — DONE):
+- TestFlight distribution, basic instrumentation, error logging
 
-Previously completed (Milestone 16 — Memories — DONE):
-- `MemoryItem`, `MemoriesPersistence`, memory proposal toast in `ChatSheetView`, `MemoriesView` in Settings
+Previously completed (Milestone 19 — Personality Modes — DONE):
+- `personalityMode` field on `UserPreferences`; tone setting in Preferences screen; distinct system prompt behaviors for Minimal/Normal/Playful
 
 ---
 
@@ -175,7 +176,9 @@ Previously completed (Milestone 16 — Memories — DONE):
 ## Notes for Future Sessions
 
 - **Swift version is 6.2** — strict concurrency checking is enabled. Any new code touching shared state must be @MainActor or Sendable-safe.
-- **Two LLM models in AppStore:** `liveLLMModel = "gpt-4o-mini"` (text path) and `multimodalLLMModel = "gpt-4o"` (vision path). The orchestrator always uses whatever model it is initialized with; the model choice lives in AppStore.
+- **Two LLM models in AppStore:** `liveLLMModel = "gpt-4o-mini"` (text path, also used for import structuring) and `multimodalLLMModel = "gpt-4o"` (vision path). The orchestrator always uses whatever model it is initialized with; the model choice lives in AppStore.
+- **Import pipeline is two-step:** Apple Vision OCR (on-device, free) extracts raw text from the image, then a `gpt-4o-mini` text-only call structures it into a PatchSet. No image is ever sent to OpenAI during import. Paste text skips Vision entirely.
+- **Import bypasses patch review:** `runImportLLM` calls `PatchApplier.apply()` directly and sets `uiState = .recipeOnly(recipe:)` inline — the UIStateMachine patch review states are never entered during import.
 - **Streaming is text-only (M18 scope):** The multimodal path (`sendWithMultimodalLLM`) does NOT stream. The streaming path in `OpenAIClient` omits the image even if one is present; this is correct for text-only streaming responses.
 - **Streaming token bridge pattern:** `AppStore.sendWithLLM` uses `AsyncStream.makeStream(of: String.self)` + a `Task { @MainActor in }` consumer to bridge streaming tokens from the orchestrator's non-isolated context to the main actor. `tokenContinuation` is `Sendable` and can be captured in the `@Sendable` `onStreamToken` callback safely.
 - **`nextLLMContext` in AppStore** — carries the last patch decision (accept/reject + summary) into the next LLM call as silent context, then clears. This is the only mechanism for cross-turn memory today. The multimodal path also injects `nextLLMContext` (rebuilt in `sendWithMultimodalLLM`).

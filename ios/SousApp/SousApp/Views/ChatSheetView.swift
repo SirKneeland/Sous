@@ -9,6 +9,7 @@ struct ChatSheetView: View {
     var onStartNew: () -> Void = {}
     var onOpenSettings: () -> Void = {}
     var onOpenRecents: () -> Void = {}
+    var onOpenImport: () -> Void = {}
     @StateObject private var photoSend = PhotoSendCoordinator()
     @State private var composerText = ""
     @State private var composerHeight: CGFloat = 36
@@ -61,6 +62,43 @@ struct ChatSheetView: View {
             }
 
             Spacer()
+
+            // Import CTA
+            VStack(spacing: 24) {
+                Button {
+                    onOpenImport()
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "doc.viewfinder")
+                            .font(.system(size: 14, weight: .regular))
+                        Text("TALK TO A RECIPE")
+                            .font(.sousButton)
+                    }
+                    .foregroundStyle(Color.sousBackground)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(Color.sousText)
+                    .overlay(Rectangle().stroke(Color.sousText, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 20)
+
+                Button {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                } label: {
+                    VStack(spacing: 6) {
+                        Text("OR CREATE ONE")
+                            .font(.sousCaption)
+                            .foregroundStyle(Color.sousMuted)
+                            .kerning(1.0)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 10, weight: .light))
+                            .foregroundStyle(Color.sousMuted)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.bottom, 16)
 
             SousRule()
             composerBar

@@ -53,6 +53,43 @@ private actor CapturingOrchestrator: LLMOrchestrator {
     }
 }
 
+// MARK: - DynamicImportOrchestrator
+
+/// Actor-based mock that generates a valid import PatchSet matching whatever recipe ID/version
+/// the store passes in. Used to test the import flow without hardcoding a recipe UUID.
+private actor DynamicImportOrchestrator: LLMOrchestrator {
+    private(set) var requests: [LLMRequest] = []
+
+    func run(_ request: LLMRequest) async -> LLMResult {
+        requests.append(request)
+        let recipeId = UUID(uuidString: request.recipeId) ?? UUID()
+        let patchSet = PatchSet(
+            baseRecipeId: recipeId,
+            baseRecipeVersion: request.recipeVersion,
+            patches: [
+                .setTitle("Spaghetti Carbonara"),
+                .addIngredient(text: "200g spaghetti", afterId: nil),
+                .addIngredient(text: "100g guanciale", afterId: nil),
+                .addStep(text: "Boil pasta until al dente", afterStepId: nil),
+                .addStep(text: "Fry guanciale until crispy", afterStepId: nil),
+            ]
+        )
+        return .valid(
+            patchSet: patchSet,
+            assistantMessage: "Got your Carbonara! What would you like to adapt?",
+            raw: nil,
+            debug: LLMDebugBundle(
+                status: .succeeded,
+                attemptCount: 1, maxAttempts: 3,
+                requestId: "test-import",
+                extractionUsed: false, repairUsed: false,
+                timingTotalMs: 0
+            ),
+            proposedMemory: nil
+        )
+    }
+}
+
 // MARK: - Helpers
 
 private extension AppStoreTests {
@@ -767,5 +804,105 @@ final class AppStoreTests: XCTestCase {
 
         XCTAssertNil(store.streamingAssistantMessage,
                      "streamingAssistantMessage must be nil after cancellation")
+    }
+
+    // MARK: (m21-a) import text success — canvas populated, hasCanvas true, one transcript message
+
+    func test_m21a_importText_success_populatesCanvas() async {
+        let capturer = DynamicImportOrchestrator()
+        let store = AppStore(testOrchestrator: capturer)
+        store.startNewSession()
+
+        XCTAssertFalse(store.hasCanvas, "Pre-condition: blank state required")
+        XCTAssertFalse(store.isShowingImportSheet, "Pre-condition: import sheet closed")
+
+        store.isShowingImportSheet = true
+        store.sendImportRequest(text: "Spaghetti Carbonara\n200g spaghetti\nBoil pasta")
+        await drainMain()
+
+        XCTAssertTrue(store.hasCanvas, "hasCanvas must be true after successful import")
+        XCTAssertTrue(store.importSuccess, "importSuccess must be true — sheet handles dismissal after animation")
+        XCTAssertNil(store.importError, "importError must be nil on success")
+        XCTAssertEqual(store.llmDebugStatus, "succeeded")
+
+        if case .recipeOnly(let r) = store.uiState {
+            XCTAssertEqual(r.title, "Spaghetti Carbonara", "Extracted title must be applied")
+            XCTAssertFalse(r.ingredients.isEmpty, "Extracted recipe must have ingredients")
+            XCTAssertFalse(r.steps.isEmpty, "Extracted recipe must have steps")
+        } else {
+            XCTFail("Expected recipeOnly after import, got \(store.uiState)")
+        }
+
+        XCTAssertEqual(store.chatTranscript.count, 1,
+                       "Transcript must contain exactly one message after import (AI welcome)")
+        XCTAssertEqual(store.chatTranscript.first?.role, .assistant,
+                       "First transcript message must be from the assistant")
+    }
+
+    // MARK: (m21-b) import text sends isImportExtraction=true to the orchestrator
+
+    func test_m21b_importText_setsIsImportExtraction() async {
+        let capturer = DynamicImportOrchestrator()
+        let store = AppStore(testOrchestrator: capturer)
+        store.startNewSession()
+
+        store.sendImportRequest(text: "some recipe text")
+        await drainMain()
+
+        let requests = await capturer.requests
+        XCTAssertEqual(requests.count, 1, "Exactly one LLM call must be made for import")
+        XCTAssertTrue(requests[0].isImportExtraction,
+                      "Import LLM request must have isImportExtraction=true")
+        XCTAssertFalse(requests[0].hasCanvas,
+                       "Import LLM request must have hasCanvas=false")
+    }
+
+    // MARK: (m21-c) import never enters patch review
+
+    func test_m21c_importText_neverEntersPatchReview() async {
+        let capturer = DynamicImportOrchestrator()
+        let store = AppStore(testOrchestrator: capturer)
+        store.startNewSession()
+
+        store.sendImportRequest(text: "some recipe text")
+        await drainMain()
+
+        XCTAssertFalse(store.uiState.isPatchProposed,
+                       "Import must never enter patchProposed state")
+        XCTAssertFalse(store.uiState.isPatchReview,
+                       "Import must never enter patchReview state")
+    }
+
+    // MARK: (m21-d) import LLM failure — hasCanvas stays false, importError set, sheet stays open
+
+    func test_m21d_importText_failure_setsError() async {
+        let mock = SyncOrchestrator(result: failureResult(fallbackPatchSet: nil))
+        let store = AppStore(testOrchestrator: mock)
+        store.startNewSession()
+
+        store.isShowingImportSheet = true
+        store.sendImportRequest(text: "some recipe text")
+        await drainMain()
+
+        XCTAssertFalse(store.hasCanvas, "hasCanvas must remain false after import failure")
+        XCTAssertTrue(store.isShowingImportSheet, "Import sheet must stay open on failure")
+        XCTAssertNotNil(store.importError, "importError must be set after import failure")
+        XCTAssertEqual(store.chatTranscript.count, 0,
+                       "Transcript must be empty after import failure (no messages appended)")
+    }
+
+    // MARK: (m21-e) import noPatches result — hasCanvas stays false, importError set
+
+    func test_m21e_importText_noPatches_setsError() async {
+        let mock = SyncOrchestrator(result: noPatchesResult())
+        let store = AppStore(testOrchestrator: mock)
+        store.startNewSession()
+
+        store.isShowingImportSheet = true
+        store.sendImportRequest(text: "some recipe text")
+        await drainMain()
+
+        XCTAssertFalse(store.hasCanvas, "hasCanvas must remain false after noPatches import")
+        XCTAssertNotNil(store.importError, "importError must be set when LLM returns noPatches")
     }
 }

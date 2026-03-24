@@ -22,6 +22,9 @@ extension UIState {
     }
 }
 
+/// Tracks the active stage of the import pipeline. Used by the loading UI to show stage-aware copy.
+enum ImportLoadingStage { case ocr, llm }
+
 // MARK: - AppStore
 
 @MainActor
@@ -63,6 +66,14 @@ final class AppStore: ObservableObject {
     private let preferencesDefaults: UserDefaults?
 
     @Published var showRecentRecipes: Bool = false
+    /// True while the import sheet is presented. Set to false by AppStore on successful import or by the sheet on cancel.
+    @Published var isShowingImportSheet: Bool = false
+    /// Non-nil when an import attempt failed. Observed by RecipeImportSheet to switch into error state.
+    @Published var importError: String? = nil
+    /// Fires once when import succeeds, so the loading view can animate to 100% before the sheet dismisses.
+    @Published var importSuccess: Bool = false
+    /// Tracks the active stage of the import pipeline for stage-aware loading UI.
+    @Published var importLoadingStage: ImportLoadingStage = .llm
     @Published var userPreferences: UserPreferences = UserPreferences()
     /// User-declared memories included as context in every LLM request.
     @Published var memories: [MemoryItem] = []
@@ -622,6 +633,139 @@ final class AppStore: ObservableObject {
                 send(.patchReceived(fallback))
             }
             append(ChatMessage(role: .assistant, text: assistantMessage))
+            llmDebugStatus = "failed"
+        }
+    }
+
+    // MARK: - Recipe Import
+
+    /// Starts an import from pasted text. Skips OCR — text goes directly to the LLM structuring call.
+    func sendImportRequest(text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        importError = nil
+        importSuccess = false
+        importLoadingStage = .llm
+        llmGeneration += 1
+        let gen = llmGeneration
+        llmTask = Task { await self.sendWithImportLLM(trimmed, generation: gen) }
+    }
+
+    /// Starts an import from a UIImage. Runs Vision OCR on-device first, then sends the
+    /// extracted text to the LLM structuring call. No image is sent to OpenAI.
+    func sendImportRequest(image: UIImage) {
+        importError = nil
+        importSuccess = false
+        importLoadingStage = .ocr
+        llmGeneration += 1
+        let gen = llmGeneration
+        llmTask = Task { await self.sendWithImportFromImage(image, generation: gen) }
+    }
+
+    private func sendWithImportFromImage(_ image: UIImage, generation: Int) async {
+        defer {
+            if llmGeneration == generation {
+                llmTask = nil
+                isThinking = false
+            }
+        }
+        isThinking = true
+        llmDebugStatus = "calling"
+
+        guard let ocrText = await RecipeOCRService.recognizeText(in: image), !ocrText.isEmpty else {
+            importError = "Couldn't read text from this photo. Try a clearer image or paste the recipe text instead."
+            return
+        }
+
+        guard !Task.isCancelled else {
+            llmDebugStatus = "cancelled"
+            return
+        }
+
+        importLoadingStage = .llm
+        await runImportLLM(userText: ocrText, generation: generation, isTextImport: false)
+    }
+
+    private func sendWithImportLLM(_ userText: String, generation: Int) async {
+        defer {
+            if llmGeneration == generation {
+                llmTask = nil
+                isThinking = false
+            }
+        }
+        isThinking = true
+        llmDebugStatus = "calling"
+        await runImportLLM(userText: userText, generation: generation, isTextImport: true)
+    }
+
+    /// Shared LLM call body for both image and text import paths.
+    /// Applies the extracted PatchSet directly — no patch review.
+    private func runImportLLM(userText: String, generation: Int, isTextImport: Bool) async {
+        let recipe = uiState.recipe
+
+        let request = LLMRequest(
+            recipeId: recipe.id.uuidString,
+            recipeVersion: recipe.version,
+            hasCanvas: false,
+            userMessage: userText,
+            recipeSnapshotForPrompt: recipe,
+            userPrefs: buildLLMUserPrefs(),
+            nextLLMContext: nil,
+            conversationHistory: [],
+            isImportExtraction: true
+        )
+
+        let llmClient = OpenAIClient(apiKey: resolvedAPIKey())
+        let orchestrator: any LLMOrchestrator = testOrchestrator ?? OpenAILLMOrchestrator(
+            client: llmClient,
+            streamingClient: llmClient,
+            model: liveLLMModel
+        )
+
+        let result = await orchestrator.run(request)
+
+        guard !Task.isCancelled else {
+            llmDebugStatus = "cancelled"
+            return
+        }
+
+        switch result {
+        case .valid(let patchSet, let assistantMessage, _, let debug, _):
+            lastDebugBundle = debug
+            let current = uiState.recipe
+            guard patchSet.baseRecipeId == current.id,
+                  patchSet.baseRecipeVersion == current.version else {
+                importError = "Couldn't extract this recipe. Please try again."
+                llmDebugStatus = "fatal_recipeIdMismatch"
+                return
+            }
+            guard let extracted = try? PatchApplier.apply(patchSet: patchSet, to: current) else {
+                importError = "Couldn't apply the extracted recipe. Please try again."
+                llmDebugStatus = "failed"
+                return
+            }
+            // Apply directly — no patch review for import.
+            uiState = .recipeOnly(recipe: extracted)
+            hasCanvas = true
+            chatTranscript = [ChatMessage(role: .assistant, text: assistantMessage)]
+            nextLLMContext = nil
+            llmDebugStatus = "succeeded"
+            saveSession()
+            importSuccess = true
+            // Sheet handles dismissal after animating progress to 100% — see RecipeImportSheet.
+
+        case .noPatches(_, _, let debug, _, _):
+            lastDebugBundle = debug
+            importError = isTextImport
+                ? "Couldn't extract a recipe from this text — please check the text and try again."
+                : "Couldn't extract a recipe here. Try a clearer photo or paste the text instead."
+            llmDebugStatus = "failed"
+
+        case .failure(_, _, _, let debug, _):
+            lastDebugBundle = debug
+            importError = isTextImport
+                ? "Couldn't extract a recipe from this text — please check the text and try again."
+                : "Couldn't extract this recipe — try a clearer photo, or paste the text instead."
             llmDebugStatus = "failed"
         }
     }

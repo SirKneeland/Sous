@@ -87,6 +87,10 @@ public struct LLMRequest: Sendable {
     /// Injected between the recipe context and the current user message so the model
     /// has multi-turn memory. Empty for the first message in a session.
     public let conversationHistory: [LLMMessage]
+    /// When true, the orchestrator uses the faithful-extraction system prompt
+    /// instead of the exploration or editing prompts. Used exclusively by the
+    /// Recipe Import flow. Defaults to false for all other requests.
+    public let isImportExtraction: Bool
 
     public init(
         recipeId: String,
@@ -96,7 +100,8 @@ public struct LLMRequest: Sendable {
         recipeSnapshotForPrompt: Recipe,
         userPrefs: LLMUserPrefs,
         nextLLMContext: NextLLMContext? = nil,
-        conversationHistory: [LLMMessage] = []
+        conversationHistory: [LLMMessage] = [],
+        isImportExtraction: Bool = false
     ) {
         self.recipeId = recipeId
         self.recipeVersion = recipeVersion
@@ -106,5 +111,6 @@ public struct LLMRequest: Sendable {
         self.userPrefs = userPrefs
         self.nextLLMContext = nextLLMContext
         self.conversationHistory = conversationHistory
+        self.isImportExtraction = isImportExtraction
     }
 }

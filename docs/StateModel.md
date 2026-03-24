@@ -198,7 +198,7 @@ SessionState {
   }
 
   ui: {
-    mode: "cook" | "chat" | "patch_review"
+    mode: "cook" | "chat" | "patch_review" | "import"
     chatDetent?: "collapsed" | "medium" | "large"
   }
 
@@ -222,7 +222,13 @@ PatchDecision {
   summary?: PatchSet["summary"]
 }
 ```
+### Import Mode
 
+`"import"` mode is active while the user is interacting with the recipe import sheet (camera, photo library, or paste text). It is a zero-state-only mode — it can only be entered when no recipe canvas exists.
+
+On successful extraction, the app transitions directly to `"cook"` mode with the new recipe canvas populated. The import flow bypasses the exploration phase entirely and does not produce a pending PatchSet — the extracted recipe is written directly to Recipe State as the initial version.
+
+If the user dismisses the import sheet without completing an import, the app returns to zero state with no canvas.
 ---
 
 ## Determinism Rules

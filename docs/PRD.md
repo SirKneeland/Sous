@@ -327,6 +327,47 @@ Memories are phrased in third person (e.g. "hates cilantro", "cooking for two yo
 
 ---
 
+## Recipe Import
+
+Sous lets users bring any existing recipe into the app — from a photo, screenshot, or pasted text — and immediately start working with it.
+
+### Entry Point
+
+The zero state screen presents two options:
+- **"Talk to a recipe"** — primary CTA, imports an existing recipe
+- **"Or create one"** — leads to the existing exploration flow
+
+### Import Sources
+
+Tapping "Talk to a recipe" opens a sheet offering three input methods:
+- Camera — photograph a cookbook page, recipe card, etc.
+- Photo library — upload a screenshot (NYT Cooking, another AI, a website photo)
+- Paste text — paste raw recipe text directly
+
+### Extraction Behavior
+
+1. AI extracts the recipe faithfully — title, ingredients, steps — with no interpretation, substitution, or editorializing.
+2. Any line where confidence is low is flagged inline with [??] appended.
+3. Title is taken from the source if detectable; otherwise AI generates a reasonable one.
+4. The recipe canvas is generated immediately on extraction.
+5. The first AI chat message acknowledges the loaded recipe and asks what the user wants to adapt (e.g. serving size, dietary changes, ingredient swaps).
+6. All subsequent changes follow the normal patch flow.
+
+### Routing
+
+New intent added to the LLM routing model: `import_existing_recipe`
+
+- `has_canvas=false` + `intent=import_existing_recipe` → extract and generate canvas directly, skip exploration phase entirely
+- No branching questions, no option cards
+
+### Guardrails
+
+- The AI must not alter the recipe during extraction. Faithfulness is the hard constraint.
+- Best-effort extraction is always preferred over refusing to proceed.
+- Adaptations only happen via the patch flow, after the user initiates them.
+
+---
+
 ## Non-Goals (current)
 
 Out of scope until explicitly added to the roadmap:

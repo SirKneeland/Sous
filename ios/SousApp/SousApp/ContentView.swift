@@ -23,7 +23,8 @@ struct ContentView: View {
                     isFullscreen: true,
                     onStartNew: { store.requestNewSession() },
                     onOpenSettings: { showSettings = true },
-                    onOpenRecents: { store.showRecentRecipes = true }
+                    onOpenRecents: { store.showRecentRecipes = true },
+                    onOpenImport: { store.isShowingImportSheet = true }
                 )
             } else {
                 RecipeCanvasView(
@@ -68,6 +69,12 @@ struct ContentView: View {
         }
         .sheet(isPresented: $store.showRecentRecipes) {
             RecentRecipesView(store: store, onDismiss: { store.showRecentRecipes = false })
+        }
+        .sheet(isPresented: $store.isShowingImportSheet) {
+            RecipeImportSheet(store: store, onCancel: {
+                store.importError = nil
+                store.isShowingImportSheet = false
+            })
         }
         .onPreferenceChange(GearButtonFrameKey.self) { gearFrame = $0 }
         .overlay {
