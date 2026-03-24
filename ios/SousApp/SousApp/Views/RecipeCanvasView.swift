@@ -71,8 +71,7 @@ struct RecipeCanvasView: View {
                                     .padding(.top, 2)
                                 Text(ingredient.text)
                                     .font(.sousBody)
-                                    .foregroundStyle(isChecked ? Color.sousMuted : Color.sousText)
-                                    .strikethrough(isChecked, color: Color.sousMuted)
+                                    .foregroundStyle(Color.sousText)
                                     .multilineTextAlignment(.leading)
                                 Spacer()
                             }
@@ -106,7 +105,6 @@ struct RecipeCanvasView: View {
                                 .padding(.vertical, 10)
                             }
                             .buttonStyle(.plain)
-                            .disabled(isDone)
                             SousRule()
                         }
                     }
@@ -151,7 +149,6 @@ struct RecipeCanvasView: View {
                             .padding(.vertical, 10)
                         }
                         .buttonStyle(.plain)
-                        .disabled(isDone)
                         SousRule()
                     }
 
