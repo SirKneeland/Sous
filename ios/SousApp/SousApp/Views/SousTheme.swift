@@ -21,6 +21,9 @@ extension Color {
     /// Terracotta #C1440E — accent, section headers, active states
     static let sousTerracotta = Color(red: 193/255, green: 68/255, blue: 14/255)
 
+    /// Pale terracotta #E8A882 — timer-highlight row background
+    static let sousHighlightBackground = Color(red: 232/255, green: 168/255, blue: 130/255)
+
     /// Warm gray #9A9590 — captions, timestamps, placeholders
     static let sousMuted = Color(red: 154/255, green: 149/255, blue: 144/255)
 

@@ -178,7 +178,7 @@ struct RecipeCanvasView: View {
                             } else {
                                 Text(step.text)
                                     .font(.sousBody)
-                                    .foregroundStyle(isDone ? Color.sousMuted : (isHighlighted ? Color.white : Color.sousText))
+                                    .foregroundStyle(isDone ? Color.sousMuted : Color.sousText)
                                     .strikethrough(isDone, color: Color.sousMuted)
                                     .multilineTextAlignment(.leading)
                                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -194,7 +194,7 @@ struct RecipeCanvasView: View {
                         .background {
                             // Negative horizontal padding cancels the parent VStack's 20pt inset,
                             // so the highlight background bleeds edge-to-edge while content stays inset.
-                            (isHighlighted ? Color.sousTerracotta : Color.clear)
+                            (isHighlighted ? Color.sousHighlightBackground : Color.clear)
                                 .padding(.horizontal, -20)
                         }
                         .animation(.easeInOut(duration: 0.3), value: isHighlighted)

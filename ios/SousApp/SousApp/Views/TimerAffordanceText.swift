@@ -55,7 +55,7 @@ struct TimerAffordanceText: View {
         } else {
             Text(step.text)
                 .font(.sousBody)
-                .foregroundStyle(isDone ? Color.sousMuted : (isHighlighted ? Color.white : Color.sousText))
+                .foregroundStyle(isDone ? Color.sousMuted : Color.sousText)
                 .strikethrough(isDone, color: Color.sousMuted)
                 .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -68,9 +68,8 @@ struct TimerAffordanceText: View {
         let before = String(text[text.startIndex..<highlightRange.lowerBound])
         let middle = String(text[highlightRange])
         let after  = String(text[highlightRange.upperBound..<text.endIndex])
-        // When the row has a terracotta background (highlighted), use white for all text.
-        let baseColor: Color = isHighlighted ? Color.white : Color.sousText
-        let accentColor: Color = isHighlighted ? Color.white : Color.sousTerracotta
+        let baseColor: Color = Color.sousText
+        let accentColor: Color = Color.sousTerracotta
         let iconName = hasActiveTimer ? "timer.circle.fill" : "timer"
 
         let composed =
