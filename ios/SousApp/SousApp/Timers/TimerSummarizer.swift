@@ -1,4 +1,5 @@
 import Foundation
+import FoundationModels
 
 // MARK: - TimerSummarizer
 
@@ -10,7 +11,7 @@ import Foundation
 enum TimerSummarizer {
 
     static func summarize(_ stepText: String) async -> String {
-        if #available(iOS 26.0, *) {
+        if #available(iOS 26, macOS 26, *) {
             if let result = await summarizeWithFoundationModels(stepText) {
                 return result
             }
@@ -20,17 +21,18 @@ enum TimerSummarizer {
 
     // MARK: - FoundationModels path (iOS 26+)
 
-    @available(iOS 26.0, *)
+    @available(iOS 26, macOS 26, *)
     private static func summarizeWithFoundationModels(_ stepText: String) async -> String? {
-        // Import is guarded by availability — use dynamic linking to avoid hard dependency
-        // that would prevent building on older SDKs.
-        // If FoundationModels is not present at build time, this whole branch is skipped.
-        return nil // Placeholder: FoundationModels API not yet finalized in build SDK
-        // TODO: When FoundationModels SDK is available, replace with:
-        // let session = LanguageModelSession()
-        // let prompt = "Summarize this cooking step in 6 to 8 words: \(stepText)"
-        // let response = try? await session.respond(to: prompt)
-        // return response?.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard case .available = SystemLanguageModel.default.availability else {
+            return nil
+        }
+        let session = LanguageModelSession()
+        let prompt = "Summarize this cooking step in 2 to 4 words. Focus only on the main action and ingredient (e.g. \"cook lamb\", \"warm flatbreads\", \"simmer garlic spices\"). Never include time, duration, or how-to details. Reply with only the short summary, nothing else. Step: \(stepText)"
+        guard let response = try? await session.respond(to: prompt) else {
+            return nil
+        }
+        let trimmed = response.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     // MARK: - Fallback
