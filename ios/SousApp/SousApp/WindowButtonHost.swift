@@ -1,112 +1,37 @@
-import Combine
 import SwiftUI
 import UIKit
 
-// MARK: - Shared Model
+// MARK: - BottomZoneView
 
-/// Drives the window-level "Talk to Sous" bar from SwiftUI state.
-@MainActor
-final class TalkToSousWindowModel: ObservableObject {
-    @Published var isVisible: Bool = false
-    var onOpenChat: () -> Void = {}
-}
+/// The persistent bottom bar rendered as .overlay(alignment: .bottom) in ContentView.
+///
+/// Structure (top → bottom):
+///   1. Active timer banners — zero or more rows, stacked downward; new banners add above
+///   2. SousRule
+///   3. Talk to Sous button
+///   4. Chevron affordance hint
+///
+/// The Talk to Sous button is always the last item in the VStack, so its screen position
+/// is determined by the bottom of the overlay — it never moves regardless of banner count.
+///
+/// ContentView measures this view's height via onHeightChange and applies a matching
+/// .safeAreaInset to RecipeCanvasView so scroll content is never hidden behind the bar.
+struct BottomZoneView: View {
+    var timerManager: StepTimerManager
+    var onOpenChat: () -> Void
+    var onTimerBannerTap: (UUID) -> Void
+    var onHeightChange: (CGFloat) -> Void
 
-// MARK: - UIViewRepresentable Anchor
-
-/// Zero-size invisible anchor that installs the button bar into the key UIWindow.
-/// Nothing at the UIWindow level can be clipped by any SwiftUI container.
-struct TalkToSousWindowHost: UIViewRepresentable {
-    @ObservedObject var model: TalkToSousWindowModel
-
-    func makeCoordinator() -> Coordinator { Coordinator(model: model) }
-
-    func makeUIView(context: Context) -> UIView {
-        let anchor = UIView()
-        anchor.isHidden = true
-        // Defer so this doesn't run during SwiftUI's layout pass
-        Task { @MainActor in
-            context.coordinator.install()
-        }
-        return anchor
-    }
-
-    func updateUIView(_ uiView: UIView, context: Context) {
-        let hidden = !model.isVisible
-        context.coordinator.hostingController?.view.isHidden = hidden
-        context.coordinator.backgroundView?.isHidden = hidden
-    }
-
-    static func dismantleUIView(_ uiView: UIView, coordinator: Coordinator) {
-        coordinator.remove()
-    }
-
-    // MARK: Coordinator
-
-    @MainActor
-    final class Coordinator: NSObject {
-        let model: TalkToSousWindowModel
-        var hostingController: UIHostingController<TalkToSousBar>?
-        var backgroundView: UIView?
-
-        init(model: TalkToSousWindowModel) { self.model = model }
-
-        func install() {
-            guard let window = UIApplication.shared.connectedScenes
-                .compactMap({ $0 as? UIWindowScene })
-                .flatMap({ $0.windows })
-                .first(where: { $0.isKeyWindow })
-            else { return }
-
-            // Solid background view — covers from the button bar's top all the way to the
-            // physical bottom of the window, including the safe area. Inserted below the
-            // hosting controller so it never obscures the button or chevron.
-            let bg = UIView()
-            bg.backgroundColor = UIColor(Color.sousBackground)
-            bg.translatesAutoresizingMaskIntoConstraints = false
-            bg.isHidden = !model.isVisible
-
-            let hc = UIHostingController(rootView: TalkToSousBar(model: model))
-            hc.view.backgroundColor = .clear
-            hc.view.translatesAutoresizingMaskIntoConstraints = false
-            hc.view.isHidden = !model.isVisible
-
-            window.addSubview(bg)
-            window.addSubview(hc.view) // added after bg so it renders on top
-            NSLayoutConstraint.activate([
-                hc.view.leadingAnchor.constraint(equalTo: window.leadingAnchor),
-                hc.view.trailingAnchor.constraint(equalTo: window.trailingAnchor),
-                hc.view.bottomAnchor.constraint(equalTo: window.safeAreaLayoutGuide.bottomAnchor),
-
-                bg.leadingAnchor.constraint(equalTo: window.leadingAnchor),
-                bg.trailingAnchor.constraint(equalTo: window.trailingAnchor),
-                bg.topAnchor.constraint(equalTo: hc.view.topAnchor),
-                bg.bottomAnchor.constraint(equalTo: window.bottomAnchor), // extends to physical bottom
-            ])
-
-            backgroundView = bg
-            hostingController = hc
-        }
-
-        func remove() {
-            backgroundView?.removeFromSuperview()
-            backgroundView = nil
-            hostingController?.view.removeFromSuperview()
-            hostingController = nil
-        }
-    }
-}
-
-// MARK: - Bar View
-
-struct TalkToSousBar: View {
-    @ObservedObject var model: TalkToSousWindowModel
     @State private var dragOffset: CGFloat = 0
 
     var body: some View {
         VStack(spacing: 0) {
+            if !timerManager.activeSessions.isEmpty {
+                TimerBannerStack(timerManager: timerManager, onTapBanner: onTimerBannerTap)
+            }
             SousRule()
             Button {
-                model.onOpenChat()
+                onOpenChat()
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "message")
@@ -124,7 +49,7 @@ struct TalkToSousBar: View {
             .padding(.vertical, 12)
             .background(Color.sousBackground)
             .offset(y: dragOffset)
-            .zIndex(1) // keep button above the chevron strip during translation
+            .zIndex(1) // keep button above chevron strip during drag translation
             // ThumbDrop affordance hint
             Image(systemName: "chevron.down")
                 .font(.system(size: 12, weight: .light))
@@ -134,7 +59,13 @@ struct TalkToSousBar: View {
                 .background(Color.sousBackground)
                 .allowsHitTesting(false)
         }
-        .background(Color.sousBackground.ignoresSafeArea(edges: .bottom)) // extends into safe area to prevent bleed-through
+        .background(Color.sousBackground.ignoresSafeArea(edges: .bottom))
+        // Report height to ContentView for the matching safeAreaInset on RecipeCanvasView.
+        .background(GeometryReader { geo in
+            Color.clear
+                .onAppear { onHeightChange(geo.size.height) }
+                .onChange(of: geo.size.height) { _, h in onHeightChange(h) }
+        })
         .simultaneousGesture(thumbDropGesture)
     }
 
@@ -149,7 +80,7 @@ struct TalkToSousBar: View {
                 if value.translation.height >= 20 {
                     dragOffset = 0
                     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    model.onOpenChat()
+                    onOpenChat()
                 } else {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                         dragOffset = 0

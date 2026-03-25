@@ -12,13 +12,47 @@ struct RecipeCanvasView: View {
     var miseEnPlaceIsLoading: Bool = false
     var miseEnPlaceError: String? = nil
     var llmDebugStatus: String? = nil
+    var timerManager: StepTimerManager? = nil
+    @Binding var scrollToStepId: UUID?
+    @Binding var highlightedStepId: UUID?
 
     @State private var checkedIngredients: Set<UUID> = []
     @AppStorage("miseEnPlaceConfirmed") private var miseEnPlaceConfirmed: Bool = false
     @State private var showingMiseEnPlaceModal: Bool = false
     @State private var modalDontShowAgain: Bool = false
 
+    init(
+        recipe: Recipe,
+        onMarkStepDone: @escaping (UUID) -> Void = { _ in },
+        onMarkMiseEnPlaceDone: @escaping (UUID) -> Void = { _ in },
+        onTriggerMiseEnPlace: @escaping () -> Void = {},
+        onOpenSettings: @escaping () -> Void = {},
+        onStartNew: @escaping () -> Void = {},
+        onOpenRecents: @escaping () -> Void = {},
+        miseEnPlaceIsLoading: Bool = false,
+        miseEnPlaceError: String? = nil,
+        llmDebugStatus: String? = nil,
+        timerManager: StepTimerManager? = nil,
+        scrollToStepId: Binding<UUID?> = .constant(nil),
+        highlightedStepId: Binding<UUID?> = .constant(nil)
+    ) {
+        self.recipe = recipe
+        self.onMarkStepDone = onMarkStepDone
+        self.onMarkMiseEnPlaceDone = onMarkMiseEnPlaceDone
+        self.onTriggerMiseEnPlace = onTriggerMiseEnPlace
+        self.onOpenSettings = onOpenSettings
+        self.onStartNew = onStartNew
+        self.onOpenRecents = onOpenRecents
+        self.miseEnPlaceIsLoading = miseEnPlaceIsLoading
+        self.miseEnPlaceError = miseEnPlaceError
+        self.llmDebugStatus = llmDebugStatus
+        self.timerManager = timerManager
+        self._scrollToStepId = scrollToStepId
+        self._highlightedStepId = highlightedStepId
+    }
+
     var body: some View {
+        ScrollViewReader { scrollProxy in
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
 
@@ -131,24 +165,56 @@ struct RecipeCanvasView: View {
                             .padding(.bottom, 12)
                     }
 
-                    ForEach(recipe.steps, id: \.id) { step in
+                    ForEach(Array(recipe.steps.enumerated()), id: \.element.id) { index, step in
                         let isDone = step.status == .done
-                        Button {
-                            if step.status == .todo { onMarkStepDone(step.id) }
-                        } label: {
-                            HStack(alignment: .top, spacing: 12) {
+                        let isHighlighted = !isDone && highlightedStepId == step.id
+                        HStack(alignment: .top, spacing: 12) {
+                            // Checkbox — marks step done (blocked when timer is active)
+                            Button {
+                                if step.status == .todo { onMarkStepDone(step.id) }
+                            } label: {
                                 SousCheckbox(isChecked: isDone)
                                     .padding(.top, 2)
+                            }
+                            .buttonStyle(.plain)
+
+                            // Step text with optional timer affordance
+                            if let tm = timerManager, !isDone {
+                                TimerAffordanceText(
+                                    step: step,
+                                    stepIndex: index,
+                                    isHighlighted: isHighlighted,
+                                    timerManager: tm
+                                )
+                                .onTapGesture {
+                                    withAnimation(.easeInOut(duration: 0.3)) {
+                                        highlightedStepId = nil
+                                    }
+                                }
+                            } else {
                                 Text(step.text)
                                     .font(.sousBody)
-                                    .foregroundStyle(isDone ? Color.sousMuted : Color.sousText)
+                                    .foregroundStyle(isDone ? Color.sousMuted : (isHighlighted ? Color.white : Color.sousText))
                                     .strikethrough(isDone, color: Color.sousMuted)
                                     .multilineTextAlignment(.leading)
-                                Spacer()
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .onTapGesture {
+                                        withAnimation(.easeInOut(duration: 0.3)) {
+                                            highlightedStepId = nil
+                                        }
+                                    }
                             }
-                            .padding(.vertical, 10)
                         }
-                        .buttonStyle(.plain)
+                        .padding(.vertical, 10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background {
+                            // Negative horizontal padding cancels the parent VStack's 20pt inset,
+                            // so the highlight background bleeds edge-to-edge while content stays inset.
+                            (isHighlighted ? Color.sousTerracotta : Color.clear)
+                                .padding(.horizontal, -20)
+                        }
+                        .animation(.easeInOut(duration: 0.3), value: isHighlighted)
+                        .id(step.id)
                         SousRule()
                     }
 
@@ -166,7 +232,7 @@ struct RecipeCanvasView: View {
                     }
                 }
                 .padding(.horizontal, 20)
-                .padding(.bottom, 100)
+                .padding(.bottom, 20)
 
 #if DEBUG
                 if let status = llmDebugStatus {
@@ -181,6 +247,18 @@ struct RecipeCanvasView: View {
             }
         }
         .background(Color.sousBackground)
+        .onChange(of: scrollToStepId) { stepId in
+            guard let id = stepId else { return }
+            withAnimation {
+                scrollProxy.scrollTo(id, anchor: .top)
+            }
+            scrollToStepId = nil
+        }
+        .simultaneousGesture(DragGesture(minimumDistance: 4).onChanged { _ in
+            withAnimation(.easeInOut(duration: 0.3)) {
+                highlightedStepId = nil
+            }
+        })
         .sheet(isPresented: $showingMiseEnPlaceModal) {
             MiseEnPlaceConfirmationModal(
                 dontShowAgain: $modalDontShowAgain,
@@ -198,6 +276,7 @@ struct RecipeCanvasView: View {
             .presentationDetents([.medium])
             .presentationDragIndicator(.hidden)
         }
+        } // end ScrollViewReader
     }
 
     // MARK: - Mise en place trigger

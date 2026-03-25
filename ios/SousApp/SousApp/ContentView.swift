@@ -1,14 +1,35 @@
 import SwiftUI
 import SousCore
+import UIKit
 
 struct ContentView: View {
     @StateObject private var store = AppStore()
     @State private var showSettings = false
-    @StateObject private var windowButtonModel = TalkToSousWindowModel()
+    @State private var timerManager = StepTimerManager()
+    /// stepId to scroll to in the recipe canvas. Set by timer banner taps.
+    @State private var scrollToStepId: UUID? = nil
+    /// stepId whose step row should be highlighted in terracotta. Cleared on any interaction.
+    @State private var highlightedStepId: UUID? = nil
     @State private var gearFrame: CGRect = .zero
+    /// Measured height of BottomZoneView. Applied as .safeAreaInset to RecipeCanvasView
+    /// so scroll content is never hidden behind the bar.
+    @State private var bottomZoneHeight: CGFloat = 0
 
-    private var shouldShowTalkToSousButton: Bool {
-        store.hasCanvas && !store.uiState.isSheetPresented && !store.uiState.isPatchReview
+    private var hasDoneBanner: Bool { !timerManager.doneQueue.isEmpty }
+
+    /// True when the recipe canvas is the active screen (not covered by a sheet or patch review).
+    private var isRecipeCanvasActive: Bool {
+        store.hasCanvas
+            && !store.uiState.isSheetPresented
+            && !store.uiState.isPatchReview
+    }
+
+    /// True when the bottom zone (banners + Talk to Sous button) should be visible.
+    private var shouldShowBottomZone: Bool {
+        store.hasCanvas
+            && !store.uiState.isSheetPresented
+            && !store.uiState.isPatchReview
+            && !hasDoneBanner
     }
 
     var body: some View {
@@ -29,7 +50,13 @@ struct ContentView: View {
             } else {
                 RecipeCanvasView(
                     recipe: store.uiState.recipe,
-                    onMarkStepDone: { id in store.send(.markStepDone(stepId: id)) },
+                    onMarkStepDone: { id in
+                        if timerManager.isTimerActive(for: id) {
+                            UINotificationFeedbackGenerator().notificationOccurred(.error)
+                            return
+                        }
+                        store.send(.markStepDone(stepId: id))
+                    },
                     onMarkMiseEnPlaceDone: { id in store.markMiseEnPlaceDone(id) },
                     onTriggerMiseEnPlace: { store.triggerMiseEnPlace() },
                     onOpenSettings: { showSettings = true },
@@ -37,8 +64,16 @@ struct ContentView: View {
                     onOpenRecents: { store.showRecentRecipes = true },
                     miseEnPlaceIsLoading: store.miseEnPlaceIsLoading,
                     miseEnPlaceError: store.miseEnPlaceError,
-                    llmDebugStatus: store.llmDebugStatus
+                    llmDebugStatus: store.llmDebugStatus,
+                    timerManager: timerManager,
+                    scrollToStepId: $scrollToStepId,
+                    highlightedStepId: $highlightedStepId
                 )
+                // Reserve space equal to the bottom zone height so the last scroll item
+                // is never hidden behind the bar.
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    Color.clear.frame(height: shouldShowBottomZone ? bottomZoneHeight : 0)
+                }
 
                 if store.uiState.isSheetPresented && !store.uiState.isPatchReview {
                     Color.black.opacity(0.4).ignoresSafeArea()
@@ -47,17 +82,27 @@ struct ContentView: View {
             }
         }
         .coordinateSpace(name: "contentRoot")
-        // Installs the Talk to Sous bar directly into UIWindow — no SwiftUI ancestor can clip it
-        .background(
-            TalkToSousWindowHost(model: windowButtonModel)
-                .frame(width: 0, height: 0)
-        )
-        .onAppear {
-            windowButtonModel.onOpenChat = { store.send(.openChat) }
-            windowButtonModel.isVisible = shouldShowTalkToSousButton
+        // Bottom zone: timer banners (growing upward) + Talk to Sous button.
+        // Rendered as an overlay so it never affects the recipe canvas layout.
+        .overlay(alignment: .bottom) {
+            if shouldShowBottomZone {
+                BottomZoneView(
+                    timerManager: timerManager,
+                    onOpenChat: { store.send(.openChat) },
+                    onTimerBannerTap: { stepId in
+                        scrollToStepId = stepId
+                        highlightedStepId = stepId
+                    },
+                    onHeightChange: { bottomZoneHeight = $0 }
+                )
+            }
         }
-        .onChange(of: shouldShowTalkToSousButton) { newValue in
-            windowButtonModel.isVisible = newValue
+        .onAppear {
+            timerManager.registerNotificationDelegate()
+            timerManager.isRecipeCanvasActive = isRecipeCanvasActive
+        }
+        .onChange(of: isRecipeCanvasActive) { _, active in
+            timerManager.isRecipeCanvasActive = active
         }
         .sheet(isPresented: Binding(
             get: { store.hasCanvas && store.uiState.isSheetPresented && !store.uiState.isPatchReview },
@@ -85,6 +130,16 @@ struct ContentView: View {
             if !store.hasAPIKey && gearFrame != .zero {
                 APIKeyCallout(gearFrame: gearFrame)
                     .allowsHitTesting(false)
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if let session = timerManager.doneQueue.first {
+                TimerDoneBanner(session: session) { stepId in
+                    timerManager.dismissDone(session)
+                    scrollToStepId = stepId
+                    highlightedStepId = stepId
+                }
+                .animation(.spring(response: 0.35, dampingFraction: 0.85), value: timerManager.doneQueue.count)
             }
         }
     }

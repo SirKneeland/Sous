@@ -429,9 +429,32 @@ Explicit non-goals:
 - User-editable correction step before canvas generation
 - Batch import
 
+
+---
+## Milestone 22 — Step Timers
+**Status:** PLANNED
+
+**Goal:** Let users start a countdown directly from a recipe step, so they never lose track of cooking time.
+
+Core capabilities:
+- Inline time detection in step text with highlighted affordance and timer SF Symbol
+- Exact time → timer starts immediately; range time → duration picker pre-filled with lower bound
+- Maximum 3 concurrent timers; attempting a 4th fires an error haptic
+- Fixed banner stack above chat button showing step summary, live countdown, and edit control
+- Tapping a running banner scrolls to and highlights the relevant step
+- Step completion blocked while its timer is running (error haptic on attempt)
+- Local notification fires when timer expires with app backgrounded
+- Timer done state: large terracotta panel with step summary and "TIMER DONE"; dismisses to step highlight
+- Active timer state persists across app background and relaunch
+- On-device short step summary via FoundationModels (iOS 18.1+) with truncation fallback
+
+Explicit non-goals:
+- Live Activities (explicitly deferred to a future milestone)
+- Timer history or logs
+- Timers surviving device restart
 ---
 
-## Milestone 22 — Post-Cook Ratings
+## Milestone 23 — Post-Cook Ratings
 **Status:** PLANNED
 
 **Goal:** Let users reflect on how a cook went, creating a feedback loop that makes Sous more useful over time.
@@ -455,7 +478,7 @@ Explicit non-goals:
 
 ---
 
-## Milestone 23 — Accounts + Sync
+## Milestone 24 — Accounts + Sync
 **Status:** PLANNED
 
 **Goal:** Establish durable user accounts so preferences, memories, and recipes persist across devices and reinstalls.
@@ -473,7 +496,7 @@ Explicit non-goals:
 
 ---
 
-## Milestone 24 — Planning, Shopping, and Prep
+## Milestone 25 — Planning, Shopping, and Prep
 **Status:** FUTURE
 
 Potential capabilities:
@@ -485,7 +508,7 @@ Potential capabilities:
 
 ---
 
-## Milestone 25 — Voice & Hands-Free Cooking
+## Milestone 26 — Voice & Hands-Free Cooking
 **Status:** FUTURE
 
 Potential capabilities:
@@ -497,7 +520,7 @@ Potential capabilities:
 
 ---
 
-## Milestone 26 — Monetization
+## Milestone 27 — Monetization
 **Status:** FUTURE
 
 Notes:

@@ -366,6 +366,63 @@ New intent added to the LLM routing model: `import_existing_recipe`
 - Best-effort extraction is always preferred over refusing to proceed.
 - Adaptations only happen via the patch flow, after the user initiates them.
 
+
+## Step Timers
+
+Sous detects time references in recipe steps and exposes an inline timer affordance for each one.
+
+### Time Detection and Affordance
+
+When a step contains a time reference (e.g. "bake for 30 minutes", "simmer for 5 to 6 hours"), the time text is highlighted in the step with a timer icon adjacent to it. Steps with no detectable time reference show no affordance.
+
+### Timer Start Flow
+
+- **Exact time** — tapping the affordance starts the timer immediately.
+- **Range/ambiguous time** (e.g. "2–3 minutes", "5 to 6 hours") — tapping opens a duration picker pre-filled with the lower number in the range. The user confirms to start.
+
+### Active Timer Limits
+
+Maximum 3 concurrent timers. Attempting to start a 4th does nothing except fire an error haptic. A step may only have one active timer at a time.
+
+### Timer Banner
+
+While timers are running and the user is on the recipe screen, a fixed banner stack appears just above the chat button. Each banner shows:
+- A short (~3 word) on-device summary of the step
+- A live countdown
+- A pencil icon to adjust time remaining
+
+Tapping a banner (outside the pencil) scrolls to the step the timer is for and highlights it in terracotta until the user next interacts with anything.
+
+Up to 3 banners stack vertically. Terracotta background, white text.
+
+### Step Completion Guard
+
+A step with an active timer cannot be marked done. Attempting to do so does nothing except fire an error haptic. Once the timer expires or is dismissed, the step can be marked done normally.
+
+### Timer Done State
+
+When a timer expires:
+- If the app is foregrounded: the banner expands to a large panel (approximately keyboard height) showing the step summary and "TIMER DONE" in large text. Terracotta background, white text.
+- If the app is backgrounded: a local notification fires.
+- Tapping the notification foregrounds the app and triggers the done panel.
+- Tapping the done panel dismisses it, scrolls to the step, and highlights it in terracotta.
+
+If multiple timers expire simultaneously, done panels are shown one at a time in sequence.
+
+### Timer Persistence
+
+Active timer state persists across app backgrounding and relaunch. Timers that expired while the app was closed show the done state on next foreground.
+
+### Short Step Summary
+
+The ~3 word step summary displayed in the timer banner is generated on-device at timer creation using Apple's FoundationModels framework where available, with a fallback to truncated step text. It is generated once and stored with the timer session.
+
+### Non-Goals (Timers)
+
+- Live Activities (explicitly deferred — planned for a future milestone)
+- Timers surviving device restart (local notification only)
+- Timer history or logs
+
 ---
 
 ## Non-Goals (current)
