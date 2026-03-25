@@ -64,8 +64,8 @@ struct MiseEnPlaceService: MiseEnPlaceServiceProtocol {
                 Use a solo entry for prep actions on a single ingredient (e.g. "Dice the onion", "Preheat oven to 375°F").
 
             "updatedSteps": array of strings — the remaining procedure steps after extracting prep.
-              Reference grouped vessel names inline, followed by a parenthetical of the first 2–3 components as a memory jogger.
-              Example: "Add Spice Bowl (cumin, paprika, salt) and stir for 30 seconds."
+              Reference grouped vessel names inline, followed by a parenthetical of the first 2 components only, plus "etc" if there are more.
+              Example: "Add Spice Bowl (cumin, paprika, etc) and stir for 30 seconds." or "Add Egg Bowl (eggs, cream) and whisk." if there are only 2 components.
 
             Rules:
             - If a step is both prep and cooking (e.g. "chop the onions and add to pan"), split it: put the prep part in miseEnPlace and the cooking part in updatedSteps.
