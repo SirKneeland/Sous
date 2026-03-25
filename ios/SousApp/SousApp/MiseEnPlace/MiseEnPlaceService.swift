@@ -4,7 +4,12 @@ import SousCore
 // MARK: - MiseEnPlaceResponse
 
 struct MiseEnPlaceResponse: Sendable {
-    let miseEnPlace: [String]
+    enum Entry: Sendable {
+        case group(vesselName: String, components: [String])
+        case solo(instruction: String)
+    }
+
+    let miseEnPlace: [Entry]
     let updatedSteps: [String]
 }
 
@@ -46,8 +51,21 @@ struct MiseEnPlaceService: MiseEnPlaceServiceProtocol {
             Prep steps include: chopping, dicing, mincing, slicing, measuring, marinating, soaking, preheating, bringing to room temperature, preparing equipment, etc.
 
             Return a JSON object with exactly these two keys:
-            - "miseEnPlace": array of strings — the prep steps extracted from the procedure (preserve the original wording closely)
-            - "updatedSteps": array of strings — the remaining procedure steps after removing the prep steps (cooking-only instructions)
+
+            "miseEnPlace": an array of entries. Each entry is one of:
+              - A GROUP entry: ingredients that are combined into a single vessel before cooking.
+                { "type": "group", "vesselName": "<label>", "components": ["<item>", ...] }
+                Name the vessel based on its contents and the most sensible container, using the format "[ingredient type] + [vessel]"
+                (e.g. "Spice Bowl", "Marinade Bowl", "Meat Plate", "Sauce Bowl").
+                Only number the vessel if the same vessel type appears more than once (e.g. "Spice Bowl 1", "Spice Bowl 2").
+                Use a group entry when two or more ingredients are combined or measured together for the same step.
+              - A SOLO entry: a single standalone prep instruction that doesn't involve combining ingredients into a vessel.
+                { "type": "solo", "instruction": "<instruction>" }
+                Use a solo entry for prep actions on a single ingredient (e.g. "Dice the onion", "Preheat oven to 375°F").
+
+            "updatedSteps": array of strings — the remaining procedure steps after extracting prep.
+              Reference grouped vessel names inline, followed by a parenthetical of the first 2–3 components as a memory jogger.
+              Example: "Add Spice Bowl (cumin, paprika, salt) and stir for 30 seconds."
 
             Rules:
             - If a step is both prep and cooking (e.g. "chop the onions and add to pan"), split it: put the prep part in miseEnPlace and the cooking part in updatedSteps.
@@ -122,11 +140,26 @@ struct MiseEnPlaceService: MiseEnPlaceServiceProtocol {
             throw MiseEnPlaceServiceError.malformedResponse
         }
 
-        let miseEnPlace = parsed["miseEnPlace"] as? [String] ?? []
+        let rawEntries = parsed["miseEnPlace"] as? [[String: Any]] ?? []
         let updatedSteps = parsed["updatedSteps"] as? [String] ?? []
 
-        guard !updatedSteps.isEmpty || miseEnPlace.isEmpty else {
+        guard !updatedSteps.isEmpty || rawEntries.isEmpty else {
             throw MiseEnPlaceServiceError.malformedResponse
+        }
+
+        let miseEnPlace: [MiseEnPlaceResponse.Entry] = rawEntries.compactMap { dict in
+            guard let type = dict["type"] as? String else { return nil }
+            switch type {
+            case "group":
+                guard let vesselName = dict["vesselName"] as? String,
+                      let components = dict["components"] as? [String] else { return nil }
+                return .group(vesselName: vesselName, components: components)
+            case "solo":
+                guard let instruction = dict["instruction"] as? String else { return nil }
+                return .solo(instruction: instruction)
+            default:
+                return nil
+            }
         }
 
         return MiseEnPlaceResponse(miseEnPlace: miseEnPlace, updatedSteps: updatedSteps)

@@ -116,29 +116,13 @@ struct RecipeCanvasView: View {
                     }
 
                     // MARK: Mise en place section (once populated)
-                    if let mepSteps = recipe.miseEnPlace, !mepSteps.isEmpty {
+                    if let mepEntries = recipe.miseEnPlace, !mepEntries.isEmpty {
                         SousSectionLabel(title: "Mise en place")
                             .padding(.top, 24)
                             .padding(.bottom, 12)
 
-                        ForEach(mepSteps, id: \.id) { step in
-                            let isDone = step.status == .done
-                            Button {
-                                if step.status == .todo { onMarkMiseEnPlaceDone(step.id) }
-                            } label: {
-                                HStack(alignment: .top, spacing: 12) {
-                                    SousCheckbox(isChecked: isDone)
-                                        .padding(.top, 2)
-                                    Text(step.text)
-                                        .font(.sousBody)
-                                        .foregroundStyle(isDone ? Color.sousMuted : Color.sousText)
-                                        .strikethrough(isDone, color: Color.sousMuted)
-                                        .multilineTextAlignment(.leading)
-                                    Spacer()
-                                }
-                                .padding(.vertical, 10)
-                            }
-                            .buttonStyle(.plain)
+                        ForEach(mepEntries, id: \.id) { entry in
+                            miseEnPlaceEntryRow(entry)
                             SousRule()
                         }
                     }
@@ -277,6 +261,68 @@ struct RecipeCanvasView: View {
             .presentationDragIndicator(.hidden)
         }
         } // end ScrollViewReader
+    }
+
+    // MARK: - Mise en place entry row
+
+    @ViewBuilder
+    private func miseEnPlaceEntryRow(_ entry: MiseEnPlaceEntry) -> some View {
+        switch entry.content {
+        case .group(let vesselName, let components):
+            VStack(alignment: .leading, spacing: 0) {
+                // Header: display-only checkbox that reflects auto-complete state
+                HStack(alignment: .top, spacing: 12) {
+                    SousCheckbox(isChecked: entry.isDone)
+                        .padding(.top, 2)
+                        .allowsHitTesting(false)
+                    Text(vesselName.uppercased())
+                        .font(.sousSectionHeader)
+                        .kerning(1.0)
+                        .foregroundStyle(entry.isDone ? Color.sousMuted : Color.sousText)
+                    Spacer()
+                }
+                .padding(.vertical, 10)
+
+                // Per-component rows, indented
+                ForEach(components, id: \.id) { component in
+                    Button {
+                        if !component.isDone { onMarkMiseEnPlaceDone(component.id) }
+                    } label: {
+                        HStack(alignment: .top, spacing: 12) {
+                            Color.clear.frame(width: 20) // indent to align beneath header text
+                            SousCheckbox(isChecked: component.isDone)
+                                .padding(.top, 2)
+                            Text(component.text)
+                                .font(.sousBody)
+                                .foregroundStyle(component.isDone ? Color.sousMuted : Color.sousText)
+                                .strikethrough(component.isDone, color: Color.sousMuted)
+                                .multilineTextAlignment(.leading)
+                            Spacer()
+                        }
+                        .padding(.vertical, 8)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+        case .solo(let instruction, let isDone):
+            Button {
+                if !isDone { onMarkMiseEnPlaceDone(entry.id) }
+            } label: {
+                HStack(alignment: .top, spacing: 12) {
+                    SousCheckbox(isChecked: isDone)
+                        .padding(.top, 2)
+                    Text(instruction)
+                        .font(.sousBody)
+                        .foregroundStyle(isDone ? Color.sousMuted : Color.sousText)
+                        .strikethrough(isDone, color: Color.sousMuted)
+                        .multilineTextAlignment(.leading)
+                    Spacer()
+                }
+                .padding(.vertical, 10)
+            }
+            .buttonStyle(.plain)
+        }
     }
 
     // MARK: - Mise en place trigger

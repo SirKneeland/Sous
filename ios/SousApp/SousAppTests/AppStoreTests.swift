@@ -925,7 +925,10 @@ final class AppStoreTests: XCTestCase {
     func test_mepa_triggerMiseEnPlace_populatesMiseEnPlaceAndUpdatesProcedure() async {
         let mock = SyncOrchestrator(result: noPatchesResult())
         let mepService = MockMiseEnPlaceService(response: MiseEnPlaceResponse(
-            miseEnPlace: ["Chop the onions", "Mince the garlic"],
+            miseEnPlace: [
+                .solo(instruction: "Chop the onions"),
+                .solo(instruction: "Mince the garlic"),
+            ],
             updatedSteps: ["Saute until golden", "Add sauce and simmer"]
         ))
         let store = AppStore(testOrchestrator: mock, testMiseEnPlaceService: mepService)
@@ -938,9 +941,13 @@ final class AppStoreTests: XCTestCase {
 
         let recipe = store.uiState.recipe
         XCTAssertNotNil(recipe.miseEnPlace, "miseEnPlace must be populated after trigger")
-        XCTAssertEqual(recipe.miseEnPlace?.count, 2, "Two prep steps must be in miseEnPlace")
-        XCTAssertEqual(recipe.miseEnPlace?[0].text, "Chop the onions")
-        XCTAssertEqual(recipe.miseEnPlace?[1].text, "Mince the garlic")
+        XCTAssertEqual(recipe.miseEnPlace?.count, 2, "Two prep entries must be in miseEnPlace")
+        if case .solo(let instruction, _) = recipe.miseEnPlace?[0].content {
+            XCTAssertEqual(instruction, "Chop the onions")
+        } else { XCTFail("Expected .solo entry at index 0") }
+        if case .solo(let instruction, _) = recipe.miseEnPlace?[1].content {
+            XCTAssertEqual(instruction, "Mince the garlic")
+        } else { XCTFail("Expected .solo entry at index 1") }
         XCTAssertEqual(recipe.steps.count, 2, "Procedure must have the two cooking-only steps")
         XCTAssertEqual(recipe.steps[0].text, "Saute until golden")
         XCTAssertEqual(recipe.version, originalVersion + 1, "Version must increment after transformation")
@@ -977,7 +984,7 @@ final class AppStoreTests: XCTestCase {
         let mock = SyncOrchestrator(result: noPatchesResult())
         // Seed recipe has "Let cool on rack" as done. Simulate LLM returning it unchanged.
         let mepService = MockMiseEnPlaceService(response: MiseEnPlaceResponse(
-            miseEnPlace: ["Mix dry ingredients"],
+            miseEnPlace: [.solo(instruction: "Mix dry ingredients")],
             updatedSteps: ["Bake at 375°F for 30 min", "Let cool on rack"]
         ))
         let store = AppStore(testOrchestrator: mock, testMiseEnPlaceService: mepService)
@@ -990,9 +997,9 @@ final class AppStoreTests: XCTestCase {
         XCTAssertNotNil(coolStep, "Updated step must exist in procedure")
         XCTAssertEqual(coolStep?.status, .done,
                        "Done status must be preserved for steps whose text matches a done step")
-        let prepStep = store.uiState.recipe.miseEnPlace?.first
-        XCTAssertEqual(prepStep?.status, .todo,
-                       "Mise en place steps start as todo")
+        let prepEntry = store.uiState.recipe.miseEnPlace?.first
+        XCTAssertFalse(prepEntry?.isDone ?? true,
+                       "Mise en place entries start as not done")
     }
 
     // MARK: (mep-d) triggerMiseEnPlace — service error sets error message, recipe unchanged
@@ -1017,12 +1024,12 @@ final class AppStoreTests: XCTestCase {
         XCTAssertFalse(store.miseEnPlaceIsLoading, "Loading flag must clear on failure")
     }
 
-    // MARK: (mep-e) markMiseEnPlaceDone — marks the step done, recipe persists
+    // MARK: (mep-e) markMiseEnPlaceDone — marks a solo step done
 
     func test_mepe_markMiseEnPlaceDone_marksStepAsDone() async {
         let mock = SyncOrchestrator(result: noPatchesResult())
         let mepService = MockMiseEnPlaceService(response: MiseEnPlaceResponse(
-            miseEnPlace: ["Chop the onions"],
+            miseEnPlace: [.solo(instruction: "Chop the onions")],
             updatedSteps: ["Saute and cook"]
         ))
         let store = AppStore(testOrchestrator: mock, testMiseEnPlaceService: mepService)
@@ -1030,15 +1037,15 @@ final class AppStoreTests: XCTestCase {
         store.triggerMiseEnPlace()
         await drainMain()
 
-        guard let mepStep = store.uiState.recipe.miseEnPlace?.first else {
-            XCTFail("Expected a miseEnPlace step to exist"); return
+        guard let mepEntry = store.uiState.recipe.miseEnPlace?.first else {
+            XCTFail("Expected a miseEnPlace entry to exist"); return
         }
-        XCTAssertEqual(mepStep.status, .todo, "Pre-condition: step must start as todo")
+        XCTAssertFalse(mepEntry.isDone, "Pre-condition: entry must start as not done")
 
-        store.markMiseEnPlaceDone(mepStep.id)
+        store.markMiseEnPlaceDone(mepEntry.id)
 
-        let updated = store.uiState.recipe.miseEnPlace?.first(where: { $0.id == mepStep.id })
-        XCTAssertEqual(updated?.status, .done, "Step must be marked done after markMiseEnPlaceDone")
+        let updated = store.uiState.recipe.miseEnPlace?.first(where: { $0.id == mepEntry.id })
+        XCTAssertTrue(updated?.isDone ?? false, "Entry must be done after markMiseEnPlaceDone")
     }
 
     // MARK: (mep-f) miseEnPlace persisted and restored across app launches
@@ -1049,11 +1056,11 @@ final class AppStoreTests: XCTestCase {
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
-        let mepStep = Step(text: "Chop onions")
+        let mepEntry = MiseEnPlaceEntry(content: .solo(instruction: "Chop onions", isDone: false))
         let recipe = Recipe(
             id: UUID(), version: 2, title: "Test Recipe",
             ingredients: [], steps: [Step(text: "Add onions and cook")],
-            notes: [], miseEnPlace: [mepStep]
+            notes: [], miseEnPlace: [mepEntry]
         )
         let snapshot = SessionSnapshot(
             schemaVersion: SessionSnapshot.currentSchemaVersion,
@@ -1073,10 +1080,61 @@ final class AppStoreTests: XCTestCase {
         XCTAssertTrue(store.hasCanvas, "Store must restore canvas from seeded session")
         XCTAssertNotNil(store.uiState.recipe.miseEnPlace,
                         "miseEnPlace must be restored from disk")
-        XCTAssertEqual(store.uiState.recipe.miseEnPlace?.first?.text, "Chop onions",
-                       "miseEnPlace step text must match the saved value")
-        XCTAssertEqual(store.uiState.recipe.miseEnPlace?.first?.status, .todo,
-                       "miseEnPlace step status must be preserved")
+        guard let restoredEntry = store.uiState.recipe.miseEnPlace?.first else {
+            XCTFail("Expected a miseEnPlace entry to be restored"); return
+        }
+        if case .solo(let instruction, let isDone) = restoredEntry.content {
+            XCTAssertEqual(instruction, "Chop onions", "Entry instruction must match the saved value")
+            XCTAssertFalse(isDone, "Entry must restore as not done")
+        } else {
+            XCTFail("Expected .solo entry to be restored from disk")
+        }
+    }
+
+    // MARK: (mep-g) group entry — per-component checking and auto-complete
+
+    func test_mepg_groupEntry_perComponentChecking_andAutoComplete() async {
+        let mock = SyncOrchestrator(result: noPatchesResult())
+        let mepService = MockMiseEnPlaceService(response: MiseEnPlaceResponse(
+            miseEnPlace: [
+                .group(vesselName: "Spice Bowl", components: ["1 tsp cumin", "1 tsp paprika"]),
+            ],
+            updatedSteps: ["Cook"]
+        ))
+        let store = AppStore(testOrchestrator: mock, testMiseEnPlaceService: mepService)
+
+        store.triggerMiseEnPlace()
+        await drainMain()
+
+        guard let entry = store.uiState.recipe.miseEnPlace?.first else {
+            XCTFail("Expected a miseEnPlace entry"); return
+        }
+        guard case .group(let vesselName, let components) = entry.content else {
+            XCTFail("Expected a .group entry"); return
+        }
+        XCTAssertEqual(vesselName, "Spice Bowl")
+        XCTAssertEqual(components.count, 2)
+        XCTAssertFalse(entry.isDone, "Group must not be done when no components are done")
+
+        // Mark first component done — group still not fully done
+        let firstComponentId = components[0].id
+        store.markMiseEnPlaceDone(firstComponentId)
+
+        let afterFirst = store.uiState.recipe.miseEnPlace?.first
+        XCTAssertFalse(afterFirst?.isDone ?? true,
+                       "Group must not be done when only one of two components is done")
+        if case .group(_, let updated) = afterFirst?.content {
+            XCTAssertTrue(updated[0].isDone,  "First component must be done")
+            XCTAssertFalse(updated[1].isDone, "Second component must still be undone")
+        }
+
+        // Mark second component done — group auto-completes
+        let secondComponentId = components[1].id
+        store.markMiseEnPlaceDone(secondComponentId)
+
+        let afterBoth = store.uiState.recipe.miseEnPlace?.first
+        XCTAssertTrue(afterBoth?.isDone ?? false,
+                      "Group must be done when all components are done")
     }
 
     // MARK: (m22-a) deleteActiveSessionAndStartNew — transitions to blank state

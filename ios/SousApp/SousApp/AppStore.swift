@@ -668,15 +668,31 @@ final class AppStore: ObservableObject {
         miseEnPlaceTask = Task { await self.runMiseEnPlaceLLM() }
     }
 
-    /// Marks a mise en place step as done. One-way — matches the procedure step behavior.
+    /// Marks a mise en place item as done. One-way — matches the procedure step behavior.
+    /// The `id` may be a solo entry's ID or a component's ID inside a group.
     func markMiseEnPlaceDone(_ id: UUID) {
         var recipe = uiState.recipe
-        guard let current = recipe.miseEnPlace,
-              current.contains(where: { $0.id == id && $0.status == .todo }) else { return }
-        recipe.miseEnPlace = current.map { step in
-            guard step.id == id else { return step }
-            return Step(id: step.id, text: step.text, status: .done)
+        guard var entries = recipe.miseEnPlace else { return }
+        var found = false
+        for i in entries.indices {
+            let entry = entries[i]
+            switch entry.content {
+            case .solo(let instruction, false) where entry.id == id:
+                entries[i] = MiseEnPlaceEntry(id: entry.id, content: .solo(instruction: instruction, isDone: true))
+                found = true
+            case .group(let vesselName, var components):
+                if let j = components.firstIndex(where: { $0.id == id && !$0.isDone }) {
+                    components[j] = MiseEnPlaceComponent(id: components[j].id, text: components[j].text, isDone: true)
+                    entries[i] = MiseEnPlaceEntry(id: entry.id, content: .group(vesselName: vesselName, components: components))
+                    found = true
+                }
+            default:
+                break
+            }
+            if found { break }
         }
+        guard found else { return }
+        recipe.miseEnPlace = entries
         uiState = uiState.replacingRecipe(recipe)
         saveSession()
     }
@@ -714,7 +730,15 @@ final class AppStore: ObservableObject {
                 return
             }
 
-            let mepSteps = response.miseEnPlace.map { Step(text: $0) }
+            let mepSteps: [MiseEnPlaceEntry] = response.miseEnPlace.map { entry in
+                switch entry {
+                case .group(let vesselName, let componentTexts):
+                    let components = componentTexts.map { MiseEnPlaceComponent(text: $0) }
+                    return MiseEnPlaceEntry(content: .group(vesselName: vesselName, components: components))
+                case .solo(let instruction):
+                    return MiseEnPlaceEntry(content: .solo(instruction: instruction, isDone: false))
+                }
+            }
             let updatedProcedure = preservingDoneStatus(
                 newTexts: response.updatedSteps,
                 existingSteps: recipe.steps
