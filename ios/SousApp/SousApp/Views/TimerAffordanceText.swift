@@ -13,6 +13,7 @@ struct TimerAffordanceText: View {
 
     @State private var showingRangePicker = false
     @State private var pendingParsed: ParsedTime? = nil
+    @State private var isStarting: Bool = false
 
     private var parsed: ParsedTime? { StepTimeParser.parse(step.text) }
     private var hasActiveTimer: Bool { timerManager.isTimerActive(for: step.id) }
@@ -70,7 +71,7 @@ struct TimerAffordanceText: View {
         let after  = String(text[highlightRange.upperBound..<text.endIndex])
         let baseColor: Color = Color.sousText
         let accentColor: Color = Color.sousTerracotta
-        let iconName = hasActiveTimer ? "timer.circle.fill" : "timer"
+        let iconName = (hasActiveTimer || isStarting) ? "timer.circle.fill" : "timer"
 
         let composed =
             Text(before).font(.sousBody).foregroundStyle(baseColor)
@@ -87,6 +88,8 @@ struct TimerAffordanceText: View {
 
     private func handleTimerTap() {
         guard let p = parsed else { return }
+        // Phase 1: immediate feedback before any async work
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
         switch p.duration {
         case .exact(let seconds):
             startTimer(duration: seconds)
@@ -97,6 +100,7 @@ struct TimerAffordanceText: View {
     }
 
     private func startTimer(duration: TimeInterval) {
+        isStarting = true
         Task {
             await timerManager.startTimer(
                 stepId: step.id,
@@ -104,6 +108,7 @@ struct TimerAffordanceText: View {
                 stepText: step.text,
                 duration: duration
             )
+            isStarting = false
         }
     }
 }
