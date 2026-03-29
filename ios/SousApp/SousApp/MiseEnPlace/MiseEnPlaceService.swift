@@ -36,7 +36,7 @@ struct MiseEnPlaceService: MiseEnPlaceServiceProtocol {
     private let model: String
     private let session: URLSession
 
-    init(model: String = "gpt-4o-mini", session: URLSession = .shared) {
+    init(model: String = "gpt-5.4-mini", session: URLSession = .shared) {
         self.model = model
         self.session = session
     }

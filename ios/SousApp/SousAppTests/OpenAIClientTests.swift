@@ -57,7 +57,7 @@ private func makeEnvelope(content: String) -> Data {
     return try! JSONSerialization.data(withJSONObject: json)
 }
 
-private func makeRequest(model: String = "gpt-4o-mini", requestId: String = "test-req-1") -> LLMClientRequest {
+private func makeRequest(model: String = "gpt-5.4-mini", requestId: String = "test-req-1") -> LLMClientRequest {
     LLMClientRequest(
         requestId: requestId,
         model: model,
@@ -282,7 +282,7 @@ final class OpenAIClientTests: XCTestCase {
         )
         let clientRequest = LLMClientRequest(
             requestId: "multimodal-test",
-            model: "gpt-4o",
+            model: "gpt-5.4-mini",
             messages: [
                 LLMMessage(role: .system, content: "You are Sous."),
                 LLMMessage(role: .user, content: "Is this done?")

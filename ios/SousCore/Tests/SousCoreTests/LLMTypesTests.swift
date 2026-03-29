@@ -24,7 +24,7 @@ struct LLMTypesTests {
             extractionUsed: false,
             repairUsed: false,
             timingTotalMs: 200,
-            model: "gpt-4o-mini",
+            model: "gpt-5.4-mini",
             promptVersion: "v1",
             outcome: "valid"
         )
@@ -106,7 +106,7 @@ struct LLMTypesTests {
             extractionUsed: false,
             repairUsed: false,
             timingTotalMs: 500,
-            model: "gpt-4o-mini",
+            model: "gpt-5.4-mini",
             promptVersion: "v1",
             outcome: "valid",
             promptTokens: 120,
@@ -127,7 +127,7 @@ struct LLMTypesTests {
             extractionUsed: false,
             repairUsed: false,
             timingTotalMs: 300,
-            model: "gpt-4o-mini",
+            model: "gpt-5.4-mini",
             promptVersion: "v1",
             outcome: "valid"
         )

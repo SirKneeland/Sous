@@ -87,8 +87,8 @@ final class AppStore: ObservableObject {
     @Published var hasAPIKey: Bool
 
     private let maxMessages = 200
-    private let liveLLMModel = "gpt-4o-mini"
-    private let multimodalLLMModel = "gpt-4o"
+    private let liveLLMModel = "gpt-5.4-mini"
+    private let multimodalLLMModel = "gpt-5.4-mini"
     private let proposer: any PatchProposer = MockPatchProposer()
     private var nextLLMContext: NextLLMContext? = nil
 

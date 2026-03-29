@@ -89,7 +89,7 @@ private extension OpenAILLMOrchestratorTests {
 
     func orchestrator(_ responses: [Result<String, Error>]) -> (OpenAILLMOrchestrator, MockLLMClient) {
         let mock = MockLLMClient(responses)
-        let orch = OpenAILLMOrchestrator(client: mock, model: "gpt-4o-mini")
+        let orch = OpenAILLMOrchestrator(client: mock, model: "gpt-5.4-mini")
         return (orch, mock)
     }
 }
@@ -173,7 +173,7 @@ struct OpenAILLMOrchestratorTests {
         let (orch1, _) = orchestrator([.success(validJSON())])
         let r1 = await orch1.run(request())
         guard case .valid(_, _, _, let d1, _) = r1 else { Issue.record("Expected .valid"); return }
-        #expect(d1.model == "gpt-4o-mini")
+        #expect(d1.model == "gpt-5.4-mini")
         #expect(d1.promptVersion == "v6")
         #expect(d1.outcome == "valid")
         #expect(d1.failureCategory == nil)
@@ -357,7 +357,7 @@ struct OpenAILLMOrchestratorTests {
     func multimodal_payloadTooLarge_returnsFailureBeforeNetworkCall() async throws {
         // MockLLMClient with no configured responses — any network call would crash.
         let mock = MockLLMClient([])
-        let orch = OpenAILLMOrchestrator(client: mock, model: "gpt-4o")
+        let orch = OpenAILLMOrchestrator(client: mock, model: "gpt-5.4-mini")
 
         // 10 MB + 1 byte exceeds the 10 MB internal gate.
         let bigData = Data(repeating: 0xFF, count: 10 * 1024 * 1024 + 1)
@@ -380,7 +380,7 @@ struct OpenAILLMOrchestratorTests {
     @Test("multimodal: valid response returns .valid result via shared decode path")
     func multimodal_validResponse_returnsValid() async throws {
         let mock = MockLLMClient([.success(validJSON())])
-        let orch = OpenAILLMOrchestrator(client: mock, model: "gpt-4o")
+        let orch = OpenAILLMOrchestrator(client: mock, model: "gpt-5.4-mini")
 
         let imageData = Data([0xFF, 0xD8, 0xFF])
         let image = try PreparedImage(
@@ -401,7 +401,7 @@ struct OpenAILLMOrchestratorTests {
     @Test("multimodal: auth error terminates immediately without retry")
     func multimodal_authError_noRetry() async throws {
         let mock = MockLLMClient([.failure(LLMError.auth)])
-        let orch = OpenAILLMOrchestrator(client: mock, model: "gpt-4o")
+        let orch = OpenAILLMOrchestrator(client: mock, model: "gpt-5.4-mini")
 
         let imageData = Data([0xFF, 0xD8, 0xFF])
         let image = try PreparedImage(

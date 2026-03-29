@@ -9,7 +9,7 @@ import SousCore
 struct LLMPatchProposer {
 
     private static let maxAttempts = 3
-    private static let model = "gpt-4o-mini"
+    private static let model = "gpt-5.4-mini"
     private static let temperature: Double = 0.1
 
     // MARK: - Entry point

@@ -30,7 +30,7 @@ private func makeDebug() -> LLMDebugBundle {
         extractionUsed: false,
         repairUsed: false,
         timingTotalMs: 100,
-        model: "gpt-4o-mini",
+        model: "gpt-5.4-mini",
         promptVersion: "v1",
         outcome: "valid"
     )

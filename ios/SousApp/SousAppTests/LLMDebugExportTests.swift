@@ -31,7 +31,7 @@ final class LLMDebugExportTests: XCTestCase {
             repairUsed: false,
             timingTotalMs: 1234,
             timingNetworkMs: 900,
-            model: "gpt-4o-mini",
+            model: "gpt-5.4-mini",
             promptVersion: "v1",
             outcome: "valid",
             failureCategory: nil,
@@ -66,7 +66,7 @@ final class LLMDebugExportTests: XCTestCase {
         let export = LLMDebugExport(
             requestId: "req-full",
             timestamp: "2026-03-06T00:00:00Z",
-            model: "gpt-4o-mini",
+            model: "gpt-5.4-mini",
             promptVersion: "v1",
             attemptsUsed: 3,
             usedRepair: true,
@@ -142,7 +142,7 @@ final class LLMDebugExportTests: XCTestCase {
         let export = LLMDebugExport.make(from: bundle)
 
         XCTAssertEqual(export.requestId, "test-req-id")
-        XCTAssertEqual(export.model, "gpt-4o-mini")
+        XCTAssertEqual(export.model, "gpt-5.4-mini")
         XCTAssertEqual(export.promptVersion, "v1")
         XCTAssertEqual(export.attemptsUsed, 2)
         XCTAssertEqual(export.usedRepair, false)
