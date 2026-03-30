@@ -649,7 +649,7 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             .joined(separator: ", ")
 
         let errLines = errors.isEmpty
-            ? "(schema or decode error — re-emit valid JSON)"
+            ? "(JSON decode error — the previous response could not be parsed. Common causes:\n- The full JSON response was nested as a string inside assistant_message instead of being the top-level object\n- Unescaped quote characters inside string values broke JSON validity\nRe-emit as a single valid top-level JSON object with assistant_message as a plain string and patchSet as an object or null.)"
             : errors.map { "• [\($0.code)] \($0.message)" }.joined(separator: "\n")
 
         let content = """
