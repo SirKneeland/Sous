@@ -309,6 +309,28 @@ final class AppStore: ObservableObject {
         startNewSession()
     }
 
+    // MARK: - Recipe Reset
+
+    /// Resets all step statuses to todo and clears any pending patch.
+    /// Recipe content (title, ingredients, steps text, notes) is unchanged.
+    /// Chat history is preserved.
+    func resetRecipe() {
+        cancelLiveLLM()
+        let recipe = uiState.recipe
+        let resetSteps = recipe.steps.map { Step(id: $0.id, text: $0.text, status: .todo) }
+        let reset = Recipe(
+            id: recipe.id,
+            version: recipe.version + 1,
+            title: recipe.title,
+            ingredients: recipe.ingredients,
+            steps: resetSteps,
+            notes: recipe.notes,
+            miseEnPlace: recipe.miseEnPlace
+        )
+        uiState = .recipeOnly(recipe: reset)
+        saveSession()
+    }
+
     // MARK: - Recent Recipes
 
     /// Returns all saved recipe sessions, most recent first (current recipe is always first slot).

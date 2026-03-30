@@ -14,6 +14,9 @@ struct ContentView: View {
     /// Measured height of BottomZoneView. Applied as .safeAreaInset to RecipeCanvasView
     /// so scroll content is never hidden behind the bar.
     @State private var bottomZoneHeight: CGFloat = 0
+    /// Controls whether the Ingredients section is expanded. Lifted here so it survives
+    /// RecipeCanvasView being replaced by PatchReviewView.
+    @State private var ingredientsExpanded: Bool = true
 
     private var hasDoneBanner: Bool { !timerManager.doneQueue.isEmpty }
 
@@ -62,12 +65,17 @@ struct ContentView: View {
                     onOpenSettings: { showSettings = true },
                     onStartNew: { store.requestNewSession() },
                     onOpenRecents: { store.showRecentRecipes = true },
+                    onResetRecipe: {
+                        store.resetRecipe()
+                        ingredientsExpanded = true
+                    },
                     miseEnPlaceIsLoading: store.miseEnPlaceIsLoading,
                     miseEnPlaceError: store.miseEnPlaceError,
                     llmDebugStatus: store.llmDebugStatus,
                     timerManager: timerManager,
                     scrollToStepId: $scrollToStepId,
-                    highlightedStepId: $highlightedStepId
+                    highlightedStepId: $highlightedStepId,
+                    ingredientsExpanded: $ingredientsExpanded
                 )
                 // Reserve space equal to the bottom zone height so the last scroll item
                 // is never hidden behind the bar.
@@ -103,6 +111,22 @@ struct ContentView: View {
         }
         .onChange(of: isRecipeCanvasActive) { _, active in
             timerManager.isRecipeCanvasActive = active
+        }
+        .onChange(of: store.uiState.recipe.id) { _, _ in
+            ingredientsExpanded = true
+        }
+        .onChange(of: store.uiState) { prev, current in
+            // Auto-expand ingredients when accepting a patch that has ingredient changes.
+            if case .patchReview(_, let patchSet, _, _) = prev,
+               case .recipeOnly = current,
+               patchSet.patches.contains(where: {
+                   switch $0 {
+                   case .addIngredient, .updateIngredient, .removeIngredient: return true
+                   default: return false
+                   }
+               }) {
+                ingredientsExpanded = true
+            }
         }
         .sheet(isPresented: Binding(
             get: { store.hasCanvas && store.uiState.isSheetPresented && !store.uiState.isPatchReview },

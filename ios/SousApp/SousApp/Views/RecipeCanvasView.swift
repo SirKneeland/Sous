@@ -9,17 +9,20 @@ struct RecipeCanvasView: View {
     var onOpenSettings: () -> Void = {}
     var onStartNew: () -> Void = {}
     var onOpenRecents: () -> Void = {}
+    var onResetRecipe: () -> Void = {}
     var miseEnPlaceIsLoading: Bool = false
     var miseEnPlaceError: String? = nil
     var llmDebugStatus: String? = nil
     var timerManager: StepTimerManager? = nil
     @Binding var scrollToStepId: UUID?
     @Binding var highlightedStepId: UUID?
+    @Binding var ingredientsExpanded: Bool
 
     @State private var checkedIngredients: Set<UUID> = []
     @AppStorage("miseEnPlaceConfirmed") private var miseEnPlaceConfirmed: Bool = false
     @State private var showingMiseEnPlaceModal: Bool = false
     @State private var modalDontShowAgain: Bool = false
+    @State private var showingResetConfirmation: Bool = false
 
     init(
         recipe: Recipe,
@@ -29,12 +32,14 @@ struct RecipeCanvasView: View {
         onOpenSettings: @escaping () -> Void = {},
         onStartNew: @escaping () -> Void = {},
         onOpenRecents: @escaping () -> Void = {},
+        onResetRecipe: @escaping () -> Void = {},
         miseEnPlaceIsLoading: Bool = false,
         miseEnPlaceError: String? = nil,
         llmDebugStatus: String? = nil,
         timerManager: StepTimerManager? = nil,
         scrollToStepId: Binding<UUID?> = .constant(nil),
-        highlightedStepId: Binding<UUID?> = .constant(nil)
+        highlightedStepId: Binding<UUID?> = .constant(nil),
+        ingredientsExpanded: Binding<Bool> = .constant(true)
     ) {
         self.recipe = recipe
         self.onMarkStepDone = onMarkStepDone
@@ -43,12 +48,14 @@ struct RecipeCanvasView: View {
         self.onOpenSettings = onOpenSettings
         self.onStartNew = onStartNew
         self.onOpenRecents = onOpenRecents
+        self.onResetRecipe = onResetRecipe
         self.miseEnPlaceIsLoading = miseEnPlaceIsLoading
         self.miseEnPlaceError = miseEnPlaceError
         self.llmDebugStatus = llmDebugStatus
         self.timerManager = timerManager
         self._scrollToStepId = scrollToStepId
         self._highlightedStepId = highlightedStepId
+        self._ingredientsExpanded = ingredientsExpanded
     }
 
     var body: some View {
@@ -69,6 +76,9 @@ struct RecipeCanvasView: View {
                     }
                     Spacer()
                     HStack(spacing: 8) {
+                        SousIconButton(systemName: "arrow.counterclockwise") {
+                            showingResetConfirmation = true
+                        }
                         SousIconButton(systemName: "plus") { onStartNew() }
                         SousIconButton(systemName: "clock") { onOpenRecents() }
                         SousIconButton(systemName: "gearshape") { onOpenSettings() }
@@ -87,32 +97,52 @@ struct RecipeCanvasView: View {
                 VStack(alignment: .leading, spacing: 0) {
 
                     // MARK: Ingredients
-                    SousSectionLabel(title: "Ingredients")
-                        .padding(.top, 20)
-                        .padding(.bottom, 12)
-
-                    ForEach(recipe.ingredients, id: \.id) { ingredient in
-                        let isChecked = checkedIngredients.contains(ingredient.id)
-                        Button {
-                            if isChecked {
-                                checkedIngredients.remove(ingredient.id)
-                            } else {
-                                checkedIngredients.insert(ingredient.id)
-                            }
-                        } label: {
-                            HStack(alignment: .top, spacing: 12) {
-                                SousCheckbox(isChecked: isChecked)
-                                    .padding(.top, 2)
-                                Text(ingredient.text)
-                                    .font(.sousBody)
-                                    .foregroundStyle(Color.sousText)
-                                    .multilineTextAlignment(.leading)
-                                Spacer()
-                            }
-                            .padding(.vertical, 10)
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            ingredientsExpanded.toggle()
                         }
-                        .buttonStyle(.plain)
-                        SousRule()
+                    } label: {
+                        HStack {
+                            Text("INGREDIENTS")
+                                .font(.sousSectionHeader)
+                                .foregroundStyle(Color.sousTerracotta)
+                                .kerning(1.2)
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(Color.sousTerracotta)
+                                .rotationEffect(.degrees(ingredientsExpanded ? 0 : -90))
+                                .animation(.easeInOut(duration: 0.2), value: ingredientsExpanded)
+                            Spacer()
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 20)
+                    .padding(.bottom, 12)
+
+                    if ingredientsExpanded {
+                        ForEach(recipe.ingredients, id: \.id) { ingredient in
+                            let isChecked = checkedIngredients.contains(ingredient.id)
+                            Button {
+                                if isChecked {
+                                    checkedIngredients.remove(ingredient.id)
+                                } else {
+                                    checkedIngredients.insert(ingredient.id)
+                                }
+                            } label: {
+                                HStack(alignment: .top, spacing: 12) {
+                                    SousCheckbox(isChecked: isChecked)
+                                        .padding(.top, 2)
+                                    Text(ingredient.text)
+                                        .font(.sousBody)
+                                        .foregroundStyle(Color.sousText)
+                                        .multilineTextAlignment(.leading)
+                                    Spacer()
+                                }
+                                .padding(.vertical, 10)
+                            }
+                            .buttonStyle(.plain)
+                            SousRule()
+                        }
                     }
 
                     // MARK: Mise en place section (once populated)
@@ -261,6 +291,15 @@ struct RecipeCanvasView: View {
             .presentationDragIndicator(.hidden)
         }
         } // end ScrollViewReader
+        .alert("Start over?", isPresented: $showingResetConfirmation) {
+            Button("Reset", role: .destructive) {
+                checkedIngredients = []
+                onResetRecipe()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Your chat history will be kept.")
+        }
     }
 
     // MARK: - Mise en place entry row
