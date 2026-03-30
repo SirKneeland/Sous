@@ -47,6 +47,7 @@ interface TestInput {
 interface TestExpected {
   shouldPatch?: boolean;
   shouldGenerateRecipe?: boolean;
+  shouldSuggestGenerate?: boolean;
   notes: string;
 }
 
@@ -317,39 +318,59 @@ function schemaScorer({
   output: EvalOutput;
   expected: TestExpected;
 }): { name: string; score: number; metadata?: Record<string, unknown> } {
-  const { hasPatchSet, isValidJson } = output;
-  const { shouldPatch } = expected;
+  const { hasPatchSet, isValidJson, rawResponse } = output;
+  const { shouldPatch, shouldSuggestGenerate } = expected;
 
-  // If shouldPatch is explicitly defined, check for presence/absence of patchSet
+  const checks: { name: string; pass: boolean; reason: string }[] = [];
+
+  // Check 1: patchSet presence/absence
   if (shouldPatch === true && !hasPatchSet) {
+    checks.push({ name: "patchSet", pass: false, reason: "Expected patchSet but none found" });
+  } else if (shouldPatch === false && hasPatchSet) {
+    checks.push({ name: "patchSet", pass: false, reason: "Expected no patchSet but one was found" });
+  } else if (hasPatchSet && !isValidJson) {
+    checks.push({ name: "patchSet", pass: false, reason: "patchSet found but JSON is invalid" });
+  } else if (shouldPatch !== undefined) {
+    checks.push({ name: "patchSet", pass: true, reason: "patchSet check passed" });
+  }
+
+  // Check 2: suggest_generate presence/absence (only when shouldSuggestGenerate is defined)
+  if (shouldSuggestGenerate !== undefined) {
+    const parsed = (typeof rawResponse === "object" && rawResponse !== null)
+      ? rawResponse as Record<string, unknown>
+      : {};
+    const hasSuggestGenerate = parsed.suggest_generate === true;
+
+    if (shouldSuggestGenerate === true && !hasSuggestGenerate) {
+      checks.push({ name: "suggest_generate", pass: false, reason: "Expected suggest_generate: true but not found" });
+    } else if (shouldSuggestGenerate === false && hasSuggestGenerate) {
+      checks.push({ name: "suggest_generate", pass: false, reason: "Expected suggest_generate absent/false but it was true" });
+    } else {
+      checks.push({ name: "suggest_generate", pass: true, reason: "suggest_generate check passed" });
+    }
+  }
+
+  // If no applicable checks, pass by default
+  if (checks.length === 0) {
     return {
       name: "schemaScorer",
-      score: 0,
-      metadata: { reason: "Expected patchSet but none found" },
+      score: 1,
+      metadata: { reason: "No schema checks applicable", hasPatchSet, isValidJson },
     };
   }
 
-  if (shouldPatch === false && hasPatchSet) {
-    return {
-      name: "schemaScorer",
-      score: 0,
-      metadata: { reason: "Expected no patchSet but one was found" },
-    };
-  }
-
-  // If JSON is present, it should be valid
-  if (hasPatchSet && !isValidJson) {
-    return {
-      name: "schemaScorer",
-      score: 0,
-      metadata: { reason: "patchSet found but JSON is invalid" },
-    };
-  }
+  const score = checks.filter((c) => c.pass).length / checks.length;
+  const failures = checks.filter((c) => !c.pass).map((c) => c.reason);
 
   return {
     name: "schemaScorer",
-    score: 1,
-    metadata: { reason: "Schema check passed", hasPatchSet, isValidJson },
+    score,
+    metadata: {
+      reason: failures.length === 0 ? "All schema checks passed" : failures.join("; "),
+      checks,
+      hasPatchSet,
+      isValidJson,
+    },
   };
 }
 

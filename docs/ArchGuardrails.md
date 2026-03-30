@@ -195,6 +195,17 @@ Breaking any of these tests indicates a **system safety regression**.
 
 ---
 
+# LLM System Prompt Guardrail
+
+Any change to the LLM system prompts (in `OpenAILLMOrchestrator.swift`) must be accompanied by:
+
+1. A corresponding eval case added to `/evals/cases/core-behaviors.json`
+2. A passing eval run (`cd evals && npm run eval`) before the change is considered complete
+
+A system prompt change without a green eval run is **not done**.
+
+---
+
 # When Modifying the Architecture
 
 Before changing any code touching:

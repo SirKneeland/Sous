@@ -27,7 +27,27 @@ Active development. Currently working toward TestFlight alpha (Milestone 19).
 - OpenAI API (structured JSON output + patch validation)
 - Local persistence via atomic file writes
 
+## Evals
+
+The `/evals` directory contains a live LLM eval suite that tests model behavior against the real system prompts.
+
+**Setup:**
+```
+cd evals
+cp .env.example .env
+# Fill in BRAINTRUST_API_KEY and OPENAI_API_KEY
+```
+
+**Run:**
+```
+cd evals && npm run eval
+```
+
+**View results:** Braintrust dashboard, project "sous"
+
+Evals test LLM behavior against the real system prompts — things like: does the model correctly refuse to patch a done step, does it respect dietary preferences, does it route ambiguous requests correctly. They run via Braintrust and are written as JSON cases in `/evals/cases/core-behaviors.json`.
+
 ## Docs
 
-Project documentation lives in `/docs`: PRD, milestones, state model, design spec, 
+Project documentation lives in `/docs`: PRD, milestones, state model, design spec,
 user stories, and codebase overview.

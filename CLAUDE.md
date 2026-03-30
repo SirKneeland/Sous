@@ -96,6 +96,39 @@ Violating any of these is a critical bug, not a style issue.
 
 ---
 
+## Evals
+
+The Sous repo has a live LLM eval suite at `/evals`. Claude Code must treat evals as a first-class responsibility alongside unit tests.
+
+**When to write new eval cases:**
+- Any time a new LLM behavior rule is added or changed in the system prompts (in OpenAILLMOrchestrator.swift)
+- Any time a bug is found that involves unexpected model output
+- Any time a new prompt type or routing path is introduced
+- Any time a user-facing constraint is added (new preference type, new immutability rule, etc.)
+
+**How to write a new eval case:**
+- Add it to `/evals/cases/core-behaviors.json`
+- Each case needs: name, description, promptType, recipeState, chatHistory, userMessage, and expected (with notes and shouldPatch)
+- Use realistic but minimal recipe state
+- - Set shouldPatch carefully: true if the response must contain a non-null 
+  patchSet, false if it must not. The schemaScorer uses this to validate JSON 
+  structure deterministically on every case.
+- Announce the new case to the user: "I added eval case `[name]`: [one sentence description of what it tests]"
+
+**How to run evals:**
+- `cd evals && npm run eval`
+- Braintrust API key and OpenAI API key must be present in `/evals/.env`
+- Run evals after any system prompt change, before marking a task complete
+- Report the summary scores to the user (copy the SUMMARY block from terminal output)
+- If any previously-passing case regresses, flag it explicitly before proceeding
+
+**Never:**
+- Modify system prompts without running evals afterward
+- Add a new LLM behavioral rule without a corresponding eval case
+- Silently skip evals because keys aren't present — instead tell the user "Evals skipped: /evals/.env not found. Run manually with: cd evals && npm run eval"
+
+---
+
 ## Definition of Done
 
 A task is complete when:

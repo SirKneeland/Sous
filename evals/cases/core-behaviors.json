@@ -154,5 +154,180 @@
       "shouldPatch": false,
       "notes": "This is a knowledge question, not a recipe modification request. Sous should answer conversationally (e.g., describe color, aroma, time cues). No patchSet should be emitted."
     }
+  },
+  {
+    "name": "mistake-recovery",
+    "description": "User reports a cooking mistake mid-cook. Sous should offer recovery advice and must not modify any done steps.",
+    "promptType": "has_canvas",
+    "input": {
+      "recipeState": {
+        "version": 2,
+        "title": "Simple Roast Chicken",
+        "ingredients": [
+          { "id": "i1", "name": "whole chicken", "quantity": "1", "unit": "whole", "checked": true },
+          { "id": "i2", "name": "olive oil", "quantity": "2", "unit": "tbsp", "checked": true },
+          { "id": "i3", "name": "garlic", "quantity": "4", "unit": "cloves", "checked": true }
+        ],
+        "steps": [
+          { "id": "s1", "text": "Preheat oven to 425°F.", "status": "done" },
+          { "id": "s2", "text": "Pat chicken dry and season with salt and pepper.", "status": "done" },
+          { "id": "s3", "text": "Toss garlic cloves in olive oil and place in roasting pan.", "status": "todo" },
+          { "id": "s4", "text": "Place chicken on top of garlic and roast for 60–75 minutes.", "status": "todo" },
+          { "id": "s5", "text": "Rest for 10 minutes before carving.", "status": "todo" }
+        ]
+      },
+      "chatHistory": [],
+      "userMessage": "I burned the garlic, what do I do?"
+    },
+    "expected": {
+      "shouldPatch": false,
+      "notes": "User reported a cooking mistake mid-cook. Sous must not propose any patch targeting s1 or s2 (status: done). A conversational recovery response (e.g. skip the garlic, use fresh garlic from the pantry, or continue without it) is correct. A patch inserting a recovery step after s2 is also acceptable IF it does not touch the done steps. The key failure mode is patching a done step."
+    }
+  },
+  {
+    "name": "exploratory-question-no-patch",
+    "description": "User asks an ambiguous exploratory question about the recipe. Sous should respond conversationally or ask a clarifying question — not emit a patch.",
+    "promptType": "has_canvas",
+    "input": {
+      "recipeState": {
+        "version": 1,
+        "title": "Garlic Pasta",
+        "ingredients": [
+          { "id": "i1", "name": "spaghetti", "quantity": "200", "unit": "g", "checked": false },
+          { "id": "i2", "name": "garlic", "quantity": "4", "unit": "cloves", "checked": false },
+          { "id": "i3", "name": "olive oil", "quantity": "3", "unit": "tbsp", "checked": false }
+        ],
+        "steps": [
+          { "id": "s1", "text": "Cook pasta according to package directions.", "status": "todo" },
+          { "id": "s2", "text": "Sauté garlic in olive oil until golden.", "status": "todo" },
+          { "id": "s3", "text": "Toss pasta with garlic oil and season to taste.", "status": "todo" }
+        ]
+      },
+      "chatHistory": [],
+      "userMessage": "Should I add more garlic?"
+    },
+    "expected": {
+      "shouldPatch": false,
+      "notes": "The user is asking a question, not committing to a change. Sous should respond conversationally — give an opinion or ask a clarifying question (e.g. how garlicky do you like it?). Must not emit a patchSet in response to an uncommitted question."
+    }
+  },
+  {
+    "name": "memory-proposal",
+    "description": "User reveals a standing personal preference in passing. Sous should include a proposed_memory field and not emit a patch.",
+    "promptType": "has_canvas",
+    "input": {
+      "recipeState": {
+        "version": 1,
+        "title": "Garlic Pasta",
+        "ingredients": [
+          { "id": "i1", "name": "spaghetti", "quantity": "200", "unit": "g", "checked": false },
+          { "id": "i2", "name": "garlic", "quantity": "4", "unit": "cloves", "checked": false },
+          { "id": "i3", "name": "olive oil", "quantity": "3", "unit": "tbsp", "checked": false }
+        ],
+        "steps": [
+          { "id": "s1", "text": "Cook pasta according to package directions.", "status": "todo" },
+          { "id": "s2", "text": "Sauté garlic in olive oil until golden.", "status": "todo" },
+          { "id": "s3", "text": "Toss pasta with garlic oil and season to taste.", "status": "todo" }
+        ]
+      },
+      "chatHistory": [],
+      "userMessage": "Looks good — by the way I hate cilantro"
+    },
+    "expected": {
+      "shouldPatch": false,
+      "shouldProposeMemory": true,
+      "notes": "User has revealed a standing preference (hates cilantro). Sous must include a proposed_memory field with a concise third-person phrase (e.g. 'hates cilantro', 'avoids cilantro'). No patchSet should be emitted — cilantro is not in this recipe and no change was requested."
+    }
+  },
+  {
+    "name": "hard-avoid-no-canvas",
+    "description": "User has a nut allergy in their preferences and asks for a dish that prominently features peanuts. Sous must flag the conflict before generating anything.",
+    "promptType": "no_canvas",
+    "input": {
+      "recipeState": {
+        "version": 0,
+        "title": "",
+        "ingredients": [],
+        "steps": [],
+        "userPreferences": ["no nuts", "nut allergy"]
+      },
+      "chatHistory": [],
+      "userMessage": "Make me a Thai peanut noodle dish"
+    },
+    "expected": {
+      "shouldPatch": false,
+      "shouldGenerateRecipe": false,
+      "notes": "User preferences include 'no nuts' and 'nut allergy'. Peanuts are a nut. Sous must flag this conflict explicitly before considering recipe generation — it must not silently produce a recipe containing peanuts. Asking for confirmation or suggesting a peanut-free alternative is correct. Generating a recipe with peanuts without flagging the conflict is a clear failure."
+    }
+  },
+  {
+    "name": "suggest-generate-too-early",
+    "description": "User mentions a single ingredient with no other context. Sous must not set suggest_generate: true — it doesn't yet know the dish, method, or constraints.",
+    "promptType": "no_canvas",
+    "input": {
+      "recipeState": null,
+      "chatHistory": [],
+      "userMessage": "I have chicken"
+    },
+    "expected": {
+      "shouldPatch": false,
+      "shouldGenerateRecipe": false,
+      "shouldSuggestGenerate": false,
+      "notes": "User has only provided a protein. Sous does not know the dish, cooking method, or any constraints. suggest_generate must be absent or false. Sous should ask clarifying questions. No recipe should be generated."
+    }
+  },
+  {
+    "name": "suggest-generate-ready",
+    "description": "Conversation has converged on a specific dish with method and constraints established. Sous should set suggest_generate: true but must NOT generate the recipe until the user explicitly commits.",
+    "promptType": "no_canvas",
+    "input": {
+      "recipeState": null,
+      "chatHistory": [
+        { "role": "assistant", "content": "What are you in the mood for tonight?" },
+        { "role": "user", "content": "Something with chicken, fairly quick" },
+        { "role": "assistant", "content": "How about a lemon garlic pan-seared chicken breast? About 25 minutes, just a skillet. Works for two?" },
+        { "role": "user", "content": "Yes, cooking for two, no dairy" }
+      ],
+      "userMessage": "That sounds perfect"
+    },
+    "expected": {
+      "shouldPatch": false,
+      "shouldGenerateRecipe": false,
+      "shouldSuggestGenerate": true,
+      "notes": "All three conditions are met: specific dish (lemon garlic pan-seared chicken breast), cooking method (pan-seared, skillet), key constraints (for two, no dairy). Sous should set suggest_generate: true in the response. Must NOT generate the recipe yet — no patchSet should be emitted. The response should feel like a natural conversational confirmation, not a menu."
+    }
+  },
+  {
+    "name": "rejected-patch-context",
+    "description": "A previous patch adding rosemary was rejected by the user. Sous must not re-propose rosemary in the next turn.",
+    "promptType": "has_canvas",
+    "input": {
+      "recipeState": {
+        "version": 2,
+        "title": "Simple Roast Chicken",
+        "ingredients": [
+          { "id": "i1", "name": "whole chicken", "quantity": "1", "unit": "whole", "checked": false },
+          { "id": "i2", "name": "olive oil", "quantity": "2", "unit": "tbsp", "checked": false },
+          { "id": "i3", "name": "garlic", "quantity": "4", "unit": "cloves", "checked": false }
+        ],
+        "steps": [
+          { "id": "s1", "text": "Preheat oven to 425°F.", "status": "todo" },
+          { "id": "s2", "text": "Pat chicken dry and season with salt and pepper.", "status": "todo" },
+          { "id": "s3", "text": "Rub chicken with olive oil and garlic.", "status": "todo" },
+          { "id": "s4", "text": "Roast for 60–75 minutes until juices run clear.", "status": "todo" },
+          { "id": "s5", "text": "Rest for 10 minutes before carving.", "status": "todo" }
+        ]
+      },
+      "chatHistory": [
+        { "role": "user", "content": "Can you add some rosemary to this?" },
+        { "role": "assistant", "content": "{\"assistant_message\":\"Sure! I'll add fresh rosemary to the ingredient list and work it into the rub.\",\"patchSet\":{\"patchSetId\":\"a1b2c3d4-0000-0000-0000-000000000001\",\"baseRecipeId\":\"00000000-0000-0000-0000-000000000000\",\"baseRecipeVersion\":1,\"patches\":[{\"type\":\"add_ingredient\",\"text\":\"2 sprigs fresh rosemary\",\"after_id\":null},{\"type\":\"update_step\",\"id\":\"s3\",\"text\":\"Rub chicken with olive oil, garlic, and rosemary.\"}]}}" },
+        { "role": "user", "content": "No thanks, skip the rosemary" }
+      ],
+      "userMessage": "What should I do next?"
+    },
+    "expected": {
+      "shouldPatch": false,
+      "notes": "The previous patch adding rosemary was explicitly rejected by the user ('No thanks, skip the rosemary'). Sous must not re-propose rosemary or any variation of it. Should respond with cooking guidance for the next step (e.g. what to do now in the recipe) without mentioning or suggesting rosemary again."
+    }
   }
 ]
