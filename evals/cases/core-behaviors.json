@@ -1,0 +1,158 @@
+[
+  {
+    "name": "exploration-no-recipe",
+    "description": "User expresses a vague cooking intent with no canvas. Sous should explore options and ask clarifying questions rather than immediately generating a recipe.",
+    "promptType": "no_canvas",
+    "input": {
+      "recipeState": null,
+      "chatHistory": [],
+      "userMessage": "I want to make something with chicken tonight"
+    },
+    "expected": {
+      "shouldPatch": false,
+      "shouldGenerateRecipe": false,
+      "notes": "Response should ask clarifying questions or propose multiple options. No recipe canvas should be created."
+    }
+  },
+  {
+    "name": "commit-triggers-recipe",
+    "description": "User commits to a specific dish that Sous previously proposed. Sous should generate a full recipe canvas.",
+    "input": {
+      "recipeState": null,
+      "chatHistory": [
+        {
+          "role": "assistant",
+          "content": "I have a few ideas! I could do a classic roast chicken with herbs and lemon, a quick chicken stir-fry, or a creamy chicken pasta. Which sounds good?"
+        },
+        {
+          "role": "user",
+          "content": "The roast chicken sounds amazing"
+        },
+        {
+          "role": "assistant",
+          "content": "Great choice! Here's a simple roast chicken recipe we can work with. Want me to set it up as your canvas?"
+        }
+      ],
+      "userMessage": "Let's do the roast chicken"
+    },
+    "promptType": "no_canvas",
+    "expected": {
+      "shouldPatch": false,
+      "shouldGenerateRecipe": true,
+      "notes": "Response should contain a full recipe structure with title, ingredients, and steps. This creates the initial canvas."
+    }
+  },
+  {
+    "name": "patch-removes-ingredient",
+    "description": "Canvas exists with onions. User says they're out of onions. Sous should propose a patchSet that removes or substitutes onions without touching any done steps.",
+    "promptType": "has_canvas",
+    "input": {
+      "recipeState": {
+        "version": 1,
+        "title": "Simple Roast Chicken",
+        "ingredients": [
+          { "id": "i1", "name": "whole chicken", "quantity": "1", "unit": "whole", "checked": false },
+          { "id": "i2", "name": "onions", "quantity": "2", "unit": "medium", "checked": false },
+          { "id": "i3", "name": "olive oil", "quantity": "2", "unit": "tbsp", "checked": false },
+          { "id": "i4", "name": "garlic", "quantity": "4", "unit": "cloves", "checked": false },
+          { "id": "i5", "name": "fresh thyme", "quantity": "4", "unit": "sprigs", "checked": false }
+        ],
+        "steps": [
+          { "id": "s1", "text": "Preheat oven to 425°F.", "status": "todo" },
+          { "id": "s2", "text": "Pat chicken dry and season with salt and pepper.", "status": "todo" },
+          { "id": "s3", "text": "Quarter onions and place in roasting pan. Add garlic cloves.", "status": "todo" },
+          { "id": "s4", "text": "Rub chicken with olive oil and thyme, place on top of onions.", "status": "todo" },
+          { "id": "s5", "text": "Roast for 60–75 minutes until juices run clear.", "status": "todo" }
+        ]
+      },
+      "chatHistory": [],
+      "userMessage": "I'm out of onions"
+    },
+    "expected": {
+      "shouldPatch": true,
+      "notes": "Should propose a patchSet targeting the onion ingredient and the step referencing onions. Must not modify any steps with status 'done'. Substitution (e.g., shallots or skip) is acceptable."
+    }
+  },
+  {
+    "name": "done-step-immutable",
+    "description": "Step 1 is marked done. User asks to change it. Sous must not patch a done step — it should explain the constraint and offer a recovery path.",
+    "promptType": "has_canvas",
+    "input": {
+      "recipeState": {
+        "version": 2,
+        "title": "Simple Roast Chicken",
+        "ingredients": [
+          { "id": "i1", "name": "whole chicken", "quantity": "1", "unit": "whole", "checked": true },
+          { "id": "i2", "name": "onions", "quantity": "2", "unit": "medium", "checked": false },
+          { "id": "i3", "name": "olive oil", "quantity": "2", "unit": "tbsp", "checked": true }
+        ],
+        "steps": [
+          { "id": "s1", "text": "Preheat oven to 425°F.", "status": "done" },
+          { "id": "s2", "text": "Pat chicken dry and season with salt and pepper.", "status": "done" },
+          { "id": "s3", "text": "Quarter onions and place in roasting pan.", "status": "todo" },
+          { "id": "s4", "text": "Roast for 60–75 minutes until juices run clear.", "status": "todo" }
+        ]
+      },
+      "chatHistory": [],
+      "userMessage": "Actually can you change step 1 to preheat to 450 instead?"
+    },
+    "expected": {
+      "shouldPatch": false,
+      "notes": "Sous must not emit a patchSet targeting step s1 (status: done). Should explain that completed steps cannot be changed, and optionally suggest a recovery note or workaround."
+    }
+  },
+  {
+    "name": "hard-avoid-violation",
+    "description": "User preferences include 'no shellfish'. User asks to add shrimp. Sous must flag the conflict before doing anything.",
+    "promptType": "has_canvas",
+    "input": {
+      "recipeState": {
+        "version": 1,
+        "title": "Garlic Pasta",
+        "ingredients": [
+          { "id": "i1", "name": "spaghetti", "quantity": "200", "unit": "g", "checked": false },
+          { "id": "i2", "name": "garlic", "quantity": "4", "unit": "cloves", "checked": false },
+          { "id": "i3", "name": "olive oil", "quantity": "3", "unit": "tbsp", "checked": false }
+        ],
+        "steps": [
+          { "id": "s1", "text": "Cook pasta according to package directions.", "status": "todo" },
+          { "id": "s2", "text": "Sauté garlic in olive oil until golden.", "status": "todo" },
+          { "id": "s3", "text": "Toss pasta with garlic oil and season to taste.", "status": "todo" }
+        ],
+        "userPreferences": ["no shellfish", "gluten-free optional"]
+      },
+      "chatHistory": [],
+      "userMessage": "Can you add some shrimp to this?"
+    },
+    "expected": {
+      "shouldPatch": false,
+      "notes": "Sous must explicitly flag the 'no shellfish' preference conflict before considering any modification. Should not silently add shrimp or propose a patch without mentioning the conflict."
+    }
+  },
+  {
+    "name": "no-patch-for-question",
+    "description": "Canvas exists but user is asking a knowledge question, not requesting a change. Sous should reply conversationally with no patchSet.",
+    "promptType": "has_canvas",
+    "input": {
+      "recipeState": {
+        "version": 1,
+        "title": "Simple Roast Chicken",
+        "ingredients": [
+          { "id": "i1", "name": "whole chicken", "quantity": "1", "unit": "whole", "checked": false },
+          { "id": "i2", "name": "garlic", "quantity": "4", "unit": "cloves", "checked": false }
+        ],
+        "steps": [
+          { "id": "s1", "text": "Preheat oven to 425°F.", "status": "todo" },
+          { "id": "s2", "text": "Sauté garlic until golden, about 2 minutes.", "status": "todo" },
+          { "id": "s3", "text": "Place chicken in oven and roast for 60 minutes.", "status": "todo" }
+        ]
+      },
+      "chatHistory": [],
+      "userMessage": "How do I know when the garlic is ready?"
+    },
+    "expected": {
+      "shouldPatch": false,
+      "notes": "This is a knowledge question, not a recipe modification request. Sous should answer conversationally (e.g., describe color, aroma, time cues). No patchSet should be emitted."
+    }
+  }
+]

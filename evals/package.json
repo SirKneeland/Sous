@@ -1,0 +1,14 @@
+{
+  "name": "sous-evals",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "eval": "tsx run.ts"
+  },
+  "dependencies": {
+    "braintrust": "^0.0.178",
+    "dotenv": "^16.4.5",
+    "openai": "^4.47.1",
+    "tsx": "^4.11.0"
+  }
+}
