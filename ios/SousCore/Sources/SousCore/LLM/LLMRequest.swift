@@ -67,6 +67,26 @@ public struct NextLLMContext: Equatable, Sendable, Codable {
     }
 }
 
+// MARK: - ReferencedItem
+
+/// Identifies a specific recipe row the user is asking about via the "Ask Sous" swipe action.
+/// Injected as structured context alongside the user message so the LLM knows which item
+/// the question applies to.
+public struct ReferencedItem: Sendable {
+    public enum ItemType: String, Sendable {
+        case ingredient
+        case step
+    }
+
+    public let type: ItemType
+    public let text: String
+
+    public init(type: ItemType, text: String) {
+        self.type = type
+        self.text = text
+    }
+}
+
 // MARK: - LLMRequest
 
 /// Immutable inputs passed to LLMClient / LLMOrchestrator.
@@ -91,6 +111,9 @@ public struct LLMRequest: Sendable {
     /// instead of the exploration or editing prompts. Used exclusively by the
     /// Recipe Import flow. Defaults to false for all other requests.
     public let isImportExtraction: Bool
+    /// When the user taps "Ask Sous" on a specific row, this carries that item's
+    /// text and type as structured context injected alongside the user message.
+    public let referencedItem: ReferencedItem?
 
     public init(
         recipeId: String,
@@ -101,7 +124,8 @@ public struct LLMRequest: Sendable {
         userPrefs: LLMUserPrefs,
         nextLLMContext: NextLLMContext? = nil,
         conversationHistory: [LLMMessage] = [],
-        isImportExtraction: Bool = false
+        isImportExtraction: Bool = false,
+        referencedItem: ReferencedItem? = nil
     ) {
         self.recipeId = recipeId
         self.recipeVersion = recipeVersion
@@ -112,5 +136,6 @@ public struct LLMRequest: Sendable {
         self.nextLLMContext = nextLLMContext
         self.conversationHistory = conversationHistory
         self.isImportExtraction = isImportExtraction
+        self.referencedItem = referencedItem
     }
 }

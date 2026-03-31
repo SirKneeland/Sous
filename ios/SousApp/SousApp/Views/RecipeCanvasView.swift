@@ -10,6 +10,9 @@ struct RecipeCanvasView: View {
     var onStartNew: () -> Void = {}
     var onOpenRecents: () -> Void = {}
     var onResetRecipe: () -> Void = {}
+    /// Called when the user swipes left on a row and taps "Ask Sous".
+    /// Arguments: (rowType, rowText) where rowType is "ingredient" or "step".
+    var onAskSousAbout: (String, String) -> Void = { _, _ in }
     var miseEnPlaceIsLoading: Bool = false
     var miseEnPlaceError: String? = nil
     var llmDebugStatus: String? = nil
@@ -33,6 +36,7 @@ struct RecipeCanvasView: View {
         onStartNew: @escaping () -> Void = {},
         onOpenRecents: @escaping () -> Void = {},
         onResetRecipe: @escaping () -> Void = {},
+        onAskSousAbout: @escaping (String, String) -> Void = { _, _ in },
         miseEnPlaceIsLoading: Bool = false,
         miseEnPlaceError: String? = nil,
         llmDebugStatus: String? = nil,
@@ -49,6 +53,7 @@ struct RecipeCanvasView: View {
         self.onStartNew = onStartNew
         self.onOpenRecents = onOpenRecents
         self.onResetRecipe = onResetRecipe
+        self.onAskSousAbout = onAskSousAbout
         self.miseEnPlaceIsLoading = miseEnPlaceIsLoading
         self.miseEnPlaceError = miseEnPlaceError
         self.llmDebugStatus = llmDebugStatus
@@ -60,8 +65,7 @@ struct RecipeCanvasView: View {
 
     var body: some View {
         ScrollViewReader { scrollProxy in
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
+            List {
 
                 // MARK: Header
                 HStack(alignment: .top, spacing: 8) {
@@ -91,162 +95,216 @@ struct RecipeCanvasView: View {
                 .padding(.horizontal, 20)
                 .padding(.top, 20)
                 .padding(.bottom, 16)
+                .plainRow()
 
                 SousRule()
+                    .plainRow()
 
-                VStack(alignment: .leading, spacing: 0) {
-
-                    // MARK: Ingredients
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            ingredientsExpanded.toggle()
-                        }
-                    } label: {
-                        HStack {
-                            Text("INGREDIENTS")
-                                .font(.sousSectionHeader)
-                                .foregroundStyle(Color.sousTerracotta)
-                                .kerning(1.2)
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(Color.sousTerracotta)
-                                .rotationEffect(.degrees(ingredientsExpanded ? 0 : -90))
-                                .animation(.easeInOut(duration: 0.2), value: ingredientsExpanded)
-                            Spacer()
-                        }
+                // MARK: Ingredients section header (collapsible)
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        ingredientsExpanded.toggle()
                     }
-                    .buttonStyle(.plain)
-                    .padding(.top, 20)
-                    .padding(.bottom, 12)
-
-                    if ingredientsExpanded {
-                        ForEach(recipe.ingredients, id: \.id) { ingredient in
-                            let isChecked = checkedIngredients.contains(ingredient.id)
-                            Button {
-                                if isChecked {
-                                    checkedIngredients.remove(ingredient.id)
-                                } else {
-                                    checkedIngredients.insert(ingredient.id)
-                                }
-                            } label: {
-                                HStack(alignment: .top, spacing: 12) {
-                                    SousCheckbox(isChecked: isChecked)
-                                        .padding(.top, 2)
-                                    Text(ingredient.text)
-                                        .font(.sousBody)
-                                        .foregroundStyle(Color.sousText)
-                                        .multilineTextAlignment(.leading)
-                                    Spacer()
-                                }
-                                .padding(.vertical, 10)
-                            }
-                            .buttonStyle(.plain)
-                            SousRule()
-                        }
-                    }
-
-                    // MARK: Mise en place section (once populated)
-                    if let mepEntries = recipe.miseEnPlace, !mepEntries.isEmpty {
-                        SousSectionLabel(title: "Mise en place")
-                            .padding(.top, 24)
-                            .padding(.bottom, 12)
-
-                        ForEach(mepEntries, id: \.id) { entry in
-                            miseEnPlaceEntryRow(entry)
-                            SousRule()
-                        }
-                    }
-
-                    // MARK: Procedure header (with mise en place trigger)
-                    HStack(alignment: .center) {
-                        Text("PROCEDURE")
+                } label: {
+                    HStack {
+                        Text("INGREDIENTS")
                             .font(.sousSectionHeader)
                             .foregroundStyle(Color.sousTerracotta)
                             .kerning(1.2)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Color.sousTerracotta)
+                            .rotationEffect(.degrees(ingredientsExpanded ? 0 : -90))
+                            .animation(.easeInOut(duration: 0.2), value: ingredientsExpanded)
                         Spacer()
-                        if recipe.miseEnPlace == nil {
-                            miseEnPlaceTrigger
+                    }
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
+                .padding(.bottom, 12)
+                .plainRow()
+
+                // MARK: Ingredient rows
+                if ingredientsExpanded {
+                    ForEach(recipe.ingredients, id: \.id) { ingredient in
+                        let isChecked = checkedIngredients.contains(ingredient.id)
+                        HStack(alignment: .top, spacing: 12) {
+                            SousCheckbox(isChecked: isChecked)
+                                .padding(.top, 2)
+                            Text(ingredient.text)
+                                .font(.sousBody)
+                                .foregroundStyle(Color.sousText)
+                                .multilineTextAlignment(.leading)
+                            Spacer()
+                        }
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 20)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            if isChecked { checkedIngredients.remove(ingredient.id) }
+                            else { checkedIngredients.insert(ingredient.id) }
+                        }
+                        .plainRow()
+                        .listRowSeparator(.visible)
+                        .listRowSeparatorTint(Color.sousSeparator)
+                        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                            if !isChecked {
+                                Button {
+                                    checkedIngredients.insert(ingredient.id)
+                                } label: {
+                                    Label("Done", systemImage: "checkmark")
+                                }
+                                .tint(Color.sousGreen)
+                            }
+                        }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button {
+                                onAskSousAbout("ingredient", ingredient.text)
+                            } label: {
+                                Label("Ask Sous", systemImage: "bubble.left")
+                            }
+                            .tint(Color.sousTerracotta)
                         }
                     }
-                    .padding(.top, 24)
-                    .padding(.bottom, miseEnPlaceError != nil ? 4 : 12)
+                }
 
-                    // Inline error below header
-                    if let error = miseEnPlaceError {
-                        Text(error)
-                            .font(.sousCaption)
-                            .foregroundStyle(Color.sousTerracotta)
-                            .padding(.bottom, 12)
+                // MARK: Mise en place section (once populated)
+                if let mepEntries = recipe.miseEnPlace, !mepEntries.isEmpty {
+                    SousSectionLabel(title: "Mise en place")
+                        .padding(.horizontal, 20)
+                        .padding(.top, 24)
+                        .padding(.bottom, 12)
+                        .plainRow()
+
+                    ForEach(mepEntries, id: \.id) { entry in
+                        miseEnPlaceEntryRow(entry)
+                            .padding(.horizontal, 20)
+                            .overlay(alignment: .bottom) { SousRule() }
+                            .plainRow()
                     }
+                }
 
-                    ForEach(Array(recipe.steps.enumerated()), id: \.element.id) { index, step in
-                        let isDone = step.status == .done
-                        let isHighlighted = !isDone && highlightedStepId == step.id
-                        HStack(alignment: .top, spacing: 12) {
-                            // Checkbox — marks step done (blocked when timer is active)
-                            Button {
-                                if step.status == .todo { onMarkStepDone(step.id) }
-                            } label: {
-                                SousCheckbox(isChecked: isDone)
-                                    .padding(.top, 2)
+                // MARK: Procedure header (with mise en place trigger)
+                HStack(alignment: .center) {
+                    Text("PROCEDURE")
+                        .font(.sousSectionHeader)
+                        .foregroundStyle(Color.sousTerracotta)
+                        .kerning(1.2)
+                    Spacer()
+                    if recipe.miseEnPlace == nil {
+                        miseEnPlaceTrigger
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 24)
+                .padding(.bottom, miseEnPlaceError != nil ? 4 : 12)
+                .plainRow()
+
+                // Inline error below procedure header
+                if let error = miseEnPlaceError {
+                    Text(error)
+                        .font(.sousCaption)
+                        .foregroundStyle(Color.sousTerracotta)
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 12)
+                        .plainRow()
+                }
+
+                // MARK: Step rows
+                ForEach(Array(recipe.steps.enumerated()), id: \.element.id) { index, step in
+                    let isDone = step.status == .done
+                    let isHighlighted = !isDone && highlightedStepId == step.id
+                    HStack(alignment: .top, spacing: 12) {
+                        // Checkbox — marks step done
+                        Button {
+                            if step.status == .todo { onMarkStepDone(step.id) }
+                        } label: {
+                            SousCheckbox(isChecked: isDone)
+                                .padding(.top, 2)
+                        }
+                        .buttonStyle(.plain)
+
+                        // Step text with optional timer affordance
+                        if let tm = timerManager, !isDone {
+                            TimerAffordanceText(
+                                step: step,
+                                stepIndex: index,
+                                isHighlighted: isHighlighted,
+                                timerManager: tm
+                            )
+                            .onTapGesture {
+                                withAnimation(.easeInOut(duration: 0.3)) {
+                                    highlightedStepId = nil
+                                }
                             }
-                            .buttonStyle(.plain)
-
-                            // Step text with optional timer affordance
-                            if let tm = timerManager, !isDone {
-                                TimerAffordanceText(
-                                    step: step,
-                                    stepIndex: index,
-                                    isHighlighted: isHighlighted,
-                                    timerManager: tm
-                                )
+                        } else {
+                            Text(step.text)
+                                .font(.sousBody)
+                                .foregroundStyle(isDone ? Color.sousMuted : Color.sousText)
+                                .strikethrough(isDone, color: Color.sousMuted)
+                                .multilineTextAlignment(.leading)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                                 .onTapGesture {
                                     withAnimation(.easeInOut(duration: 0.3)) {
                                         highlightedStepId = nil
                                     }
                                 }
-                            } else {
-                                Text(step.text)
-                                    .font(.sousBody)
-                                    .foregroundStyle(isDone ? Color.sousMuted : Color.sousText)
-                                    .strikethrough(isDone, color: Color.sousMuted)
-                                    .multilineTextAlignment(.leading)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .onTapGesture {
-                                        withAnimation(.easeInOut(duration: 0.3)) {
-                                            highlightedStepId = nil
-                                        }
-                                    }
-                            }
                         }
-                        .padding(.vertical, 10)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background {
-                            // Negative horizontal padding cancels the parent VStack's 20pt inset,
-                            // so the highlight background bleeds edge-to-edge while content stays inset.
-                            (isHighlighted ? Color.sousHighlightBackground : Color.clear)
-                                .padding(.horizontal, -20)
-                        }
-                        .animation(.easeInOut(duration: 0.3), value: isHighlighted)
-                        .id(step.id)
-                        SousRule()
                     }
-
-                    // MARK: Notes
-                    if !recipe.notes.isEmpty {
-                        SousSectionLabel(title: "Notes")
-                            .padding(.top, 24)
-                            .padding(.bottom, 12)
-                        ForEach(recipe.notes, id: \.self) { note in
-                            Text("— \(note)")
-                                .font(.sousBody)
-                                .foregroundStyle(Color.sousText)
-                                .padding(.vertical, 4)
+                    .padding(.vertical, 10)
+                    .padding(.horizontal, 20)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    // Background covers full row width (listRowInsets is zero); animates highlight.
+                    .background(isHighlighted ? Color.sousHighlightBackground : Color.sousBackground)
+                    .animation(.easeInOut(duration: 0.3), value: isHighlighted)
+                    .id(step.id)
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.visible)
+                    .listRowSeparatorTint(Color.sousSeparator)
+                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                        if !isDone {
+                            Button {
+                                onMarkStepDone(step.id)
+                            } label: {
+                                Label("Done", systemImage: "checkmark")
+                            }
+                            .tint(Color.sousGreen)
                         }
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button {
+                            onAskSousAbout("step", step.text)
+                        } label: {
+                            Label("Ask Sous", systemImage: "bubble.left")
+                        }
+                        .tint(Color.sousTerracotta)
                     }
                 }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 20)
+
+                // MARK: Notes
+                if !recipe.notes.isEmpty {
+                    SousSectionLabel(title: "Notes")
+                        .padding(.horizontal, 20)
+                        .padding(.top, 24)
+                        .padding(.bottom, 12)
+                        .plainRow()
+
+                    ForEach(recipe.notes, id: \.self) { note in
+                        Text("— \(note)")
+                            .font(.sousBody)
+                            .foregroundStyle(Color.sousText)
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 4)
+                            .plainRow()
+                    }
+                }
+
+                // Bottom breathing room
+                Color.clear.frame(height: 20)
+                    .plainRow()
 
 #if DEBUG
                 if let status = llmDebugStatus {
@@ -256,40 +314,37 @@ struct RecipeCanvasView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 20)
                         .padding(.bottom, 8)
+                        .plainRow()
                 }
 #endif
             }
-        }
-        .background(Color.sousBackground)
-        .onChange(of: scrollToStepId) { stepId in
-            guard let id = stepId else { return }
-            withAnimation {
-                scrollProxy.scrollTo(id, anchor: .top)
-            }
-            scrollToStepId = nil
-        }
-        .simultaneousGesture(DragGesture(minimumDistance: 4).onChanged { _ in
-            withAnimation(.easeInOut(duration: 0.3)) {
-                highlightedStepId = nil
-            }
-        })
-        .sheet(isPresented: $showingMiseEnPlaceModal) {
-            MiseEnPlaceConfirmationModal(
-                dontShowAgain: $modalDontShowAgain,
-                onCancel: {
-                    showingMiseEnPlaceModal = false
-                    modalDontShowAgain = false
-                },
-                onConfirm: {
-                    if modalDontShowAgain { miseEnPlaceConfirmed = true }
-                    showingMiseEnPlaceModal = false
-                    modalDontShowAgain = false
-                    onTriggerMiseEnPlace()
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .background(Color.sousBackground)
+            .onChange(of: scrollToStepId) { stepId in
+                guard let id = stepId else { return }
+                withAnimation {
+                    scrollProxy.scrollTo(id, anchor: .top)
                 }
-            )
-            .presentationDetents([.medium])
-            .presentationDragIndicator(.hidden)
-        }
+                scrollToStepId = nil
+            }
+            .sheet(isPresented: $showingMiseEnPlaceModal) {
+                MiseEnPlaceConfirmationModal(
+                    dontShowAgain: $modalDontShowAgain,
+                    onCancel: {
+                        showingMiseEnPlaceModal = false
+                        modalDontShowAgain = false
+                    },
+                    onConfirm: {
+                        if modalDontShowAgain { miseEnPlaceConfirmed = true }
+                        showingMiseEnPlaceModal = false
+                        modalDontShowAgain = false
+                        onTriggerMiseEnPlace()
+                    }
+                )
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.hidden)
+            }
         } // end ScrollViewReader
         .alert("Start over?", isPresented: $showingResetConfirmation) {
             Button("Reset", role: .destructive) {
@@ -400,6 +455,19 @@ struct RecipeCanvasView: View {
         }
     }
 }
+
+// MARK: - Plain List Row Helper
+
+private extension View {
+    /// Strips default List row chrome: zero insets, sousBackground background, no separator.
+    func plainRow() -> some View {
+        self
+            .listRowInsets(EdgeInsets())
+            .listRowBackground(Color.sousBackground)
+            .listRowSeparator(.hidden)
+    }
+}
+
 
 // MARK: - Mise en place confirmation modal
 

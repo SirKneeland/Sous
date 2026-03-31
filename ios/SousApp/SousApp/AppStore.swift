@@ -3,6 +3,15 @@ import Foundation
 import SousCore
 import UIKit
 
+// MARK: - QuotedRowContext
+
+/// Carries the recipe row the user tapped "Ask Sous" on. Cleared after the message is sent.
+struct QuotedRowContext: Equatable {
+    enum RowType: Equatable { case ingredient, step }
+    let type: RowType
+    let text: String
+}
+
 // MARK: - UIState projection helpers (app-layer only)
 
 extension UIState {
@@ -85,6 +94,9 @@ final class AppStore: ObservableObject {
     @Published var pendingMemoryProposal: String? = nil
     /// True when a non-empty API key is stored in the Keychain. Drives the first-launch onboarding callout.
     @Published var hasAPIKey: Bool
+    /// The recipe row the user asked Sous about via the swipe action. Shown as a quote chip
+    /// in the chat composer; consumed and cleared when the user sends a message.
+    @Published var quotedRowContext: QuotedRowContext? = nil
 
     private let maxMessages = 200
     private let liveLLMModel = "gpt-5.4-mini"
@@ -402,6 +414,12 @@ final class AppStore: ObservableObject {
 
     // MARK: - Chat
 
+    /// Opens the chat sheet and sets a quoted row context (from the "Ask Sous" swipe action).
+    func openChatWithRowContext(type: QuotedRowContext.RowType, text: String) {
+        quotedRowContext = QuotedRowContext(type: type, text: text)
+        send(.openChat)
+    }
+
     func sendUserMessage(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -432,10 +450,15 @@ final class AppStore: ObservableObject {
         }
         #endif
         append(ChatMessage(role: .user, text: trimmed))
+        // Capture and clear quoted context before dispatching — it applies only to this send.
+        let capturedItem: ReferencedItem? = quotedRowContext.map { ctx in
+            ReferencedItem(type: ctx.type == .ingredient ? .ingredient : .step, text: ctx.text)
+        }
+        quotedRowContext = nil
         if useLiveLLM {
             llmGeneration += 1
             let gen = llmGeneration
-            llmTask = Task { await self.sendWithLLM(trimmed, generation: gen) }
+            llmTask = Task { await self.sendWithLLM(trimmed, referencedItem: capturedItem, generation: gen) }
         } else {
             let patchSet = proposer.propose(userText: trimmed, recipe: uiState.recipe)
             send(.patchReceived(patchSet))
@@ -454,7 +477,7 @@ final class AppStore: ObservableObject {
         )
     }
 
-    private func sendWithLLM(_ userText: String, generation: Int) async {
+    private func sendWithLLM(_ userText: String, referencedItem: ReferencedItem? = nil, generation: Int) async {
         // Clear llmTask when this generation's call ends (natural or cancelled).
         // The generation guard prevents an old cancelled task from clearing a newer task's ref.
         defer {
@@ -479,7 +502,8 @@ final class AppStore: ObservableObject {
             recipeSnapshotForPrompt: recipe,
             userPrefs: buildLLMUserPrefs(),
             nextLLMContext: nextLLMContext,
-            conversationHistory: buildConversationHistory()
+            conversationHistory: buildConversationHistory(),
+            referencedItem: referencedItem
         )
 #if DEBUG
         lastDebugLLMRequest = request

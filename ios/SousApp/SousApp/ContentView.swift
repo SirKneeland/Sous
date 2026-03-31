@@ -69,6 +69,10 @@ struct ContentView: View {
                         store.resetRecipe()
                         ingredientsExpanded = true
                     },
+                    onAskSousAbout: { type, text in
+                        let rowType: QuotedRowContext.RowType = type == "ingredient" ? .ingredient : .step
+                        store.openChatWithRowContext(type: rowType, text: text)
+                    },
                     miseEnPlaceIsLoading: store.miseEnPlaceIsLoading,
                     miseEnPlaceError: store.miseEnPlaceError,
                     llmDebugStatus: store.llmDebugStatus,

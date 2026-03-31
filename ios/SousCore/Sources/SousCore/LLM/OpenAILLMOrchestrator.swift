@@ -634,7 +634,12 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             LLMMessage(role: .system, content: recipeContextMessage(for: request)),
         ]
         messages += request.conversationHistory
-        messages.append(LLMMessage(role: .user, content: request.userMessage))
+        var userContent = request.userMessage
+        if let item = request.referencedItem {
+            let label = item.type == .ingredient ? "ingredient" : "step"
+            userContent = "[The user is asking specifically about this \(label): \"\(item.text)\"]\n\n\(request.userMessage)"
+        }
+        messages.append(LLMMessage(role: .user, content: userContent))
         return messages
     }
 

@@ -15,6 +15,7 @@ struct ChatSheetView: View {
     @State private var composerHeight: CGFloat = 36
     @State private var showPhotoSheet = false
     @State private var inputBarDragOffset: CGFloat = 0
+    @FocusState private var isComposerFocused: Bool
 
     var body: some View {
         Group {
@@ -27,6 +28,16 @@ struct ChatSheetView: View {
 #if DEBUG
         .modifier(DebugTapExportModifier(store: store))
 #endif
+        .onAppear {
+            if store.quotedRowContext != nil {
+                isComposerFocused = true
+            }
+        }
+        .onChange(of: store.quotedRowContext) { newValue in
+            if newValue != nil {
+                isComposerFocused = true
+            }
+        }
     }
 
     // MARK: - Blank State
@@ -330,40 +341,48 @@ struct ChatSheetView: View {
                 )
             }
 
-            // Text input
-            ZStack(alignment: .topLeading) {
-                // Hidden text used to measure content height
-                Text(composerText.isEmpty ? " " : composerText)
-                    .font(.sousBody)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 8)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .hidden()
-                    .background(
-                        GeometryReader { geo in
-                            Color.clear.preference(
-                                key: ComposerHeightPreferenceKey.self,
-                                value: geo.size.height
-                            )
-                        }
-                    )
-                    .onPreferenceChange(ComposerHeightPreferenceKey.self) { height in
-                        composerHeight = max(height, 36)
+            // Text input (with optional quoted context chip above)
+            VStack(spacing: 0) {
+                if let ctx = store.quotedRowContext {
+                    QuotedContextChip(context: ctx) {
+                        store.quotedRowContext = nil
                     }
-                if composerText.isEmpty {
-                    Text("Ask Sous...")
+                }
+                ZStack(alignment: .topLeading) {
+                    // Hidden text used to measure content height
+                    Text(composerText.isEmpty ? " " : composerText)
                         .font(.sousBody)
-                        .foregroundStyle(Color.sousMuted)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 8)
-                        .allowsHitTesting(false)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .hidden()
+                        .background(
+                            GeometryReader { geo in
+                                Color.clear.preference(
+                                    key: ComposerHeightPreferenceKey.self,
+                                    value: geo.size.height
+                                )
+                            }
+                        )
+                        .onPreferenceChange(ComposerHeightPreferenceKey.self) { height in
+                            composerHeight = max(height, 36)
+                        }
+                    if composerText.isEmpty {
+                        Text("Ask Sous...")
+                            .font(.sousBody)
+                            .foregroundStyle(Color.sousMuted)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 8)
+                            .allowsHitTesting(false)
+                    }
+                    TextEditor(text: $composerText)
+                        .font(.sousBody)
+                        .foregroundStyle(Color.sousText)
+                        .scrollContentBackground(.hidden)
+                        .background(Color.clear)
+                        .frame(height: composerHeight)
+                        .focused($isComposerFocused)
                 }
-                TextEditor(text: $composerText)
-                    .font(.sousBody)
-                    .foregroundStyle(Color.sousText)
-                    .scrollContentBackground(.hidden)
-                    .background(Color.clear)
-                    .frame(height: composerHeight)
             }
             .padding(4)
             .background(Color.sousSurface)
@@ -622,6 +641,50 @@ private struct MemoryProposalToast: View {
                 onSave(text)
             }
         }
+    }
+}
+
+// MARK: - Quoted Context Chip
+
+private struct QuotedContextChip: View {
+    let context: QuotedRowContext
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 0) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(context.type == .ingredient ? "INGREDIENT" : "STEP")
+                    .font(.sousCaption)
+                    .foregroundStyle(Color.sousTerracotta)
+                    .kerning(0.8)
+                Text(context.text)
+                    .font(.sousBody)
+                    .foregroundStyle(Color.sousMuted)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.leading, 13)
+            .padding(.trailing, 10)
+            .padding(.vertical, 4)
+
+            Button {
+                onDismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Color.sousMuted)
+                    .padding(8)
+            }
+            .buttonStyle(.plain)
+        }
+        .background(Color.sousBackground)
+        .overlay(alignment: .leading) {
+            // Accent stripe as overlay — sized to content, never expands independently
+            Color.sousTerracotta.frame(width: 3)
+        }
+        .overlay(Rectangle().stroke(Color.sousSeparator, lineWidth: 1))
+        .transition(.move(edge: .top).combined(with: .opacity))
     }
 }
 
