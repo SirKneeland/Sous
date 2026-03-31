@@ -2,7 +2,7 @@ import SwiftUI
 
 // MARK: - TimerDoneBanner
 
-/// Large (~300pt) terracotta panel shown when a timer expires.
+/// Large (~300pt) burgundy panel shown when a timer expires.
 /// Tapping dismisses it and scrolls to the step.
 struct TimerDoneBanner: View {
     let session: TimerSession

@@ -18,11 +18,21 @@ extension Color {
             : UIColor(red: 26/255, green: 26/255, blue: 26/255, alpha: 1)
     })
 
-    /// Terracotta #C1440E — accent, section headers, active states
-    static let sousTerracotta = Color(red: 193/255, green: 68/255, blue: 14/255)
+    /// Burgundy — accent, section headers, active states
+    /// Light: #8B2E3F  Dark: #C45068
+    static let sousTerracotta = Color(UIColor { t in
+        t.userInterfaceStyle == .dark
+            ? UIColor(red: 196/255, green: 80/255, blue: 104/255, alpha: 1)
+            : UIColor(red: 139/255, green: 46/255, blue: 63/255, alpha: 1)
+    })
 
-    /// Pale terracotta #E8A882 — timer-highlight row background
-    static let sousHighlightBackground = Color(red: 232/255, green: 168/255, blue: 130/255)
+    /// Pale burgundy — timer-highlight row background
+    /// Light: #F7EAEC  Dark: #2C1018
+    static let sousHighlightBackground = Color(UIColor { t in
+        t.userInterfaceStyle == .dark
+            ? UIColor(red: 44/255, green: 16/255, blue: 24/255, alpha: 1)
+            : UIColor(red: 247/255, green: 234/255, blue: 236/255, alpha: 1)
+    })
 
     /// Warm gray #9A9590 — captions, timestamps, placeholders
     static let sousMuted = Color(red: 154/255, green: 149/255, blue: 144/255)
@@ -51,7 +61,7 @@ extension Font {
     /// Large, bold, ALL CAPS — recipe titles, screen titles
     static let sousTitle: Font = .system(size: 24, weight: .bold, design: .monospaced)
 
-    /// Small ALL CAPS terracotta — section headers (INGREDIENTS, PROCEDURE)
+    /// Small ALL CAPS burgundy — section headers (INGREDIENTS, PROCEDURE)
     static let sousSectionHeader: Font = .system(size: 11, weight: .regular, design: .monospaced)
 
     /// Regular weight — body text, ingredient names, step text, chat messages
@@ -69,7 +79,7 @@ extension Font {
 
 // MARK: - Square Checkbox
 
-/// Square bordered checkbox. Unchecked: 1pt border. Checked: terracotta fill + white checkmark.
+/// Square bordered checkbox. Unchecked: 1pt border. Checked: burgundy fill + white checkmark.
 struct SousCheckbox: View {
     let isChecked: Bool
     var size: CGFloat = 20
@@ -94,7 +104,7 @@ struct SousCheckbox: View {
 
 // MARK: - Section Header
 
-/// Terracotta ALL CAPS section header with letter spacing.
+/// Burgundy ALL CAPS section header with letter spacing.
 struct SousSectionLabel: View {
     let title: String
 

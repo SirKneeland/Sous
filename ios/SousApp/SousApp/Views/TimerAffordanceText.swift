@@ -3,7 +3,7 @@ import SousCore
 
 // MARK: - TimerAffordanceText
 
-/// Renders step text with a highlighted time span (terracotta) and a tappable timer icon.
+/// Renders step text with a highlighted time span (burgundy) and a tappable timer icon.
 /// Steps with no detected time reference render as plain text with no affordance.
 struct TimerAffordanceText: View {
     let step: Step
