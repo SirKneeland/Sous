@@ -1196,4 +1196,124 @@ final class AppStoreTests: XCTestCase {
                        "Session file must be deleted from disk after deleteActiveSessionAndStartNew")
         XCTAssertFalse(store.hasCanvas, "hasCanvas must be false after deleteActiveSessionAndStartNew")
     }
+
+    // MARK: - resetRecipe
+
+    func test_resetRecipe_resetsAllStepsTodo() async {
+        let mock = ControlledOrchestrator()
+        let store = AppStore(testOrchestrator: mock)
+        // Seed recipe already has stepDoneId at .done; mark another step done too.
+        store.send(.markStepDone(stepId: AppStore.stepMixId))
+        await drainMain()
+        XCTAssertEqual(
+            store.uiState.recipe.steps.first { $0.id == AppStore.stepMixId }?.status, .done,
+            "Pre-condition: stepMixId should be .done before reset"
+        )
+        XCTAssertEqual(
+            store.uiState.recipe.steps.first { $0.id == AppStore.stepDoneId }?.status, .done,
+            "Pre-condition: stepDoneId should be .done before reset"
+        )
+
+        store.resetRecipe()
+
+        let steps = store.uiState.recipe.steps
+        XCTAssertTrue(
+            steps.allSatisfy { $0.status == .todo },
+            "All steps must be .todo after resetRecipe; got: \(steps.map { "\($0.text): \($0.status)" })"
+        )
+    }
+
+    func test_resetRecipe_preservesChatTranscript() async {
+        let mock = ControlledOrchestrator()
+        let store = AppStore(testOrchestrator: mock)
+        let countBefore = store.chatTranscript.count
+        XCTAssertGreaterThan(countBefore, 0, "Pre-condition: seed transcript must be non-empty")
+
+        store.resetRecipe()
+
+        XCTAssertEqual(store.chatTranscript.count, countBefore,
+                       "Chat transcript must be preserved after resetRecipe")
+    }
+
+    func test_resetRecipe_preservesRecipeContent() async {
+        let mock = ControlledOrchestrator()
+        let store = AppStore(testOrchestrator: mock)
+        let before = store.uiState.recipe
+
+        store.resetRecipe()
+
+        let after = store.uiState.recipe
+        XCTAssertEqual(after.id, before.id, "Recipe id must be preserved")
+        XCTAssertEqual(after.title, before.title, "Recipe title must be preserved")
+        XCTAssertEqual(after.ingredients, before.ingredients, "Ingredients must be preserved")
+        XCTAssertEqual(after.steps.map(\.text), before.steps.map(\.text), "Step text must be preserved")
+    }
+
+    func test_resetRecipe_clearsMiseEnPlaceSoloStates() async {
+        let mock = SyncOrchestrator(result: noPatchesResult())
+        let mepService = MockMiseEnPlaceService(response: MiseEnPlaceResponse(
+            miseEnPlace: [
+                .solo(instruction: "Chop onions"),
+                .solo(instruction: "Mince garlic"),
+            ],
+            updatedSteps: ["Saute until golden"]
+        ))
+        let store = AppStore(testOrchestrator: mock, testMiseEnPlaceService: mepService)
+        store.triggerMiseEnPlace()
+        await drainMain()
+
+        // Mark the first solo entry done.
+        let entryId = store.uiState.recipe.miseEnPlace![0].id
+        store.markMiseEnPlaceDone(entryId)
+        XCTAssertTrue(store.uiState.recipe.miseEnPlace![0].isDone, "Pre-condition: entry must be done before reset")
+
+        store.resetRecipe()
+
+        let mep = store.uiState.recipe.miseEnPlace
+        XCTAssertNotNil(mep, "Mise en place section must still be present after reset")
+        XCTAssertEqual(mep?.count, 2, "Entry count must be unchanged")
+        XCTAssertTrue(mep?.allSatisfy { !$0.isDone } ?? false,
+                      "All mise en place entries must be unchecked after reset")
+    }
+
+    func test_resetRecipe_clearsMiseEnPlaceGroupComponentStates() async {
+        // Populate MEP with two solo entries, mark both done, verify reset clears them both.
+        let mock = SyncOrchestrator(result: noPatchesResult())
+        let mepService = MockMiseEnPlaceService(response: MiseEnPlaceResponse(
+            miseEnPlace: [
+                .solo(instruction: "Chop onions"),
+                .solo(instruction: "Mince garlic"),
+            ],
+            updatedSteps: ["Saute until golden"]
+        ))
+        let store = AppStore(testOrchestrator: mock, testMiseEnPlaceService: mepService)
+        store.triggerMiseEnPlace()
+        await drainMain()
+
+        let id0 = store.uiState.recipe.miseEnPlace![0].id
+        let id1 = store.uiState.recipe.miseEnPlace![1].id
+        store.markMiseEnPlaceDone(id0)
+        store.markMiseEnPlaceDone(id1)
+        XCTAssertTrue(store.uiState.recipe.miseEnPlace!.allSatisfy { $0.isDone },
+                      "Pre-condition: all entries are done before reset")
+
+        store.resetRecipe()
+
+        let mep = store.uiState.recipe.miseEnPlace
+        XCTAssertNotNil(mep, "Section must remain after reset")
+        XCTAssertEqual(mep?.count, 2, "Entry count must be unchanged")
+        XCTAssertTrue(mep!.allSatisfy { !$0.isDone },
+                      "All mise en place entries must be undone after reset")
+    }
+
+    func test_resetRecipe_nilMiseEnPlace_remainsNil() async {
+        let mock = ControlledOrchestrator()
+        let store = AppStore(testOrchestrator: mock)
+        XCTAssertNil(store.uiState.recipe.miseEnPlace, "Pre-condition: seed recipe has no mise en place")
+
+        store.resetRecipe()
+
+        XCTAssertNil(store.uiState.recipe.miseEnPlace,
+                     "miseEnPlace must remain nil after reset when it was not set")
+    }
 }

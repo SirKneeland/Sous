@@ -323,13 +323,24 @@ final class AppStore: ObservableObject {
 
     // MARK: - Recipe Reset
 
-    /// Resets all step statuses to todo and clears any pending patch.
-    /// Recipe content (title, ingredients, steps text, notes) is unchanged.
+    /// Resets all step statuses to todo, clears mise en place check states, and clears any pending patch.
+    /// Recipe content (title, ingredients, steps text, notes, mise en place entries) is unchanged.
     /// Chat history is preserved.
     func resetRecipe() {
         cancelLiveLLM()
         let recipe = uiState.recipe
         let resetSteps = recipe.steps.map { Step(id: $0.id, text: $0.text, status: .todo) }
+        let resetMEP = recipe.miseEnPlace.map { entries in
+            entries.map { entry in
+                switch entry.content {
+                case .solo(let instruction, _):
+                    return MiseEnPlaceEntry(id: entry.id, content: .solo(instruction: instruction, isDone: false))
+                case .group(let vesselName, let components):
+                    let reset = components.map { MiseEnPlaceComponent(id: $0.id, text: $0.text, isDone: false) }
+                    return MiseEnPlaceEntry(id: entry.id, content: .group(vesselName: vesselName, components: reset))
+                }
+            }
+        }
         let reset = Recipe(
             id: recipe.id,
             version: recipe.version + 1,
@@ -337,7 +348,7 @@ final class AppStore: ObservableObject {
             ingredients: recipe.ingredients,
             steps: resetSteps,
             notes: recipe.notes,
-            miseEnPlace: recipe.miseEnPlace
+            miseEnPlace: resetMEP
         )
         uiState = .recipeOnly(recipe: reset)
         saveSession()
