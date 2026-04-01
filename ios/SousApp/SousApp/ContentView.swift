@@ -17,6 +17,8 @@ struct ContentView: View {
     /// Controls whether the Ingredients section is expanded. Lifted here so it survives
     /// RecipeCanvasView being replaced by PatchReviewView.
     @State private var ingredientsExpanded: Bool = true
+    /// Whether the collapsible top nav bar (New / History / Settings) is currently revealed.
+    @State private var navBarVisible: Bool = false
 
     private var hasDoneBanner: Bool { !timerManager.doneQueue.isEmpty }
 
@@ -79,8 +81,17 @@ struct ContentView: View {
                     timerManager: timerManager,
                     scrollToStepId: $scrollToStepId,
                     highlightedStepId: $highlightedStepId,
-                    ingredientsExpanded: $ingredientsExpanded
+                    ingredientsExpanded: $ingredientsExpanded,
+                    navBarVisible: $navBarVisible
                 )
+                // Reserve space for the collapsible nav bar so list content
+                // is never hidden behind it when revealed.
+                // 44pt keeps the thrash-free gap wider than the inset shift
+                // (collapse at -60 → after inset removed position jumps to -16, which
+                //  stays below the reveal threshold of -10).
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    Color.clear.frame(height: navBarVisible && isRecipeCanvasActive ? 44 : 0)
+                }
                 // Reserve space equal to the bottom zone height so the last scroll item
                 // is never hidden behind the bar.
                 .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -115,6 +126,10 @@ struct ContentView: View {
         }
         .onChange(of: isRecipeCanvasActive) { _, active in
             timerManager.isRecipeCanvasActive = active
+        }
+        .onChange(of: store.hasCanvas) { _, hasCanvas in
+            // Show nav bar when the canvas first appears (user is at the top).
+            if hasCanvas { navBarVisible = true }
         }
         .onChange(of: store.uiState.recipe.id) { _, _ in
             ingredientsExpanded = true
@@ -155,9 +170,37 @@ struct ContentView: View {
         }
         .onPreferenceChange(GearButtonFrameKey.self) { gearFrame = $0 }
         .overlay {
-            if !store.hasAPIKey && gearFrame != .zero {
+            // Only show when nav bar is visible so the callout arrow points at the
+            // actual on-screen gear button.
+            if !store.hasAPIKey && gearFrame != .zero && navBarVisible && isRecipeCanvasActive {
                 APIKeyCallout(gearFrame: gearFrame)
                     .allowsHitTesting(false)
+            }
+        }
+        // Collapsible top nav bar: burgundy bar below the status bar with New / History / Settings.
+        // The bar's background also fills the status bar area via ignoresSafeArea.
+        .overlay(alignment: .top) {
+            if isRecipeCanvasActive {
+                CollapsibleNavBar(
+                    isVisible: navBarVisible,
+                    onNew: { store.requestNewSession() },
+                    onHistory: { store.showRecentRecipes = true },
+                    onSettings: { showSettings = true }
+                )
+            }
+        }
+        // Transparent tap zone covering the top of the screen to trigger nav reveal.
+        // Only active when nav is collapsed; removed when nav is visible so buttons receive taps.
+        .overlay(alignment: .top) {
+            if isRecipeCanvasActive && !navBarVisible {
+                Color.clear
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 60)
+                    .ignoresSafeArea(edges: .top)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        withAnimation(.easeInOut(duration: 0.25)) { navBarVisible = true }
+                    }
             }
         }
         .overlay(alignment: .bottom) {
@@ -170,6 +213,59 @@ struct ContentView: View {
                 .animation(.spring(response: 0.35, dampingFraction: 0.85), value: timerManager.doneQueue.count)
             }
         }
+    }
+}
+
+// MARK: - Collapsible Nav Bar
+
+/// Burgundy bar that slides down from below the status bar.
+///
+/// When `isVisible` is false, only the status bar area has a burgundy background
+/// (via `.background(...ignoresSafeArea(.top))`). When true, the 52pt button row
+/// slides in below the status bar containing New, History, and Settings icons.
+private struct CollapsibleNavBar: View {
+    var isVisible: Bool
+    var onNew: () -> Void
+    var onHistory: () -> Void
+    var onSettings: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if isVisible {
+                HStack(spacing: 0) {
+                    Spacer()
+                    navButton("plus", action: onNew)
+                    Spacer()
+                    navButton("books.vertical.fill", action: onHistory)
+                    Spacer()
+                    navButton("gearshape", action: onSettings)
+                        .background(GeometryReader { geo in
+                            Color.clear.preference(
+                                key: GearButtonFrameKey.self,
+                                value: geo.frame(in: .named("contentRoot"))
+                            )
+                        })
+                    Spacer()
+                }
+                .frame(height: 44)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        // The background extends behind the status bar via ignoresSafeArea.
+        // This keeps the status bar burgundy even when the button row is collapsed.
+        .background(Color.sousTerracotta.ignoresSafeArea(edges: .top))
+        .animation(.easeInOut(duration: 0.25), value: isVisible)
+    }
+
+    @ViewBuilder
+    private func navButton(_ systemName: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 16, weight: .regular))
+                .foregroundStyle(.white)
+                .frame(width: 44, height: 44)
+        }
+        .buttonStyle(.plain)
     }
 }
 
