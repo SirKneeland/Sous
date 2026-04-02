@@ -3,7 +3,8 @@ import SousCore
 
 // MARK: - TimerAffordanceText
 
-/// Renders step text with a highlighted time span (burgundy) and a tappable timer icon.
+/// Renders step text with a highlighted time span (terracotta) and a trailing tappable timer icon.
+/// The timer icon is the sole tap target for the timer flow — the text itself is not tappable.
 /// Steps with no detected time reference render as plain text with no affordance.
 struct TimerAffordanceText: View {
     let step: Step
@@ -40,20 +41,28 @@ struct TimerAffordanceText: View {
 
     // MARK: - Step text
 
-    /// Returns the Text-concatenated step view with the timer icon inlined before the
-    /// highlighted time span. When there is an active timer or no time reference, renders
-    /// plain text. The whole view is wrapped in a Button when there is a time reference so
-    /// tapping anywhere on the text triggers the timer flow.
+    /// Renders the step text with the timer affordance scoped to a trailing icon button only.
+    /// The highlighted time span is coloured but not itself tappable — only the icon triggers
+    /// the timer flow. Steps with no detected time reference render as plain text.
     @ViewBuilder
     private var stepTextView: some View {
         if let p = parsed, !isDone {
-            Button {
-                guard !hasActiveTimer else { return }
-                handleTimerTap()
-            } label: {
-                buildInlineText(step.text, highlightRange: p.range)
+            HStack(alignment: .top, spacing: 8) {
+                buildHighlightedText(step.text, highlightRange: p.range)
+
+                let iconName = (hasActiveTimer || isStarting) ? "timer.circle.fill" : "timer"
+                Button {
+                    guard !hasActiveTimer else { return }
+                    handleTimerTap()
+                } label: {
+                    Image(systemName: iconName)
+                        .font(.sousBody)
+                        .foregroundStyle(Color.sousTerracotta.opacity(0.85))
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
         } else {
             Text(step.text)
                 .font(.sousBody)
@@ -64,25 +73,21 @@ struct TimerAffordanceText: View {
         }
     }
 
-    /// Builds a `Text` with the timer SF Symbol inlined immediately before the highlighted
-    /// time span, so the icon and time text flow together within the paragraph.
-    private func buildInlineText(_ text: String, highlightRange: Range<String.Index>) -> some View {
+    /// Builds a `Text` with the time span highlighted in terracotta. No icon is inlined —
+    /// the icon lives as a separate tappable button so the tap target is correctly scoped.
+    private func buildHighlightedText(_ text: String, highlightRange: Range<String.Index>) -> some View {
         let before = String(text[text.startIndex..<highlightRange.lowerBound])
         let middle = String(text[highlightRange])
         let after  = String(text[highlightRange.upperBound..<text.endIndex])
-        let baseColor: Color = Color.sousText
-        let accentColor: Color = Color.sousTerracotta
-        let iconName = (hasActiveTimer || isStarting) ? "timer.circle.fill" : "timer"
 
-        let composed =
-            Text(before).font(.sousBody).foregroundStyle(baseColor)
-            + Text(Image(systemName: iconName)).font(.sousBody).foregroundStyle(accentColor.opacity(0.85))
-            + Text(" " + middle).font(.sousBody).foregroundStyle(accentColor)
-            + Text(after).font(.sousBody).foregroundStyle(baseColor)
-
-        return composed
-            .multilineTextAlignment(.leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        return (
+            Text(before).foregroundStyle(Color.sousText)
+            + Text(middle).foregroundStyle(Color.sousTerracotta)
+            + Text(after).foregroundStyle(Color.sousText)
+        )
+        .font(.sousBody)
+        .multilineTextAlignment(.leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Timer start logic
@@ -90,7 +95,6 @@ struct TimerAffordanceText: View {
     private func handleTimerTap() {
         guard let p = parsed else { return }
         onClearHighlight?()
-        // Phase 1: immediate feedback before any async work
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         switch p.duration {
         case .exact(let seconds):

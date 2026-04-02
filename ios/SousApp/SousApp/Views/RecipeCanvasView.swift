@@ -147,6 +147,13 @@ struct RecipeCanvasView: View {
                             if isChecked { checkedIngredients.remove(ingredient.id) }
                             else { checkedIngredients.insert(ingredient.id) }
                         }
+                        .simultaneousGesture(
+                            LongPressGesture(minimumDuration: 0.5)
+                                .onEnded { _ in
+                                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                    onAskSousAbout("ingredient", ingredient.text)
+                                }
+                        )
                         .listRowInsets(EdgeInsets())
                         .listRowBackground(Color.sousBackground)
                         .listRowSeparator(.visible, edges: .bottom)
@@ -184,12 +191,43 @@ struct RecipeCanvasView: View {
                         .listRowSeparator(.hidden)
 
                     ForEach(mepEntries, id: \.id) { entry in
+                        let askSousText: String = {
+                            switch entry.content {
+                            case .solo(let instruction, _): return instruction
+                            case .group(let vesselName, _): return vesselName
+                            }
+                        }()
                         miseEnPlaceEntryRow(entry)
                             .padding(.horizontal, 20)
+                            .simultaneousGesture(
+                                LongPressGesture(minimumDuration: 0.5)
+                                    .onEnded { _ in
+                                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                        onAskSousAbout("mise en place", askSousText)
+                                    }
+                            )
                             .listRowInsets(EdgeInsets())
                             .listRowBackground(Color.sousBackground)
                             .listRowSeparator(.visible, edges: .bottom)
                             .listRowSeparatorTint(Color.sousSeparator)
+                            .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                                if !entry.isDone {
+                                    Button {
+                                        onMarkMiseEnPlaceDone(entry.id)
+                                    } label: {
+                                        Label("Done", systemImage: "checkmark")
+                                    }
+                                    .tint(Color.sousGreen)
+                                }
+                            }
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button {
+                                    onAskSousAbout("mise en place", askSousText)
+                                } label: {
+                                    Label("Ask Sous", systemImage: "bubble.left")
+                                }
+                                .tint(Color.sousTerracotta)
+                            }
                     }
                 }
 
@@ -275,6 +313,13 @@ struct RecipeCanvasView: View {
                             : Color.sousBackground
                     )
                     .animation(.easeInOut(duration: 0.3), value: isHighlighted)
+                    .simultaneousGesture(
+                        LongPressGesture(minimumDuration: 0.5)
+                            .onEnded { _ in
+                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                onAskSousAbout("step", step.text)
+                            }
+                    )
                     .listRowSeparator(.visible, edges: .bottom)
                     .listRowSeparatorTint(Color.sousSeparator)
                     .swipeActions(edge: .leading, allowsFullSwipe: true) {
