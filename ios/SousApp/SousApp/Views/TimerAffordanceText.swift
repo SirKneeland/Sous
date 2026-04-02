@@ -1,11 +1,13 @@
 import SwiftUI
+import UIKit
 import SousCore
 
 // MARK: - TimerAffordanceText
 
-/// Renders step text with a highlighted time span (terracotta) and a trailing tappable timer icon.
-/// The timer icon is the sole tap target for the timer flow — the text itself is not tappable.
-/// Steps with no detected time reference render as plain text with no affordance.
+/// Renders a step row's text. If the step contains a time reference and is not done, delegates
+/// to `TimerStepTextView` (UIViewRepresentable) which produces a single flowing paragraph with
+/// the timer affordance (icon + time span) as the sole tap target. Steps without a time reference,
+/// or done steps, render as a plain SwiftUI `Text`.
 struct TimerAffordanceText: View {
     let step: Step
     let stepIndex: Int
@@ -39,30 +41,20 @@ struct TimerAffordanceText: View {
             }
     }
 
-    // MARK: - Step text
-
-    /// Renders the step text with the timer affordance scoped to a trailing icon button only.
-    /// The highlighted time span is coloured but not itself tappable — only the icon triggers
-    /// the timer flow. Steps with no detected time reference render as plain text.
     @ViewBuilder
     private var stepTextView: some View {
         if let p = parsed, !isDone {
-            HStack(alignment: .top, spacing: 8) {
-                buildHighlightedText(step.text, highlightRange: p.range)
-
-                let iconName = (hasActiveTimer || isStarting) ? "timer.circle.fill" : "timer"
-                Button {
+            TimerStepTextView(
+                stepText: step.text,
+                timerRange: p.range,
+                isTimerActive: hasActiveTimer,
+                isStarting: isStarting,
+                onTimerTap: {
                     guard !hasActiveTimer else { return }
                     handleTimerTap()
-                } label: {
-                    Image(systemName: iconName)
-                        .font(.sousBody)
-                        .foregroundStyle(Color.sousTerracotta.opacity(0.85))
-                        .frame(width: 28, height: 28)
-                        .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-            }
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             Text(step.text)
                 .font(.sousBody)
@@ -71,23 +63,6 @@ struct TimerAffordanceText: View {
                 .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-    }
-
-    /// Builds a `Text` with the time span highlighted in terracotta. No icon is inlined —
-    /// the icon lives as a separate tappable button so the tap target is correctly scoped.
-    private func buildHighlightedText(_ text: String, highlightRange: Range<String.Index>) -> some View {
-        let before = String(text[text.startIndex..<highlightRange.lowerBound])
-        let middle = String(text[highlightRange])
-        let after  = String(text[highlightRange.upperBound..<text.endIndex])
-
-        return (
-            Text(before).foregroundStyle(Color.sousText)
-            + Text(middle).foregroundStyle(Color.sousTerracotta)
-            + Text(after).foregroundStyle(Color.sousText)
-        )
-        .font(.sousBody)
-        .multilineTextAlignment(.leading)
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Timer start logic
@@ -115,6 +90,166 @@ struct TimerAffordanceText: View {
                 duration: duration
             )
             isStarting = false
+        }
+    }
+}
+
+// MARK: - TimerStepTextView
+
+/// A non-scrolling UITextView wrapped as a SwiftUI view. Renders the step text as a single
+/// flowing NSAttributedString paragraph with an inline SF Symbol for the timer affordance.
+/// A UITapGestureRecognizer uses NSLayoutManager character-index hit testing to restrict
+/// the interactive region to the timer span (icon + time text) only.
+private struct TimerStepTextView: UIViewRepresentable {
+
+    let stepText: String
+    let timerRange: Range<String.Index>
+    let isTimerActive: Bool
+    let isStarting: Bool
+    let onTimerTap: () -> Void
+
+    // MARK: Shared style constants
+
+    private static let bodyFont = UIFont.monospacedSystemFont(ofSize: 15, weight: .regular)
+
+    private static var textUIColor: UIColor {
+        UIColor { t in
+            t.userInterfaceStyle == .dark
+                ? UIColor(red: 242/255, green: 239/255, blue: 233/255, alpha: 1)
+                : UIColor(red:  26/255, green:  26/255, blue:  26/255, alpha: 1)
+        }
+    }
+
+    private static var accentUIColor: UIColor {
+        UIColor { t in
+            t.userInterfaceStyle == .dark
+                ? UIColor(red: 196/255, green: 80/255, blue: 104/255, alpha: 1)
+                : UIColor(red: 139/255, green: 46/255, blue:  63/255, alpha: 1)
+        }
+    }
+
+    // MARK: UIViewRepresentable
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeUIView(context: Context) -> UITextView {
+        // Force TextKit 1 so NSLayoutManager character-index hit testing is available.
+        let tv = UITextView(usingTextLayoutManager: false)
+        tv.isScrollEnabled = false
+        tv.isEditable = false
+        tv.isSelectable = false
+        tv.backgroundColor = .clear
+        tv.textContainerInset = .zero
+        tv.textContainer.lineFragmentPadding = 0
+        tv.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        let tap = UITapGestureRecognizer(target: context.coordinator,
+                                         action: #selector(Coordinator.handleTap(_:)))
+        tv.addGestureRecognizer(tap)
+        context.coordinator.textView = tv
+        return tv
+    }
+
+    func updateUIView(_ tv: UITextView, context: Context) {
+        let (attrStr, timerRange) = buildAttributedString()
+        if tv.attributedText != attrStr {
+            tv.attributedText = attrStr
+        }
+        context.coordinator.timerNSRange = timerRange
+        context.coordinator.onTimerTap = onTimerTap
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize? {
+        let width = proposal.width ?? UIScreen.main.bounds.width
+        let natural = uiView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
+        return CGSize(width: width, height: ceil(natural.height))
+    }
+
+    // MARK: NSAttributedString construction
+
+    /// Builds the attributed string and returns the NSRange of the timer span
+    /// (icon attachment character + space + time text) within the full string.
+    private func buildAttributedString() -> (NSAttributedString, NSRange) {
+        let text = stepText
+        let before = String(text[text.startIndex..<timerRange.lowerBound])
+        let middle = String(text[timerRange])
+        let after  = String(text[timerRange.upperBound..<text.endIndex])
+
+        let font = Self.bodyFont
+        let baseAttrs:   [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: Self.textUIColor]
+        let accentAttrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: Self.accentUIColor]
+
+        let result = NSMutableAttributedString()
+
+        // Text before the timer reference
+        if !before.isEmpty {
+            result.append(NSAttributedString(string: before, attributes: baseAttrs))
+        }
+
+        // --- Timer span start ---
+        let timerStart = result.length
+
+        // Inline SF Symbol icon
+        let iconName = (isTimerActive || isStarting) ? "timer.circle.fill" : "timer"
+        let symCfg = UIImage.SymbolConfiguration(font: font)
+        if let img = UIImage(systemName: iconName, withConfiguration: symCfg)?
+                        .withTintColor(Self.accentUIColor, renderingMode: .alwaysOriginal) {
+            let attachment = NSTextAttachment()
+            attachment.image = img
+            // Vertically centre the icon on the cap-height line.
+            let sz = img.size
+            attachment.bounds = CGRect(
+                x: 0,
+                y: (font.capHeight - sz.height) / 2,
+                width: sz.width,
+                height: sz.height
+            )
+            result.append(NSAttributedString(attachment: attachment))
+        }
+
+        // Space + highlighted time text
+        result.append(NSAttributedString(string: " " + middle, attributes: accentAttrs))
+
+        // --- Timer span end ---
+        let timerEnd = result.length
+
+        // Text after the timer reference
+        if !after.isEmpty {
+            result.append(NSAttributedString(string: after, attributes: baseAttrs))
+        }
+
+        let timerNSRange = NSRange(location: timerStart, length: timerEnd - timerStart)
+        return (result, timerNSRange)
+    }
+
+    // MARK: Coordinator
+
+    final class Coordinator: NSObject {
+        weak var textView: UITextView?
+        var timerNSRange: NSRange = NSRange(location: NSNotFound, length: 0)
+        var onTimerTap: (() -> Void)?
+
+        @objc func handleTap(_ gesture: UITapGestureRecognizer) {
+            guard let tv = textView,
+                  timerNSRange.location != NSNotFound else { return }
+            let lm = tv.layoutManager
+
+            // Convert touch to text-container coordinates.
+            let pt = gesture.location(in: tv)
+            let adjusted = CGPoint(x: pt.x - tv.textContainerInset.left,
+                                   y: pt.y - tv.textContainerInset.top)
+
+            // Find the nearest glyph and its corresponding character index.
+            let glyphIdx = lm.glyphIndex(for: adjusted,
+                                          in: tv.textContainer,
+                                          fractionOfDistanceThroughGlyph: nil)
+            let charIdx = lm.characterIndexForGlyph(at: glyphIdx)
+
+            // Fire only when the tap lands inside the timer span.
+            if charIdx >= timerNSRange.location,
+               charIdx < timerNSRange.location + timerNSRange.length {
+                onTimerTap?()
+            }
         }
     }
 }
