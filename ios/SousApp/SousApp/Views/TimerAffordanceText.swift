@@ -10,6 +10,7 @@ struct TimerAffordanceText: View {
     let stepIndex: Int
     let isHighlighted: Bool
     var timerManager: StepTimerManager
+    var onClearHighlight: (() -> Void)? = nil
 
     @State private var showingRangePicker = false
     @State private var pendingParsed: ParsedTime? = nil
@@ -88,6 +89,7 @@ struct TimerAffordanceText: View {
 
     private func handleTimerTap() {
         guard let p = parsed else { return }
+        onClearHighlight?()
         // Phase 1: immediate feedback before any async work
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         switch p.duration {

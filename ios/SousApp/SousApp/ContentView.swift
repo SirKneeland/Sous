@@ -47,7 +47,7 @@ struct ContentView: View {
                 ChatSheetView(
                     store: store,
                     isFullscreen: true,
-                    onStartNew: { store.requestNewSession() },
+                    onStartNew: { store.requestNewSession(); timerManager.clearAll() },
                     onOpenSettings: { showSettings = true },
                     onOpenRecents: { store.showRecentRecipes = true },
                     onOpenImport: { store.isShowingImportSheet = true }
@@ -65,10 +65,11 @@ struct ContentView: View {
                     onMarkMiseEnPlaceDone: { id in store.markMiseEnPlaceDone(id) },
                     onTriggerMiseEnPlace: { store.triggerMiseEnPlace() },
                     onOpenSettings: { showSettings = true },
-                    onStartNew: { store.requestNewSession() },
+                    onStartNew: { store.requestNewSession(); timerManager.clearAll() },
                     onOpenRecents: { store.showRecentRecipes = true },
                     onResetRecipe: {
                         store.resetRecipe()
+                        timerManager.clearAll()
                         ingredientsExpanded = true
                     },
                     onAskSousAbout: { type, text in

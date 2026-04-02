@@ -168,24 +168,29 @@ final class StepTimerManager {
     private func restorePersistedTimers() {
         let stored = TimerPersistence.load(from: defaults)
         let now = Date()
-        var active: [TimerSession] = []
-        var done: [TimerSession] = []
-        for session in stored {
-            if session.isExpired(at: now) {
-                done.append(session)
-            } else {
-                active.append(session)
-            }
-        }
+        // Expired sessions are discarded on restore — the system notification was already
+        // delivered while the app was backgrounded, so showing a stale done banner on
+        // relaunch would be surprising and incorrect.
+        let active = stored.filter { !$0.isExpired(at: now) }
         activeSessions = active
-        doneQueue = done
         for session in active {
             scheduleNotification(for: session)
         }
     }
 
     private func persist() {
-        TimerPersistence.save(activeSessions + doneQueue, to: defaults)
+        // Only persist active (running) sessions. Done-queue entries are transient UI state
+        // that should not survive an app relaunch.
+        TimerPersistence.save(activeSessions, to: defaults)
+    }
+
+    /// Cancels all active timers and clears any pending done banners.
+    /// Called when the user starts a new recipe or resets the current one.
+    func clearAll() {
+        activeSessions.forEach { cancelNotification(for: $0.id) }
+        activeSessions.removeAll()
+        doneQueue.removeAll()
+        TimerPersistence.clear(from: defaults)
     }
 
     // MARK: - Notifications
