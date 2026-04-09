@@ -215,6 +215,49 @@ struct PatchReviewView: View {
                 }
             }
 
+        case .addedSubStep(_, _, let text):
+            HStack(spacing: 0) {
+                Color.clear.frame(width: 20)
+                Rectangle().fill(Color.sousGreen).frame(width: 2)
+                Text(text)
+                    .font(.sousBody)
+                    .foregroundStyle(Color.sousGreen)
+                    .padding(.leading, 12)
+                    .padding(.vertical, 10)
+                Spacer()
+            }
+
+        case .removedSubStep(_, _, let text):
+            HStack(spacing: 0) {
+                Color.clear.frame(width: 20)
+                Rectangle().fill(Color.sousTerracotta).frame(width: 2)
+                Text(text)
+                    .font(.sousBody)
+                    .foregroundStyle(Color.sousTerracotta)
+                    .strikethrough(true, color: Color.sousTerracotta)
+                    .padding(.leading, 12)
+                    .padding(.vertical, 10)
+                Spacer()
+            }
+
+        case .updatedSubStep(_, _, _, let newText):
+            HStack(spacing: 0) {
+                Color.clear.frame(width: 20)
+                Rectangle().fill(Color.sousGreen).frame(width: 2)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(newText)
+                        .font(.sousBody)
+                        .foregroundStyle(Color.sousGreen)
+                    Text("EDITED")
+                        .font(.sousCaption)
+                        .foregroundStyle(Color.sousGreen)
+                        .kerning(0.5)
+                }
+                .padding(.leading, 12)
+                .padding(.vertical, 8)
+                Spacer()
+            }
+
         case .unchanged:
             EmptyView()
         }
@@ -329,6 +372,45 @@ struct PatchReviewView: View {
             }
         }
 
+        // Collect sub-step diff rows grouped by parent step ID.
+        var subStepDiffs: [UUID: [DiffRow]] = [:]
+        for patch in patchSet.patches {
+            switch patch {
+            case .addSubStep(let parentStepId, let text, _):
+                subStepDiffs[parentStepId, default: []].append(
+                    .addedSubStep(id: UUID(), parentId: parentStepId, text: text)
+                )
+            case .removeSubStep(let parentStepId, let subStepId):
+                if let parent = recipe.steps.first(where: { $0.id == parentStepId }),
+                   let sub = parent.subSteps?.first(where: { $0.id == subStepId }) {
+                    subStepDiffs[parentStepId, default: []].append(
+                        .removedSubStep(id: subStepId, parentId: parentStepId, text: sub.text)
+                    )
+                }
+            case .updateSubStep(let parentStepId, let subStepId, let newText):
+                if let parent = recipe.steps.first(where: { $0.id == parentStepId }),
+                   let sub = parent.subSteps?.first(where: { $0.id == subStepId }) {
+                    subStepDiffs[parentStepId, default: []].append(
+                        .updatedSubStep(id: subStepId, parentId: parentStepId, oldText: sub.text, newText: newText)
+                    )
+                }
+            default:
+                break
+            }
+        }
+
+        // Inject sub-step diff rows immediately after their parent step row.
+        if !subStepDiffs.isEmpty {
+            var expanded: [DiffRow] = []
+            for row in rows {
+                expanded.append(row)
+                if let subs = subStepDiffs[row.id] {
+                    expanded.append(contentsOf: subs)
+                }
+            }
+            return expanded
+        }
+
         return rows
     }
 
@@ -353,6 +435,10 @@ struct PatchReviewView: View {
             return "Internal conflict: \(msg)"
         case .recipeIdMismatch(let expected, let got):
             return "Recipe ID mismatch: expected \(expected), got \(got)"
+        case .invalidSubStepId(let id):
+            return "Invalid sub-step ID: \(id.uuidString)"
+        case .parentStepDone(let id):
+            return "Parent step is already done: \(id.uuidString)"
         }
     }
 }
@@ -365,6 +451,9 @@ private enum DiffRow: Identifiable {
     case updated(id: UUID, oldText: String, newText: String)
     case removed(id: UUID, text: String)
     case doneImmutableViolation(id: UUID, originalText: String, attemptedText: String)
+    case addedSubStep(id: UUID, parentId: UUID, text: String)
+    case removedSubStep(id: UUID, parentId: UUID, text: String)
+    case updatedSubStep(id: UUID, parentId: UUID, oldText: String, newText: String)
 
     var id: UUID {
         switch self {
@@ -373,6 +462,9 @@ private enum DiffRow: Identifiable {
         case .updated(let id, _, _):                 return id
         case .removed(let id, _):                    return id
         case .doneImmutableViolation(let id, _, _):  return id
+        case .addedSubStep(let id, _, _):            return id
+        case .removedSubStep(let id, _, _):          return id
+        case .updatedSubStep(let id, _, _, _):       return id
         }
     }
 }

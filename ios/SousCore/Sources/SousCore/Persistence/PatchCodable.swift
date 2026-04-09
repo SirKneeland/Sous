@@ -35,6 +35,7 @@ extension PatchSetStatus: Codable {
 extension Patch: Codable {
     private enum CodingKeys: String, CodingKey {
         case type, text, id, afterId, afterStepId, title
+        case parentStepId, subStepId, afterSubStepId
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -68,6 +69,24 @@ extension Patch: Codable {
         case .setTitle(let title):
             try c.encode("setTitle", forKey: .type)
             try c.encode(title, forKey: .title)
+        case .addSubStep(let parentStepId, let text, let afterSubStepId):
+            try c.encode("addSubStep", forKey: .type)
+            try c.encode(parentStepId, forKey: .parentStepId)
+            try c.encode(text, forKey: .text)
+            try c.encodeIfPresent(afterSubStepId, forKey: .afterSubStepId)
+        case .updateSubStep(let parentStepId, let subStepId, let text):
+            try c.encode("updateSubStep", forKey: .type)
+            try c.encode(parentStepId, forKey: .parentStepId)
+            try c.encode(subStepId, forKey: .subStepId)
+            try c.encode(text, forKey: .text)
+        case .removeSubStep(let parentStepId, let subStepId):
+            try c.encode("removeSubStep", forKey: .type)
+            try c.encode(parentStepId, forKey: .parentStepId)
+            try c.encode(subStepId, forKey: .subStepId)
+        case .completeSubStep(let parentStepId, let subStepId):
+            try c.encode("completeSubStep", forKey: .type)
+            try c.encode(parentStepId, forKey: .parentStepId)
+            try c.encode(subStepId, forKey: .subStepId)
         }
     }
 
@@ -103,6 +122,28 @@ extension Patch: Codable {
             self = .addNote(text: try c.decode(String.self, forKey: .text))
         case "setTitle":
             self = .setTitle(try c.decode(String.self, forKey: .title))
+        case "addSubStep":
+            self = .addSubStep(
+                parentStepId: try c.decode(UUID.self, forKey: .parentStepId),
+                text: try c.decode(String.self, forKey: .text),
+                afterSubStepId: try c.decodeIfPresent(UUID.self, forKey: .afterSubStepId)
+            )
+        case "updateSubStep":
+            self = .updateSubStep(
+                parentStepId: try c.decode(UUID.self, forKey: .parentStepId),
+                subStepId: try c.decode(UUID.self, forKey: .subStepId),
+                text: try c.decode(String.self, forKey: .text)
+            )
+        case "removeSubStep":
+            self = .removeSubStep(
+                parentStepId: try c.decode(UUID.self, forKey: .parentStepId),
+                subStepId: try c.decode(UUID.self, forKey: .subStepId)
+            )
+        case "completeSubStep":
+            self = .completeSubStep(
+                parentStepId: try c.decode(UUID.self, forKey: .parentStepId),
+                subStepId: try c.decode(UUID.self, forKey: .subStepId)
+            )
         default:
             throw DecodingError.dataCorruptedError(
                 forKey: .type, in: c,

@@ -7,6 +7,10 @@ public enum PatchValidationError: Equatable, Sendable {
     case stepDoneImmutable(UUID)
     case internalConflict(String)
     case recipeIdMismatch(expected: UUID, got: UUID)
+    /// The referenced sub-step ID does not exist on its parent step.
+    case invalidSubStepId(UUID)
+    /// A completeSubStep was attempted on a parent step whose effectiveStatus is already .done.
+    case parentStepDone(UUID)
 
     public var code: PatchValidationErrorCode {
         switch self {
@@ -22,6 +26,10 @@ public enum PatchValidationError: Equatable, Sendable {
             return .STEP_DONE_IMMUTABLE
         case .internalConflict:
             return .INTERNAL_CONFLICT
+        case .invalidSubStepId:
+            return .INVALID_SUBSTEP_ID
+        case .parentStepDone:
+            return .PARENT_STEP_DONE
         }
     }
 }
@@ -32,6 +40,8 @@ public enum PatchValidationErrorCode: String, Sendable {
     case INVALID_STEP_ID
     case STEP_DONE_IMMUTABLE
     case INTERNAL_CONFLICT
+    case INVALID_SUBSTEP_ID
+    case PARENT_STEP_DONE
 }
 
 public enum PatchValidationResult: Equatable, Sendable {
@@ -51,6 +61,7 @@ public enum PatchValidator {
         // Track IDs that will be removed mid-set to catch internal conflicts
         var removedIngredientIds: Set<UUID> = []
         var removedStepIds: Set<UUID> = []
+        var removedSubStepIds: Set<UUID> = []
 
         for patch in patchSet.patches {
             switch patch {
@@ -119,6 +130,62 @@ public enum PatchValidator {
 
             case .setTitle:
                 break
+
+            case .addSubStep(let parentStepId, _, let afterSubStepId):
+                let parentRemoved = removedStepIds.contains(parentStepId)
+                guard let parent = recipe.steps.first(where: { $0.id == parentStepId }), !parentRemoved else {
+                    errors.append(.invalidStepId(parentStepId))
+                    break
+                }
+                if let afterSubStepId = afterSubStepId {
+                    let existsInParent = parent.subSteps?.contains { $0.id == afterSubStepId } ?? false
+                    let alreadyRemovedSub = removedSubStepIds.contains(afterSubStepId)
+                    if !existsInParent || alreadyRemovedSub {
+                        errors.append(.invalidSubStepId(afterSubStepId))
+                    }
+                }
+
+            case .updateSubStep(let parentStepId, let subStepId, _):
+                let parentRemoved = removedStepIds.contains(parentStepId)
+                guard let parent = recipe.steps.first(where: { $0.id == parentStepId }), !parentRemoved else {
+                    errors.append(.invalidStepId(parentStepId))
+                    break
+                }
+                let existsInParent = parent.subSteps?.contains { $0.id == subStepId } ?? false
+                let alreadyRemovedSub = removedSubStepIds.contains(subStepId)
+                if !existsInParent || alreadyRemovedSub {
+                    errors.append(.invalidSubStepId(subStepId))
+                }
+
+            case .removeSubStep(let parentStepId, let subStepId):
+                let parentRemoved = removedStepIds.contains(parentStepId)
+                guard let parent = recipe.steps.first(where: { $0.id == parentStepId }), !parentRemoved else {
+                    errors.append(.invalidStepId(parentStepId))
+                    break
+                }
+                let existsInParent = parent.subSteps?.contains { $0.id == subStepId } ?? false
+                let alreadyRemovedSub = removedSubStepIds.contains(subStepId)
+                if !existsInParent || alreadyRemovedSub {
+                    errors.append(.invalidSubStepId(subStepId))
+                } else {
+                    removedSubStepIds.insert(subStepId)
+                }
+
+            case .completeSubStep(let parentStepId, let subStepId):
+                let parentRemoved = removedStepIds.contains(parentStepId)
+                guard let parent = recipe.steps.first(where: { $0.id == parentStepId }), !parentRemoved else {
+                    errors.append(.invalidStepId(parentStepId))
+                    break
+                }
+                let existsInParent = parent.subSteps?.contains { $0.id == subStepId } ?? false
+                let alreadyRemovedSub = removedSubStepIds.contains(subStepId)
+                if !existsInParent || alreadyRemovedSub {
+                    errors.append(.invalidSubStepId(subStepId))
+                    break
+                }
+                if parent.effectiveStatus == .done {
+                    errors.append(.parentStepDone(parentStepId))
+                }
             }
         }
 

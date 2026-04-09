@@ -28,8 +28,10 @@ extension StepStatus: Codable {
     }
 }
 
-// Ingredient and Step are declared Codable in their respective model files so
-// the compiler can synthesise encode(to:) and init(from:) automatically.
+// Ingredient is declared Codable in its model file so the compiler can synthesise
+// encode(to:) and init(from:) automatically.
+// Step has an explicit Codable extension in Step.swift (required for the private
+// _status backing store and optional subSteps field).
 //
 // Recipe uses a manual Codable extension below to support backward compatibility
 // when loading sessions saved with the old flat [Step] miseEnPlace format.

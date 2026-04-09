@@ -120,4 +120,49 @@ final class PatchCodableTests: XCTestCase {
         let patch = Patch.setTitle("Spaghetti Carbonara")
         XCTAssertEqual(try roundTrip(patch), patch)
     }
+
+    // MARK: - Sub-step operations
+
+    func test_addSubStep_withAfterSubStepId() throws {
+        let patch = Patch.addSubStep(
+            parentStepId: SeedRecipes.stepMixId,
+            text: "Sift flour",
+            afterSubStepId: SeedRecipes.subStepAId
+        )
+        XCTAssertEqual(try roundTrip(patch), patch)
+    }
+
+    func test_addSubStep_withoutAfterSubStepId() throws {
+        let patch = Patch.addSubStep(
+            parentStepId: SeedRecipes.stepMixId,
+            text: "Sift flour",
+            afterSubStepId: nil
+        )
+        XCTAssertEqual(try roundTrip(patch), patch)
+    }
+
+    func test_updateSubStep() throws {
+        let patch = Patch.updateSubStep(
+            parentStepId: SeedRecipes.stepMixId,
+            subStepId: SeedRecipes.subStepAId,
+            text: "Measure 2 cups flour"
+        )
+        XCTAssertEqual(try roundTrip(patch), patch)
+    }
+
+    func test_removeSubStep() throws {
+        let patch = Patch.removeSubStep(
+            parentStepId: SeedRecipes.stepMixId,
+            subStepId: SeedRecipes.subStepBId
+        )
+        XCTAssertEqual(try roundTrip(patch), patch)
+    }
+
+    func test_completeSubStep() throws {
+        let patch = Patch.completeSubStep(
+            parentStepId: SeedRecipes.stepMixId,
+            subStepId: SeedRecipes.subStepAId
+        )
+        XCTAssertEqual(try roundTrip(patch), patch)
+    }
 }

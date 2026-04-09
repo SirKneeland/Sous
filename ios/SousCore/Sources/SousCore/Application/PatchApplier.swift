@@ -62,6 +62,44 @@ public enum PatchApplier {
 
             case .setTitle(let title):
                 newTitle = title
+
+            case .addSubStep(let parentStepId, let text, let afterSubStepId):
+                guard let idx = steps.firstIndex(where: { $0.id == parentStepId }) else {
+                    throw PatchApplierError.validationFailed([.invalidStepId(parentStepId)])
+                }
+                let newSub = Step(text: text, status: .todo)
+                var subs = steps[idx].subSteps ?? []
+                if let afterSubStepId = afterSubStepId,
+                   let subIdx = subs.firstIndex(where: { $0.id == afterSubStepId }) {
+                    subs.insert(newSub, at: subIdx + 1)
+                } else {
+                    subs.append(newSub)
+                }
+                steps[idx].subSteps = subs
+
+            case .updateSubStep(let parentStepId, let subStepId, let text):
+                guard let idx = steps.firstIndex(where: { $0.id == parentStepId }) else {
+                    throw PatchApplierError.validationFailed([.invalidStepId(parentStepId)])
+                }
+                guard let subIdx = steps[idx].subSteps?.firstIndex(where: { $0.id == subStepId }) else {
+                    throw PatchApplierError.validationFailed([.invalidSubStepId(subStepId)])
+                }
+                steps[idx].subSteps?[subIdx].text = text
+
+            case .removeSubStep(let parentStepId, let subStepId):
+                guard let idx = steps.firstIndex(where: { $0.id == parentStepId }) else {
+                    throw PatchApplierError.validationFailed([.invalidStepId(parentStepId)])
+                }
+                steps[idx].subSteps?.removeAll { $0.id == subStepId }
+
+            case .completeSubStep(let parentStepId, let subStepId):
+                guard let idx = steps.firstIndex(where: { $0.id == parentStepId }) else {
+                    throw PatchApplierError.validationFailed([.invalidStepId(parentStepId)])
+                }
+                guard let subIdx = steps[idx].subSteps?.firstIndex(where: { $0.id == subStepId }) else {
+                    throw PatchApplierError.validationFailed([.invalidSubStepId(subStepId)])
+                }
+                steps[idx].subSteps?[subIdx].status = .done
             }
         }
 

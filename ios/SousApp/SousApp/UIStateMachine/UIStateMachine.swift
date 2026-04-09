@@ -72,6 +72,33 @@ public enum UIStateMachine {
             )
             return state.replacingRecipe(updated)
 
+        // MARK: markSubStepDone — user-initiated, works in any state
+
+        case (_, .markSubStepDone(let parentStepId, let subStepId)):
+            let recipe = state.recipe
+            guard let parentIdx = recipe.steps.firstIndex(where: { $0.id == parentStepId }),
+                  let subs = recipe.steps[parentIdx].subSteps,
+                  let subIdx = subs.firstIndex(where: { $0.id == subStepId })
+            else { return state }
+            let subStep = subs[subIdx]
+            // No-op if already done (sub-steps are immutable once done).
+            guard subStep.effectiveStatus == .todo else { return state }
+            var updatedSubSteps = subs
+            updatedSubSteps[subIdx] = Step(id: subStep.id, text: subStep.text, status: .done, subSteps: subStep.subSteps)
+            let parent = recipe.steps[parentIdx]
+            var updatedSteps = recipe.steps
+            updatedSteps[parentIdx] = Step(id: parent.id, text: parent.text, status: parent.status, subSteps: updatedSubSteps)
+            let updated = Recipe(
+                id: recipe.id,
+                version: recipe.version + 1,
+                title: recipe.title,
+                ingredients: recipe.ingredients,
+                steps: updatedSteps,
+                notes: recipe.notes,
+                miseEnPlace: recipe.miseEnPlace
+            )
+            return state.replacingRecipe(updated)
+
         // MARK: unhandled combinations — no-op
 
         default:

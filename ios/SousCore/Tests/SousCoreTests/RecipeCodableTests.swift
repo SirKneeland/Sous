@@ -88,6 +88,69 @@ final class RecipeCodableTests: XCTestCase {
         XCTAssertEqual(decoded.steps.map(\.id), recipe.steps.map(\.id))
     }
 
+    // MARK: - Step subSteps
+
+    func test_step_withSubSteps_roundTrip() throws {
+        let sub1 = Step(id: UUID(), text: "Sub A", status: .todo)
+        let sub2 = Step(id: UUID(), text: "Sub B", status: .done)
+        let parent = Step(id: UUID(), text: "Parent step", status: .todo, subSteps: [sub1, sub2])
+        let decoded = try roundTrip(parent)
+        XCTAssertEqual(decoded, parent)
+        XCTAssertEqual(decoded.subSteps?.count, 2)
+        XCTAssertEqual(decoded.subSteps?[0].text, "Sub A")
+        XCTAssertEqual(decoded.subSteps?[1].text, "Sub B")
+    }
+
+    func test_step_leafStep_noSubStepsKey_decodesWithoutSubSteps() throws {
+        // JSON without a "subSteps" key (old format / leaf step) must decode fine.
+        let id = UUID()
+        let json = #"{"id":"\#(id.uuidString)","text":"Mix","status":"todo"}"#
+            .data(using: .utf8)!
+        let step = try JSONDecoder().decode(Step.self, from: json)
+        XCTAssertNil(step.subSteps)
+        XCTAssertEqual(step.status, .todo)
+    }
+
+    func test_step_effectiveStatus_derivedFromSubSteps_allDone() {
+        let sub1 = Step(text: "Sub A", status: .done)
+        let sub2 = Step(text: "Sub B", status: .done)
+        let parent = Step(text: "Parent", status: .todo, subSteps: [sub1, sub2])
+        XCTAssertEqual(parent.effectiveStatus, .done, "Parent must be done when all sub-steps are done")
+        XCTAssertEqual(parent.status, .done)
+    }
+
+    func test_step_effectiveStatus_derivedFromSubSteps_notAllDone() {
+        let sub1 = Step(text: "Sub A", status: .done)
+        let sub2 = Step(text: "Sub B", status: .todo)
+        let parent = Step(text: "Parent", status: .todo, subSteps: [sub1, sub2])
+        XCTAssertEqual(parent.effectiveStatus, .todo, "Parent must be todo when any sub-step is incomplete")
+    }
+
+    func test_step_cannotManuallyMarkDoneWithIncompleteSubSteps() {
+        let sub1 = Step(text: "Sub A", status: .done)
+        let sub2 = Step(text: "Sub B", status: .todo)
+        var parent = Step(text: "Parent", status: .todo, subSteps: [sub1, sub2])
+        parent.status = .done // should be a no-op
+        XCTAssertEqual(parent.status, .todo, "Setting done on a parent with incomplete sub-steps must be ignored")
+    }
+
+    func test_step_noSubSteps_statusMutatesNormally() {
+        var step = Step(text: "Leaf step", status: .todo)
+        step.status = .done
+        XCTAssertEqual(step.status, .done, "Leaf step status must be settable normally")
+    }
+
+    func test_step_withSubSteps_encodesStatusAsStoredValue() throws {
+        // The serialised "status" key reflects _status (the stored value), not
+        // effectiveStatus, so that the JSON is stable across sub-step changes.
+        let sub = Step(text: "Sub", status: .done)
+        let parent = Step(text: "Parent", status: .todo, subSteps: [sub])
+        let data = try JSONEncoder().encode(parent)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        XCTAssertEqual(json["status"] as? String, "todo",
+                       "Encoded status must reflect stored _status, not derived effectiveStatus")
+    }
+
     // MARK: - MiseEnPlaceEntry
 
     func test_miseEnPlaceEntry_solo_roundTrip() throws {

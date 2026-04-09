@@ -62,6 +62,9 @@ struct ContentView: View {
                         }
                         store.send(.markStepDone(stepId: id))
                     },
+                    onMarkSubStepDone: { parentId, subId in
+                        store.send(.markSubStepDone(parentStepId: parentId, subStepId: subId))
+                    },
                     onMarkMiseEnPlaceDone: { id in store.markMiseEnPlaceDone(id) },
                     onTriggerMiseEnPlace: { store.triggerMiseEnPlace() },
                     onOpenSettings: { showSettings = true },

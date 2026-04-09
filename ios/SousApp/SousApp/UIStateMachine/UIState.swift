@@ -77,4 +77,6 @@ public enum UIEvent {
     case rejectPatch(userText: String)
     /// User taps a todo step to mark it done. One-way; done steps are immutable.
     case markStepDone(stepId: UUID)
+    /// User taps a todo sub-step to mark it done. One-way; done sub-steps are immutable.
+    case markSubStepDone(parentStepId: UUID, subStepId: UUID)
 }

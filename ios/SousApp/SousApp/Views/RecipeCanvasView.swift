@@ -4,6 +4,7 @@ import SousCore
 struct RecipeCanvasView: View {
     let recipe: Recipe
     var onMarkStepDone: (UUID) -> Void = { _ in }
+    var onMarkSubStepDone: (UUID, UUID) -> Void = { _, _ in }
     var onMarkMiseEnPlaceDone: (UUID) -> Void = { _ in }
     var onTriggerMiseEnPlace: () -> Void = {}
     var onOpenSettings: () -> Void = {}
@@ -31,6 +32,7 @@ struct RecipeCanvasView: View {
     init(
         recipe: Recipe,
         onMarkStepDone: @escaping (UUID) -> Void = { _ in },
+        onMarkSubStepDone: @escaping (UUID, UUID) -> Void = { _, _ in },
         onMarkMiseEnPlaceDone: @escaping (UUID) -> Void = { _ in },
         onTriggerMiseEnPlace: @escaping () -> Void = {},
         onOpenSettings: @escaping () -> Void = {},
@@ -49,6 +51,7 @@ struct RecipeCanvasView: View {
     ) {
         self.recipe = recipe
         self.onMarkStepDone = onMarkStepDone
+        self.onMarkSubStepDone = onMarkSubStepDone
         self.onMarkMiseEnPlaceDone = onMarkMiseEnPlaceDone
         self.onTriggerMiseEnPlace = onTriggerMiseEnPlace
         self.onOpenSettings = onOpenSettings
@@ -94,7 +97,7 @@ struct RecipeCanvasView: View {
                 .padding(.bottom, 16)
                 .frame(maxWidth: .infinity)
                 .listRowInsets(EdgeInsets())
-                .listRowBackground(Color.sousBackground)
+                .listRowBackground(Color.clear)
                 .listRowSeparator(.visible, edges: .bottom)
                 .listRowSeparatorTint(Color.sousSeparator)
 
@@ -123,7 +126,7 @@ struct RecipeCanvasView: View {
                 .padding(.bottom, 12)
                 .frame(maxWidth: .infinity)
                 .listRowInsets(EdgeInsets())
-                .listRowBackground(Color.sousBackground)
+                .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
 
                 // MARK: Ingredient rows
@@ -155,7 +158,7 @@ struct RecipeCanvasView: View {
                                 }
                         )
                         .listRowInsets(EdgeInsets())
-                        .listRowBackground(Color.sousBackground)
+                        .listRowBackground(Color.clear)
                         .listRowSeparator(.visible, edges: .bottom)
                         .listRowSeparatorTint(Color.sousSeparator)
                         .swipeActions(edge: .leading, allowsFullSwipe: true) {
@@ -187,33 +190,27 @@ struct RecipeCanvasView: View {
                         .padding(.bottom, 12)
                         .frame(maxWidth: .infinity)
                         .listRowInsets(EdgeInsets())
-                        .listRowBackground(Color.sousBackground)
+                        .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
 
-                    ForEach(mepEntries, id: \.id) { entry in
-                        let askSousText: String = {
-                            switch entry.content {
-                            case .solo(let instruction, _): return instruction
-                            case .group(let vesselName, _): return vesselName
-                            }
-                        }()
-                        miseEnPlaceEntryRow(entry)
+                    ForEach(flatMEPRows(mepEntries)) { row in
+                        mepFlatRowView(row)
                             .padding(.horizontal, 20)
                             .simultaneousGesture(
                                 LongPressGesture(minimumDuration: 0.5)
                                     .onEnded { _ in
                                         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                                        onAskSousAbout("mise en place", askSousText)
+                                        onAskSousAbout("mise en place", row.askSousText)
                                     }
                             )
                             .listRowInsets(EdgeInsets())
-                            .listRowBackground(Color.sousBackground)
+                            .listRowBackground(Color.clear)
                             .listRowSeparator(.visible, edges: .bottom)
                             .listRowSeparatorTint(Color.sousSeparator)
                             .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                                if !entry.isDone {
+                                if !row.isDone {
                                     Button {
-                                        onMarkMiseEnPlaceDone(entry.id)
+                                        for id in row.completeIds { onMarkMiseEnPlaceDone(id) }
                                     } label: {
                                         Label("Done", systemImage: "checkmark")
                                     }
@@ -222,7 +219,7 @@ struct RecipeCanvasView: View {
                             }
                             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                 Button {
-                                    onAskSousAbout("mise en place", askSousText)
+                                    onAskSousAbout("mise en place", row.askSousText)
                                 } label: {
                                     Label("Ask Sous", systemImage: "bubble.left")
                                 }
@@ -247,7 +244,7 @@ struct RecipeCanvasView: View {
                 .padding(.bottom, miseEnPlaceError != nil ? 4 : 12)
                 .frame(maxWidth: .infinity)
                 .listRowInsets(EdgeInsets())
-                .listRowBackground(Color.sousBackground)
+                .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
 
                 // Inline error below procedure header
@@ -259,86 +256,109 @@ struct RecipeCanvasView: View {
                         .padding(.bottom, 12)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .listRowInsets(EdgeInsets())
-                        .listRowBackground(Color.sousBackground)
+                        .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
                 }
 
                 // MARK: Step rows
                 ForEach(Array(recipe.steps.enumerated()), id: \.element.id) { index, step in
-                    let isDone = step.status == .done
-                    let isHighlighted = !isDone && highlightedStepId == step.id
-                    HStack(alignment: .top, spacing: 12) {
-                        Button {
-                            if step.status == .todo { onMarkStepDone(step.id) }
-                        } label: {
-                            SousCheckbox(isChecked: isDone)
-                                .padding(.top, 2)
-                        }
-                        .buttonStyle(.plain)
-
-                        if let tm = timerManager, !isDone {
-                            TimerAffordanceText(
-                                step: step,
-                                stepIndex: index,
-                                isHighlighted: isHighlighted,
-                                timerManager: tm,
-                                onClearHighlight: {
-                                    withAnimation(.easeInOut(duration: 0.3)) {
-                                        highlightedStepId = nil
-                                    }
+                    if let subSteps = step.subSteps, !subSteps.isEmpty {
+                        let items = subSteps.map { NestedStepItem(id: $0.id, text: $0.text, isDone: $0.effectiveStatus == .done) }
+                        NestedStepGroupView(
+                            header: step.text,
+                            items: items,
+                            isDone: step.effectiveStatus == .done,
+                            onChildTap: { subStepId in onMarkSubStepDone(step.id, subStepId) }
+                        )
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .id(step.id)
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                        .simultaneousGesture(
+                            LongPressGesture(minimumDuration: 0.5)
+                                .onEnded { _ in
+                                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                    onAskSousAbout("step", step.text)
                                 }
-                            )
-                        } else {
-                            Text(step.text)
-                                .font(.sousBody)
-                                .foregroundStyle(isDone ? Color.sousMuted : Color.sousText)
-                                .strikethrough(isDone, color: Color.sousMuted)
-                                .multilineTextAlignment(.leading)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .onTapGesture {
-                                    withAnimation(.easeInOut(duration: 0.3)) {
-                                        highlightedStepId = nil
-                                    }
-                                }
-                        }
-                    }
-                    .padding(.vertical, 10)
-                    .padding(.horizontal, 20)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .id(step.id)
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(
-                        isHighlighted
-                            ? Color.sousHighlightBackground
-                            : Color.sousBackground
-                    )
-                    .animation(.easeInOut(duration: 0.3), value: isHighlighted)
-                    .simultaneousGesture(
-                        LongPressGesture(minimumDuration: 0.5)
-                            .onEnded { _ in
-                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                                onAskSousAbout("step", step.text)
-                            }
-                    )
-                    .listRowSeparator(.visible, edges: .bottom)
-                    .listRowSeparatorTint(Color.sousSeparator)
-                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                        if !isDone {
+                        )
+                        .listRowSeparator(.visible, edges: .bottom)
+                        .listRowSeparatorTint(Color.sousSeparator)
+                    } else {
+                        let isDone = step.status == .done
+                        let isHighlighted = !isDone && highlightedStepId == step.id
+                        HStack(alignment: .top, spacing: 12) {
                             Button {
-                                onMarkStepDone(step.id)
+                                if step.status == .todo { onMarkStepDone(step.id) }
                             } label: {
-                                Label("Done", systemImage: "checkmark")
+                                SousCheckbox(isChecked: isDone)
+                                    .padding(.top, 2)
                             }
-                            .tint(Color.sousGreen)
+                            .buttonStyle(.plain)
+
+                            if let tm = timerManager, !isDone {
+                                TimerAffordanceText(
+                                    step: step,
+                                    stepIndex: index,
+                                    isHighlighted: isHighlighted,
+                                    timerManager: tm,
+                                    onClearHighlight: {
+                                        withAnimation(.easeInOut(duration: 0.3)) {
+                                            highlightedStepId = nil
+                                        }
+                                    }
+                                )
+                            } else {
+                                Text(step.text)
+                                    .font(.sousBody)
+                                    .foregroundStyle(isDone ? Color.sousMuted : Color.sousText)
+                                    .strikethrough(isDone, color: Color.sousMuted)
+                                    .multilineTextAlignment(.leading)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .onTapGesture {
+                                        withAnimation(.easeInOut(duration: 0.3)) {
+                                            highlightedStepId = nil
+                                        }
+                                    }
+                            }
                         }
-                    }
-                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                        Button {
-                            onAskSousAbout("step", step.text)
-                        } label: {
-                            Label("Ask Sous", systemImage: "bubble.left")
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 20)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .id(step.id)
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(
+                            isHighlighted
+                                ? Color.sousHighlightBackground
+                                : Color.clear
+                        )
+                        .animation(.easeInOut(duration: 0.3), value: isHighlighted)
+                        .simultaneousGesture(
+                            LongPressGesture(minimumDuration: 0.5)
+                                .onEnded { _ in
+                                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                    onAskSousAbout("step", step.text)
+                                }
+                        )
+                        .listRowSeparator(.visible, edges: .bottom)
+                        .listRowSeparatorTint(Color.sousSeparator)
+                        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                            if !isDone {
+                                Button {
+                                    onMarkStepDone(step.id)
+                                } label: {
+                                    Label("Done", systemImage: "checkmark")
+                                }
+                                .tint(Color.sousGreen)
+                            }
                         }
-                        .tint(Color.sousTerracotta)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button {
+                                onAskSousAbout("step", step.text)
+                            } label: {
+                                Label("Ask Sous", systemImage: "bubble.left")
+                            }
+                            .tint(Color.sousTerracotta)
+                        }
                     }
                 }
 
@@ -350,7 +370,7 @@ struct RecipeCanvasView: View {
                         .padding(.bottom, 12)
                         .frame(maxWidth: .infinity)
                         .listRowInsets(EdgeInsets())
-                        .listRowBackground(Color.sousBackground)
+                        .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
 
                     ForEach(recipe.notes, id: \.self) { note in
@@ -361,7 +381,7 @@ struct RecipeCanvasView: View {
                             .padding(.vertical, 4)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .listRowInsets(EdgeInsets())
-                            .listRowBackground(Color.sousBackground)
+                            .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
                     }
                 }
@@ -369,7 +389,7 @@ struct RecipeCanvasView: View {
                 // Bottom breathing room
                 Color.clear.frame(height: 20)
                     .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.sousBackground)
+                    .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
 
 #if DEBUG
@@ -381,7 +401,7 @@ struct RecipeCanvasView: View {
                         .padding(.horizontal, 20)
                         .padding(.bottom, 8)
                         .listRowInsets(EdgeInsets())
-                        .listRowBackground(Color.sousBackground)
+                        .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
                 }
 #endif
@@ -389,7 +409,7 @@ struct RecipeCanvasView: View {
             } // end List
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
-            .background(Color.sousBackground)
+            .background(Color.sousBackground.paperTexture())
             .onScrollGeometryChange(for: CGFloat.self) { geo in
                 geo.contentOffset.y
             } action: { _, newVal in
@@ -433,49 +453,38 @@ struct RecipeCanvasView: View {
         }
     }
 
-    // MARK: - Mise en place entry row
+    // MARK: - Mise en place flat row helpers
+
+    private func flatMEPRows(_ entries: [MiseEnPlaceEntry]) -> [MEPFlatRow] {
+        entries.flatMap { entry -> [MEPFlatRow] in
+            switch entry.content {
+            case .solo(let instruction, let isDone):
+                return [MEPFlatRow(
+                    id: entry.id,
+                    kind: .solo(instruction: instruction, isDone: isDone)
+                )]
+            case .group(let vesselName, let components):
+                let incompleteIds = components.filter { !$0.isDone }.map { $0.id }
+                let header = MEPFlatRow(
+                    id: entry.id,
+                    kind: .groupHeader(vesselName: vesselName, isDone: entry.isDone,
+                                       incompleteComponentIds: incompleteIds)
+                )
+                let children = components.map { c in
+                    MEPFlatRow(id: c.id,
+                               kind: .groupComponent(text: c.text, isDone: c.isDone, vesselName: vesselName))
+                }
+                return [header] + children
+            }
+        }
+    }
 
     @ViewBuilder
-    private func miseEnPlaceEntryRow(_ entry: MiseEnPlaceEntry) -> some View {
-        switch entry.content {
-        case .group(let vesselName, let components):
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(alignment: .top, spacing: 12) {
-                    SousCheckbox(isChecked: entry.isDone)
-                        .padding(.top, 2)
-                        .allowsHitTesting(false)
-                    Text(vesselName.uppercased())
-                        .font(.sousSectionHeader)
-                        .kerning(1.0)
-                        .foregroundStyle(entry.isDone ? Color.sousMuted : Color.sousText)
-                    Spacer()
-                }
-                .padding(.vertical, 10)
-
-                ForEach(components, id: \.id) { component in
-                    Button {
-                        if !component.isDone { onMarkMiseEnPlaceDone(component.id) }
-                    } label: {
-                        HStack(alignment: .top, spacing: 12) {
-                            Color.clear.frame(width: 20)
-                            SousCheckbox(isChecked: component.isDone)
-                                .padding(.top, 2)
-                            Text(component.text)
-                                .font(.sousBody)
-                                .foregroundStyle(component.isDone ? Color.sousMuted : Color.sousText)
-                                .strikethrough(component.isDone, color: Color.sousMuted)
-                                .multilineTextAlignment(.leading)
-                            Spacer()
-                        }
-                        .padding(.vertical, 8)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-
+    private func mepFlatRowView(_ row: MEPFlatRow) -> some View {
+        switch row.kind {
         case .solo(let instruction, let isDone):
             Button {
-                if !isDone { onMarkMiseEnPlaceDone(entry.id) }
+                if !isDone { onMarkMiseEnPlaceDone(row.id) }
             } label: {
                 HStack(alignment: .top, spacing: 12) {
                     SousCheckbox(isChecked: isDone)
@@ -490,6 +499,29 @@ struct RecipeCanvasView: View {
                 .padding(.vertical, 10)
             }
             .buttonStyle(.plain)
+
+        case .groupHeader(let vesselName, let isDone, let incompleteIds):
+            Button {
+                for id in incompleteIds { onMarkMiseEnPlaceDone(id) }
+            } label: {
+                HStack(alignment: .top, spacing: 12) {
+                    SousCheckbox(isChecked: isDone)
+                        .padding(.top, 2)
+                    Text(vesselName)
+                        .font(.sousBody)
+                        .foregroundStyle(isDone ? Color.sousMuted : Color.sousText)
+                        .strikethrough(isDone, color: Color.sousMuted)
+                        .multilineTextAlignment(.leading)
+                    Spacer()
+                }
+                .padding(.vertical, 10)
+            }
+            .buttonStyle(.plain)
+
+        case .groupComponent(let text, let isDone, _):
+            NestedStepChildRow(text: text, isDone: isDone) {
+                onMarkMiseEnPlaceDone(row.id)
+            }
         }
     }
 
@@ -527,6 +559,117 @@ struct RecipeCanvasView: View {
             modalDontShowAgain = false
             showingMiseEnPlaceModal = true
         }
+    }
+}
+
+// MARK: - Mise en place flat row model
+
+private struct MEPFlatRow: Identifiable {
+    enum Kind {
+        case solo(instruction: String, isDone: Bool)
+        case groupHeader(vesselName: String, isDone: Bool, incompleteComponentIds: [UUID])
+        case groupComponent(text: String, isDone: Bool, vesselName: String)
+    }
+    let id: UUID
+    let kind: Kind
+
+    var isDone: Bool {
+        switch kind {
+        case .solo(_, let d): return d
+        case .groupHeader(_, let d, _): return d
+        case .groupComponent(_, let d, _): return d
+        }
+    }
+
+    /// IDs to mark done when the user taps this row's "Done" action.
+    var completeIds: [UUID] {
+        switch kind {
+        case .solo: return [id]
+        case .groupHeader(_, _, let ids): return ids
+        case .groupComponent: return [id]
+        }
+    }
+
+    /// Text used for "Ask Sous" context.
+    var askSousText: String {
+        switch kind {
+        case .solo(let instruction, _): return instruction
+        case .groupHeader(let name, _, _): return name
+        case .groupComponent(let text, _, _): return text
+        }
+    }
+}
+
+// MARK: - Nested step group support
+
+private struct NestedStepItem: Identifiable {
+    let id: UUID
+    let text: String
+    let isDone: Bool
+}
+
+/// Renders a group header with a non-interactive derived-done checkbox, followed by
+/// individually tappable child rows with indented checkboxes. Used for procedure
+/// sub-step groups; child row rendering is shared with MEP group components via
+/// `NestedStepChildRow`.
+private struct NestedStepGroupView: View {
+    let header: String
+    let items: [NestedStepItem]
+    let isDone: Bool
+    let onChildTap: (UUID) -> Void
+
+    var body: some View {
+        Group {
+            HStack(alignment: .top, spacing: 12) {
+                SousCheckbox(isChecked: isDone)
+                    .padding(.top, 2)
+                    .allowsHitTesting(false)
+                Text(header.uppercased())
+                    .font(.sousSectionHeader)
+                    .kerning(1.0)
+                    .foregroundStyle(isDone ? Color.sousMuted : Color.sousText)
+                Spacer()
+            }
+            .padding(.vertical, 10)
+            .padding(.horizontal, 20)
+
+            ForEach(items) { item in
+                NestedStepChildRow(text: item.text, isDone: item.isDone, indentWidth: 32) {
+                    onChildTap(item.id)
+                }
+            }
+        }
+    }
+}
+
+/// Single indented child row used by both `NestedStepGroupView` (procedure sub-steps)
+/// and `mepFlatRowView` (MEP group components). Pass `indentWidth` to match the
+/// surrounding layout: 32 for procedure (header has explicit 20px horizontal padding),
+/// 20 for MEP (caller applies 20px horizontal padding to the row).
+private struct NestedStepChildRow: View {
+    let text: String
+    let isDone: Bool
+    var indentWidth: CGFloat = 20
+    let onTap: () -> Void
+
+    var body: some View {
+        Button {
+            if !isDone { onTap() }
+        } label: {
+            HStack(alignment: .top, spacing: 12) {
+                Color.clear.frame(width: indentWidth, height: 20)
+                SousCheckbox(isChecked: isDone)
+                    .padding(.top, 2)
+                Text(text)
+                    .font(.sousBody)
+                    .foregroundStyle(isDone ? Color.sousMuted : Color.sousText)
+                    .strikethrough(isDone, color: Color.sousMuted)
+                    .multilineTextAlignment(.leading)
+                Spacer()
+            }
+            .padding(.vertical, 10)
+        }
+        .buttonStyle(.plain)
     }
 }
 

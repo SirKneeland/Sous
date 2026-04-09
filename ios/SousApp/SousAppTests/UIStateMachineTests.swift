@@ -7,13 +7,17 @@ import SousCore
 private extension UIStateMachineTests {
 
     // Stable UUIDs for deterministic tests
-    static let recipeId   = UUID(uuidString: "00000000-0000-0000-FFFF-000000000001")!
-    static let flourId    = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
-    static let saltId     = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
-    static let stepMixId  = UUID(uuidString: "00000000-0000-0000-0001-000000000001")!
-    static let stepBakeId = UUID(uuidString: "00000000-0000-0000-0001-000000000002")!
-    static let stepDoneId = UUID(uuidString: "00000000-0000-0000-0001-000000000003")!
-    static let patchSetId = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+    static let recipeId    = UUID(uuidString: "00000000-0000-0000-FFFF-000000000001")!
+    static let flourId     = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+    static let saltId      = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
+    static let stepMixId   = UUID(uuidString: "00000000-0000-0000-0001-000000000001")!
+    static let stepBakeId  = UUID(uuidString: "00000000-0000-0000-0001-000000000002")!
+    static let stepDoneId  = UUID(uuidString: "00000000-0000-0000-0001-000000000003")!
+    static let patchSetId  = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+    // Sub-step UUIDs
+    static let parentSubStepId  = UUID(uuidString: "00000000-0000-0000-0002-000000000001")!
+    static let subStep1Id       = UUID(uuidString: "00000000-0000-0000-0002-000000000002")!
+    static let subStep2Id       = UUID(uuidString: "00000000-0000-0000-0002-000000000003")!
 
     /// A seed recipe with version 1 and stable IDs.
     static func seedRecipe() -> Recipe {
@@ -51,6 +55,21 @@ private extension UIStateMachineTests {
             baseRecipeId: recipeId,
             baseRecipeVersion: 1,
             patches: [.updateStep(id: stepDoneId, text: "Changed done step")]
+        )
+    }
+
+    /// A seed recipe that includes a step with two sub-steps.
+    static func recipeWithSubSteps() -> Recipe {
+        let sub1 = Step(id: subStep1Id,  text: "Measure flour",   status: .todo)
+        let sub2 = Step(id: subStep2Id,  text: "Add salt",        status: .todo)
+        let parentStep = Step(id: parentSubStepId, text: "Prep dry ingredients", status: .todo, subSteps: [sub1, sub2])
+        return Recipe(
+            id: recipeId,
+            version: 1,
+            title: "Simple Bread",
+            ingredients: [Ingredient(id: flourId, text: "2 cups flour")],
+            steps: [parentStep],
+            notes: []
         )
     }
 }
@@ -293,5 +312,63 @@ final class UIStateMachineTests: XCTestCase {
         let next = UIStateMachine.reduce(state, .markStepDone(stepId: Self.stepMixId))
         let bakeStep = next.recipe.steps.first { $0.id == Self.stepBakeId }
         XCTAssertEqual(bakeStep?.status, .todo, "Other todo steps must remain todo")
+    }
+
+    // MARK: markSubStepDone
+
+    func test_markSubStepDone_todoSubStep_marksItDone() {
+        let state = UIState.recipeOnly(recipe: Self.recipeWithSubSteps())
+        let next = UIStateMachine.reduce(state, .markSubStepDone(parentStepId: Self.parentSubStepId, subStepId: Self.subStep1Id))
+        let parent = next.recipe.steps.first { $0.id == Self.parentSubStepId }
+        let sub = parent?.subSteps?.first { $0.id == Self.subStep1Id }
+        XCTAssertEqual(sub?.effectiveStatus, .done, "Tapped sub-step must be marked done")
+    }
+
+    func test_markSubStepDone_incrementsRecipeVersion() {
+        let state = UIState.recipeOnly(recipe: Self.recipeWithSubSteps())
+        let next = UIStateMachine.reduce(state, .markSubStepDone(parentStepId: Self.parentSubStepId, subStepId: Self.subStep1Id))
+        XCTAssertEqual(next.recipe.version, 2, "Version must increment when a sub-step is marked done")
+    }
+
+    func test_markSubStepDone_doneSubStep_isNoOp() {
+        var recipe = Self.recipeWithSubSteps()
+        // Pre-mark sub1 as done by building the recipe with it already done.
+        let doneSub = Step(id: Self.subStep1Id, text: "Measure flour", status: .done)
+        let todoSub = Step(id: Self.subStep2Id, text: "Add salt", status: .todo)
+        let parent  = Step(id: Self.parentSubStepId, text: "Prep dry ingredients", status: .todo, subSteps: [doneSub, todoSub])
+        recipe = Recipe(id: Self.recipeId, version: 1, title: "Simple Bread",
+                        ingredients: recipe.ingredients, steps: [parent], notes: [])
+        let state = UIState.recipeOnly(recipe: recipe)
+        let next = UIStateMachine.reduce(state, .markSubStepDone(parentStepId: Self.parentSubStepId, subStepId: Self.subStep1Id))
+        XCTAssertEqual(next.recipe.version, 1, "Marking an already-done sub-step must be a no-op")
+    }
+
+    func test_markSubStepDone_allSubStepsDone_parentIsDone() {
+        let state = UIState.recipeOnly(recipe: Self.recipeWithSubSteps())
+        var current = state
+        current = UIStateMachine.reduce(current, .markSubStepDone(parentStepId: Self.parentSubStepId, subStepId: Self.subStep1Id))
+        current = UIStateMachine.reduce(current, .markSubStepDone(parentStepId: Self.parentSubStepId, subStepId: Self.subStep2Id))
+        let parent = current.recipe.steps.first { $0.id == Self.parentSubStepId }
+        XCTAssertEqual(parent?.effectiveStatus, .done, "Parent must be done when all sub-steps are done")
+    }
+
+    func test_markSubStepDone_unknownParentId_isNoOp() {
+        let state = UIState.recipeOnly(recipe: Self.recipeWithSubSteps())
+        let next = UIStateMachine.reduce(state, .markSubStepDone(parentStepId: UUID(), subStepId: Self.subStep1Id))
+        XCTAssertEqual(next.recipe.version, 1, "Unknown parentStepId must be a no-op")
+    }
+
+    func test_markSubStepDone_unknownSubStepId_isNoOp() {
+        let state = UIState.recipeOnly(recipe: Self.recipeWithSubSteps())
+        let next = UIStateMachine.reduce(state, .markSubStepDone(parentStepId: Self.parentSubStepId, subStepId: UUID()))
+        XCTAssertEqual(next.recipe.version, 1, "Unknown subStepId must be a no-op")
+    }
+
+    func test_markSubStepDone_otherSubStepUnchanged() {
+        let state = UIState.recipeOnly(recipe: Self.recipeWithSubSteps())
+        let next = UIStateMachine.reduce(state, .markSubStepDone(parentStepId: Self.parentSubStepId, subStepId: Self.subStep1Id))
+        let parent = next.recipe.steps.first { $0.id == Self.parentSubStepId }
+        let untouched = parent?.subSteps?.first { $0.id == Self.subStep2Id }
+        XCTAssertEqual(untouched?.effectiveStatus, .todo, "Untouched sub-step must remain todo")
     }
 }

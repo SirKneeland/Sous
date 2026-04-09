@@ -6,6 +6,9 @@ struct SettingsView: View {
     @State private var keyInput = ""
     @State private var keyIsPresent: Bool = false
     @Environment(\.dismiss) private var dismiss
+    // TEMP: remove once texture intensity is finalized
+    @AppStorage("debugTextureIntensity") private var textureIntensity: Double = 0.6
+    @State private var showingTexturePreview = false
 
     var body: some View {
         NavigationView {
@@ -130,6 +133,37 @@ struct SettingsView: View {
                     Text("Your key is stored in the device Keychain and never leaves your device.")
                         .font(.sousCaption)
                         .foregroundStyle(Color.sousMuted)
+                }
+                .listRowBackground(Color.sousBackground)
+                .listRowSeparatorTint(Color.sousSeparator)
+
+                // MARK: Debug
+                Section {
+                    // TEMP: remove once texture intensity is finalized
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Recipe texture intensity")
+                            .font(.sousBody)
+                            .foregroundStyle(Color.sousText)
+                        Slider(value: $textureIntensity, in: 0...1)
+                            .tint(Color.sousTerracotta)
+                    }
+                    .padding(.vertical, 4)
+
+                    // TEMP: remove once texture intensity is finalized
+                    Button("Preview Texture") {
+                        showingTexturePreview = true
+                    }
+                    .font(.sousBody)
+                    .foregroundStyle(Color.sousTerracotta)
+                    .fullScreenCover(isPresented: $showingTexturePreview) {
+                        TexturePreviewView()
+                    }
+                } header: {
+                    Text("DEBUG")
+                        .font(.sousSectionHeader)
+                        .foregroundStyle(Color.sousTerracotta)
+                        .kerning(1.2)
+                        .textCase(nil)
                 }
                 .listRowBackground(Color.sousBackground)
                 .listRowSeparatorTint(Color.sousSeparator)
