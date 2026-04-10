@@ -103,6 +103,7 @@ struct ChatSheetView: View {
             .padding(.bottom, 16)
 
             SousRule()
+            attachmentStrip
             composerBar
         }
         .background(Color.sousBackground.ignoresSafeArea())
