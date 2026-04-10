@@ -228,7 +228,7 @@ struct ContentView: View {
 /// When `isVisible` is false, only the status bar area has a burgundy background
 /// (via `.background(...ignoresSafeArea(.top))`). When true, the 52pt button row
 /// slides in below the status bar containing New, History, and Settings icons.
-private struct CollapsibleNavBar: View {
+struct CollapsibleNavBar: View {
     var isVisible: Bool
     var onNew: () -> Void
     var onHistory: () -> Void

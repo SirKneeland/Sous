@@ -44,21 +44,12 @@ struct ChatSheetView: View {
 
     private var blankStateView: some View {
         VStack(spacing: 0) {
-            HStack {
-                Spacer()
-                HStack(spacing: 8) {
-                    SousIconButton(systemName: "plus") { onStartNew() }
-                    SousIconButton(systemName: "clock") { onOpenRecents() }
-                    SousIconButton(systemName: "gearshape") { onOpenSettings() }
-                        .background(GeometryReader { geo in
-                            Color.clear.preference(key: GearButtonFrameKey.self,
-                                                   value: geo.frame(in: .named("contentRoot")))
-                        })
-                }
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 20)
-            .padding(.bottom, 8)
+            CollapsibleNavBar(
+                isVisible: true,
+                onNew: { onStartNew() },
+                onHistory: { onOpenRecents() },
+                onSettings: { onOpenSettings() }
+            )
 
             Spacer()
 
