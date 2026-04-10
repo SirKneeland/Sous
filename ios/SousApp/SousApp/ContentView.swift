@@ -191,6 +191,7 @@ struct ContentView: View {
                     onHistory: { store.showRecentRecipes = true },
                     onSettings: { showSettings = true }
                 )
+                .animation(.easeInOut(duration: 0.2), value: navBarVisible)
             }
         }
         // Transparent tap zone covering the top of the screen to trigger nav reveal.
@@ -255,6 +256,7 @@ private struct CollapsibleNavBar: View {
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
+        .frame(maxWidth: .infinity)
         // The background extends behind the status bar via ignoresSafeArea.
         // This keeps the status bar burgundy even when the button row is collapsed.
         .background(Color.sousTerracotta.ignoresSafeArea(edges: .top))

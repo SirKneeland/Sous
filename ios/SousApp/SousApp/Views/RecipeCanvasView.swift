@@ -1,6 +1,12 @@
 import SwiftUI
 import SousCore
 
+private struct ScrollState: Equatable {
+    var offset: CGFloat
+    var contentHeight: CGFloat
+    var containerHeight: CGFloat
+}
+
 struct RecipeCanvasView: View {
     let recipe: Recipe
     var onMarkStepDone: (UUID) -> Void = { _ in }
@@ -410,11 +416,20 @@ struct RecipeCanvasView: View {
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .background(Color.sousBackground.paperTexture())
-            .onScrollGeometryChange(for: CGFloat.self) { geo in
-                geo.contentOffset.y
-            } action: { _, newVal in
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    navBarVisible = newVal < 60
+            .onScrollGeometryChange(for: ScrollState.self) { geo in
+                ScrollState(
+                    offset: geo.contentOffset.y,
+                    contentHeight: geo.contentSize.height,
+                    containerHeight: geo.containerSize.height
+                )
+            } action: { oldVal, newVal in
+                let distanceFromBottom = newVal.contentHeight - newVal.containerHeight - newVal.offset
+                if newVal.offset < 60 {
+                    navBarVisible = true
+                } else if newVal.offset < oldVal.offset && distanceFromBottom > 40 {
+                    navBarVisible = true
+                } else if newVal.offset > oldVal.offset + 10 {
+                    navBarVisible = false
                 }
             }
             .onChange(of: scrollToStepId) { stepId in
