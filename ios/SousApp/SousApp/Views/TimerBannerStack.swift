@@ -66,14 +66,10 @@ private struct TimerBannerRow: View {
         }
         .buttonStyle(.plain)
         .sheet(isPresented: $showingAdjust) {
-            DurationPickerSheet(
-                title: "ADJUST TIMER",
-                initialDuration: remaining,
-                onConfirm: { newDuration in
-                    showingAdjust = false
-                    timerManager.adjustTimer(session, newRemaining: newDuration)
-                },
-                onCancel: { showingAdjust = false }
+            AdjustTimerSheet(
+                session: session,
+                timerManager: timerManager,
+                onDismiss: { showingAdjust = false }
             )
             .presentationDetents([.medium])
             .presentationDragIndicator(.hidden)

@@ -77,21 +77,54 @@ final class StepTimerManager {
         persist()
     }
 
-    /// Adjusts remaining time on an active timer by resetting its startedAt.
+    /// Resets a timer to count down from `newRemaining` starting now.
     func adjustTimer(_ session: TimerSession, newRemaining: TimeInterval) {
         guard let idx = activeSessions.firstIndex(where: { $0.id == session.id }) else { return }
-        let newStartedAt = Date().addingTimeInterval(-max(0, session.totalDuration - newRemaining))
         let updated = TimerSession(
             id: session.id,
             stepId: session.stepId,
             stepIndex: session.stepIndex,
-            totalDuration: session.totalDuration,
-            startedAt: newStartedAt,
-            shortSummary: session.shortSummary
+            totalDuration: newRemaining,
+            startedAt: Date(),
+            shortSummary: activeSessions[idx].shortSummary
         )
         activeSessions[idx] = updated
         cancelNotification(for: session.id)
         scheduleNotification(for: updated)
+        persist()
+    }
+
+    /// Pauses a running timer, freezing the remaining time display.
+    func pauseTimer(_ session: TimerSession) {
+        guard let idx = activeSessions.firstIndex(where: { $0.id == session.id }) else { return }
+        guard activeSessions[idx].pausedAt == nil else { return }
+        activeSessions[idx].pausedAt = Date()
+        cancelNotification(for: session.id)
+        persist()
+    }
+
+    /// Resumes a paused timer, preserving the remaining time at the moment of pause.
+    func resumeTimer(_ session: TimerSession) {
+        guard let idx = activeSessions.firstIndex(where: { $0.id == session.id }) else { return }
+        guard let pausedAt = activeSessions[idx].pausedAt else { return }
+        let elapsed = pausedAt.timeIntervalSince(activeSessions[idx].startedAt)
+        let updated = TimerSession(
+            id: session.id,
+            stepId: session.stepId,
+            stepIndex: session.stepIndex,
+            totalDuration: activeSessions[idx].totalDuration,
+            startedAt: Date().addingTimeInterval(-elapsed),
+            shortSummary: activeSessions[idx].shortSummary
+        )
+        activeSessions[idx] = updated
+        scheduleNotification(for: updated)
+        persist()
+    }
+
+    /// Removes the timer entirely.
+    func deleteTimer(_ session: TimerSession) {
+        activeSessions.removeAll { $0.id == session.id }
+        cancelNotification(for: session.id)
         persist()
     }
 

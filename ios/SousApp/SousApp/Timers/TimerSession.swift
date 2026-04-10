@@ -46,15 +46,24 @@ struct TimerSession: Identifiable, Codable, Equatable {
     /// Short (~3 word) summary of the step text, generated once at creation.
     var shortSummary: String
 
+    /// If non-nil, the timer is paused and this is the wall-clock time at which it was paused.
+    var pausedAt: Date?
+
     // MARK: Computed
 
-    /// Seconds remaining as of `now`. Returns 0 when expired.
+    var isPaused: Bool { pausedAt != nil }
+
+    /// Seconds remaining as of `now`. When paused, returns the static time at which pausing occurred.
     func remainingTime(at now: Date = Date()) -> TimeInterval {
-        max(0, totalDuration - now.timeIntervalSince(startedAt))
+        if let paused = pausedAt {
+            return max(0, totalDuration - paused.timeIntervalSince(startedAt))
+        }
+        return max(0, totalDuration - now.timeIntervalSince(startedAt))
     }
 
-    /// True when the timer has passed its duration.
+    /// True when the timer has passed its duration. Paused timers never expire.
     func isExpired(at now: Date = Date()) -> Bool {
-        remainingTime(at: now) <= 0
+        guard !isPaused else { return false }
+        return remainingTime(at: now) <= 0
     }
 }
