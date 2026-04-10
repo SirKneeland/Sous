@@ -328,6 +328,7 @@ struct ChatSheetView: View {
                     onAcquired: { asset in
                         photoSend.attach(asset)
                         showPhotoSheet = false
+                        isComposerFocused = true
                     },
                     onCancel: { showPhotoSheet = false }
                 )
