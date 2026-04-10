@@ -79,7 +79,7 @@ enum PatchDTO: Decodable {
         case .removeIngredient(let id):
             return .removeIngredient(id: id)
         case .addStep(let text, let afterStepId):
-            return .addStep(text: text, afterStepId: afterStepId)
+            return .addStep(text: text, afterStepId: afterStepId, preassignedId: nil)
         case .updateStep(let id, let text):
             return .updateStep(id: id, text: text)
         case .removeStep(let id):

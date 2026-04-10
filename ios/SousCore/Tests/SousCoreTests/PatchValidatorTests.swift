@@ -104,7 +104,7 @@ struct PatchValidatorTests {
         let patchSet = PatchSet(
             baseRecipeId: recipe.id,
             baseRecipeVersion: 1,
-            patches: [.addStep(text: "new step", afterStepId: badId)]
+            patches: [.addStep(text: "new step", afterStepId: badId, preassignedId: nil)]
         )
         let result = PatchValidator.validate(patchSet: patchSet, recipe: recipe)
         #expect(result == .invalid([.invalidStepId(badId)]))
@@ -402,6 +402,102 @@ struct PatchValidatorTests {
         )
         let result = PatchValidator.validate(patchSet: patchSet, recipe: recipe)
         #expect(result == .invalid([.invalidSubStepId(badSubId)]))
+    }
+
+    // MARK: - Hard-avoid violations
+
+    @Test("Rejects addIngredient whose text contains a hard-avoid keyword")
+    func hardAvoidOnAddIngredient() {
+        let recipe = SeedRecipes.sample()
+        let patchSet = PatchSet(
+            baseRecipeId: recipe.id,
+            baseRecipeVersion: 1,
+            patches: [.addIngredient(text: "200g shrimp, peeled", afterId: nil)]
+        )
+        let result = PatchValidator.validate(patchSet: patchSet, recipe: recipe, hardAvoids: ["shellfish", "shrimp"])
+        #expect(result == .invalid([.hardAvoidViolation(ingredient: "shrimp")]))
+    }
+
+    @Test("Rejects addIngredient matching hard-avoid by case-insensitive substring")
+    func hardAvoidCaseInsensitive() {
+        let recipe = SeedRecipes.sample()
+        let patchSet = PatchSet(
+            baseRecipeId: recipe.id,
+            baseRecipeVersion: 1,
+            patches: [.addIngredient(text: "1 cup Peanut Butter", afterId: nil)]
+        )
+        let result = PatchValidator.validate(patchSet: patchSet, recipe: recipe, hardAvoids: ["peanut"])
+        #expect(result == .invalid([.hardAvoidViolation(ingredient: "peanut")]))
+    }
+
+    @Test("Rejects updateIngredient whose new text contains a hard-avoid keyword")
+    func hardAvoidOnUpdateIngredient() {
+        let recipe = SeedRecipes.sample()
+        let patchSet = PatchSet(
+            baseRecipeId: recipe.id,
+            baseRecipeVersion: 1,
+            patches: [.updateIngredient(id: SeedRecipes.ingredientSaltId, text: "1 tsp shrimp paste")]
+        )
+        let result = PatchValidator.validate(patchSet: patchSet, recipe: recipe, hardAvoids: ["shrimp"])
+        #expect(result == .invalid([.hardAvoidViolation(ingredient: "shrimp")]))
+    }
+
+    @Test("Rejects addStep whose text contains a hard-avoid keyword")
+    func hardAvoidOnAddStep() {
+        let recipe = SeedRecipes.sample()
+        let patchSet = PatchSet(
+            baseRecipeId: recipe.id,
+            baseRecipeVersion: 1,
+            patches: [.addStep(text: "Toss in shrimp and cook 2 minutes", afterStepId: nil, preassignedId: nil)]
+        )
+        let result = PatchValidator.validate(patchSet: patchSet, recipe: recipe, hardAvoids: ["shrimp"])
+        #expect(result == .invalid([.hardAvoidViolation(ingredient: "shrimp")]))
+    }
+
+    @Test("Rejects updateStep whose text contains a hard-avoid keyword")
+    func hardAvoidOnUpdateStep() {
+        let recipe = SeedRecipes.sample()
+        let patchSet = PatchSet(
+            baseRecipeId: recipe.id,
+            baseRecipeVersion: 1,
+            patches: [.updateStep(id: SeedRecipes.stepMixId, text: "Mix dry ingredients and fold in shrimp")]
+        )
+        let result = PatchValidator.validate(patchSet: patchSet, recipe: recipe, hardAvoids: ["shrimp"])
+        #expect(result == .invalid([.hardAvoidViolation(ingredient: "shrimp")]))
+    }
+
+    @Test("Rejects addSubStep whose text contains a hard-avoid keyword")
+    func hardAvoidOnAddSubStep() {
+        let recipe = SeedRecipes.sampleWithSubSteps()
+        let patchSet = PatchSet(
+            baseRecipeId: recipe.id,
+            baseRecipeVersion: 1,
+            patches: [.addSubStep(parentStepId: SeedRecipes.stepMixId, text: "Stir in shrimp", afterSubStepId: nil)]
+        )
+        let result = PatchValidator.validate(patchSet: patchSet, recipe: recipe, hardAvoids: ["shrimp"])
+        #expect(result == .invalid([.hardAvoidViolation(ingredient: "shrimp")]))
+    }
+
+    @Test("Accepts patches when hardAvoids is empty")
+    func hardAvoidEmptyListAllowsAll() {
+        let recipe = SeedRecipes.sample()
+        let patchSet = PatchSet(
+            baseRecipeId: recipe.id,
+            baseRecipeVersion: 1,
+            patches: [.addIngredient(text: "200g shrimp", afterId: nil)]
+        )
+        #expect(PatchValidator.validate(patchSet: patchSet, recipe: recipe, hardAvoids: []) == .valid)
+    }
+
+    @Test("Accepts patches when text does not contain any hard-avoid keyword")
+    func hardAvoidNoMatch() {
+        let recipe = SeedRecipes.sample()
+        let patchSet = PatchSet(
+            baseRecipeId: recipe.id,
+            baseRecipeVersion: 1,
+            patches: [.addIngredient(text: "fresh thyme", afterId: nil)]
+        )
+        #expect(PatchValidator.validate(patchSet: patchSet, recipe: recipe, hardAvoids: ["shellfish", "peanuts"]) == .valid)
     }
 
     @Test("Rejects completeSubStep when parent step is already done")

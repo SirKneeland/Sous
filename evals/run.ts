@@ -57,6 +57,9 @@ interface TestCase {
   promptType: "no_canvas" | "has_canvas" | "import";
   input: TestInput;
   expected: TestExpected;
+  /** When true, the case is excluded from the eval run (known capability gap or WIP). */
+  skip?: boolean;
+  skipReason?: string;
 }
 
 interface EvalOutput {
@@ -69,9 +72,14 @@ interface EvalOutput {
 // Load test cases
 // ---------------------------------------------------------------------------
 
-const cases: TestCase[] = JSON.parse(
+const allCases: TestCase[] = JSON.parse(
   readFileSync(join(__dirname, "cases/core-behaviors.json"), "utf-8")
 );
+const skipped = allCases.filter((tc) => tc.skip);
+if (skipped.length > 0) {
+  console.log(`Skipping ${skipped.length} case(s): ${skipped.map((tc) => tc.name).join(", ")}`);
+}
+const cases = allCases.filter((tc) => !tc.skip);
 
 // ---------------------------------------------------------------------------
 // System prompts (sourced from OpenAILLMOrchestrator.swift)
@@ -89,19 +97,22 @@ RULES — never violate:
 7. In assistant_message, briefly acknowledge the loaded recipe by name and invite the user to adapt it (serving size, substitutions, dietary changes, etc.). Keep it short — one or two sentences.
 
 FORMATTING RULES — for richly-formatted sources (ChatGPT output, markdown, emoji-decorated text):
-8. Nested bullet points and sub-items belong to their parent step. Fold them into the parent step's text rather than creating separate steps. Example: if a step says "When soft + lightly golden:" followed by indented sub-bullets, those sub-bullets are part of that step — not independent steps.
+8. When a section header introduces a numbered or lettered list of sub-steps (e.g. "Parboil the potatoes:" followed by "1. Fill pot…", "2. Add potatoes…"), emit the header as add_step with a short kebab-case client_id, then emit each numbered item as add_substep with parent_step_id matching that client_id. Keep each sub-step's text verbatim. Do NOT fold numbered sub-steps into the header text.
+   Example source: "Parboil the potatoes:\\n1. Fill a large pot with salted water and bring to a boil\\n2. Add diced potatoes and cook 8 minutes\\n3. Drain and set aside"
+   Example patches: {"type":"add_step","text":"Parboil the potatoes:","after_step_id":null,"client_id":"parboil-phase"} then {"type":"add_substep","text":"Fill a large pot with salted water and bring to a boil","parent_step_id":"parboil-phase","after_substep_id":null} then {"type":"add_substep","text":"Add diced potatoes and cook 8 minutes","parent_step_id":"parboil-phase","after_substep_id":null} then {"type":"add_substep","text":"Drain and set aside","parent_step_id":"parboil-phase","after_substep_id":null}
 9. Emoji bullets used for tips or emphasis (e.g. 👉 Don't move too early) are annotations on their surrounding step context, not standalone steps. Incorporate them into the nearest logical step.
 10. Omit non-actionable narrative sections entirely. This includes sections titled things like "What success looks like", "Common failure modes", "Game plan", closing remarks, and upgrade suggestions. Only extract ingredients and actionable cooking steps.
 11. Section headers (e.g. "Meatloaf = crustmaxx", "Brioche = anti-sog system") are grouping labels, not steps. Omit them or fold their meaning into the first step of that section.
 12. Inline context like heat settings (e.g. "Gas: medium-high / Induction: 400°F") belongs to the step it accompanies — incorporate it into that step's text, not as a separate step.
 
 Output shape (patchSetId must be a new UUID you generate):
-{"assistant_message":"...","patchSet":{"patchSetId":"<new-uuid>","baseRecipeId":"<copy id from RECIPE CONTEXT>","baseRecipeVersion":<copy version from RECIPE CONTEXT>,"patches":[{"type":"set_title","title":"..."},{"type":"add_ingredient","text":"...","after_id":null},{"type":"add_step","text":"...","after_step_id":null}]}}
+{"assistant_message":"...","patchSet":{"patchSetId":"<new-uuid>","baseRecipeId":"<copy id from RECIPE CONTEXT>","baseRecipeVersion":<copy version from RECIPE CONTEXT>,"patches":[{"type":"set_title","title":"..."},{"type":"add_ingredient","text":"...","after_id":null},{"type":"add_step","text":"...","after_step_id":null},{"type":"add_substep","text":"...","parent_step_id":"<client_id>","after_substep_id":null}]}}
 
-Patch operations (blank canvas — always null for after_id and after_step_id):
+Patch operations (blank canvas — always null for after_id, after_step_id, and after_substep_id):
 {"type":"set_title","title":"..."}
 {"type":"add_ingredient","text":"...","after_id":null}
-{"type":"add_step","text":"...","after_step_id":null}
+{"type":"add_step","text":"...","after_step_id":null}                                    (add client_id:"<kebab-string>" when this step has numbered sub-steps)
+{"type":"add_substep","text":"...","parent_step_id":"<client_id>","after_substep_id":null}
 {"type":"add_note","text":"..."}`;
 
 const SYSTEM_PROMPT_HAS_CANVAS = `You are Sous, a cooking companion who loves food and has strong opinions about it. A recipe is on the canvas and the user is working with it.

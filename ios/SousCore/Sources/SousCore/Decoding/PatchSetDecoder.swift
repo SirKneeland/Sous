@@ -217,7 +217,7 @@ struct PatchSetDecoder: Sendable {
                 patches.append(.removeIngredient(id: id))
             case "add_step":
                 guard let text = obj["text"] as? String else { return .schemaInvalid(.patchOpMissingField) }
-                patches.append(.addStep(text: text, afterStepId: obj["after_step_id"] as? String))
+                patches.append(.addStep(text: text, afterStepId: obj["after_step_id"] as? String, clientId: obj["client_id"] as? String))
             case "update_step":
                 guard let id = obj["id"] as? String, let text = obj["text"] as? String else { return .schemaInvalid(.patchOpMissingField) }
                 patches.append(.updateStep(id: id, text: text))
@@ -230,6 +230,19 @@ struct PatchSetDecoder: Sendable {
             case "set_title":
                 guard let title = obj["title"] as? String else { return .schemaInvalid(.patchOpMissingField) }
                 patches.append(.setTitle(title: title))
+            case "add_substep":
+                guard let text = obj["text"] as? String,
+                      let parentId = obj["parent_step_id"] as? String else { return .schemaInvalid(.patchOpMissingField) }
+                patches.append(.addSubstep(text: text, parentStepClientId: parentId, afterSubstepId: obj["after_substep_id"] as? String))
+            case "update_substep":
+                guard let id = obj["id"] as? String, let text = obj["text"] as? String else { return .schemaInvalid(.patchOpMissingField) }
+                patches.append(.updateSubstep(id: id, text: text))
+            case "remove_substep":
+                guard let id = obj["id"] as? String else { return .schemaInvalid(.patchOpMissingField) }
+                patches.append(.removeSubstep(id: id))
+            case "complete_substep":
+                guard let id = obj["id"] as? String else { return .schemaInvalid(.patchOpMissingField) }
+                patches.append(.completeSubstep(id: id))
             default:
                 return .schemaInvalid(.patchOpUnknownType)
             }

@@ -359,7 +359,7 @@ struct PatchSetDecoderTests {
         """
         let result = decoder.decode(json)
         guard let dto = expectSuccess(result, extractionUsed: false) else { return }
-        guard case .addStep(let text, let afterStepId) = dto.patchSet?.patches[0] else {
+        guard case .addStep(let text, let afterStepId, _) = dto.patchSet?.patches[0] else {
             Issue.record("Expected addStep patch op")
             return
         }
@@ -379,5 +379,88 @@ struct PatchSetDecoderTests {
             return
         }
         #expect(title == "Pasta Carbonara")
+    }
+
+    // MARK: - Sub-step op decoding
+
+    @Test("add_substep decodes text, parent_step_id, and null after_substep_id")
+    func addSubstep_decodesFields() {
+        let json = """
+        {
+            "assistant_message": "Structured import",
+            "patchSet": {
+                "patchSetId": "ps-1",
+                "baseRecipeId": "r-1",
+                "baseRecipeVersion": 0,
+                "patches": [
+                    {"type": "add_step", "text": "Parboil the potatoes:", "after_step_id": null, "client_id": "parboil-phase"},
+                    {"type": "add_substep", "text": "Fill a large pot with salted water", "parent_step_id": "parboil-phase", "after_substep_id": null}
+                ]
+            }
+        }
+        """
+        let result = decoder.decode(json)
+        guard let dto = expectSuccess(result, extractionUsed: false) else { return }
+        guard case .addSubstep(let text, let parentId, let afterSubId) = dto.patchSet?.patches[1] else {
+            Issue.record("Expected addSubstep at index 1")
+            return
+        }
+        #expect(text == "Fill a large pot with salted water")
+        #expect(parentId == "parboil-phase")
+        #expect(afterSubId == nil)
+    }
+
+    @Test("add_substep missing parent_step_id → patchOpMissingField")
+    func addSubstep_missingParentStepId_fails() {
+        let json = """
+        {"assistant_message":"x","patchSet":{"patchSetId":"p1","baseRecipeId":"r1","baseRecipeVersion":0,"patches":[{"type":"add_substep","text":"step text"}]}}
+        """
+        expectFailure(decoder.decode(json), .schemaInvalid(.patchOpMissingField))
+    }
+
+    @Test("update_substep decodes id and text")
+    func updateSubstep_decodesFields() {
+        let subId = "AAAABBBB-0000-0000-0000-000000000099"
+        let json = """
+        {"assistant_message":"ok","patchSet":{"patchSetId":"ps-1","baseRecipeId":"r-1","baseRecipeVersion":1,"patches":[{"type":"update_substep","id":"\(subId)","text":"Updated sub-step text"}]}}
+        """
+        let result = decoder.decode(json)
+        guard let dto = expectSuccess(result, extractionUsed: false) else { return }
+        guard case .updateSubstep(let id, let text) = dto.patchSet?.patches[0] else {
+            Issue.record("Expected updateSubstep at index 0")
+            return
+        }
+        #expect(id == subId)
+        #expect(text == "Updated sub-step text")
+    }
+
+    @Test("remove_substep decodes id")
+    func removeSubstep_decodesId() {
+        let subId = "AAAABBBB-0000-0000-0000-000000000088"
+        let json = """
+        {"assistant_message":"ok","patchSet":{"patchSetId":"ps-1","baseRecipeId":"r-1","baseRecipeVersion":1,"patches":[{"type":"remove_substep","id":"\(subId)"}]}}
+        """
+        let result = decoder.decode(json)
+        guard let dto = expectSuccess(result, extractionUsed: false) else { return }
+        guard case .removeSubstep(let id) = dto.patchSet?.patches[0] else {
+            Issue.record("Expected removeSubstep at index 0")
+            return
+        }
+        #expect(id == subId)
+    }
+
+    @Test("complete_substep decodes id")
+    func completeSubstep_decodesId() {
+        let subId = "AAAABBBB-0000-0000-0000-000000000077"
+        let json = """
+        {"assistant_message":"ok","patchSet":{"patchSetId":"ps-1","baseRecipeId":"r-1","baseRecipeVersion":1,"patches":[{"type":"complete_substep","id":"\(subId)"}]}}
+        """
+        let result = decoder.decode(json)
+        guard let dto = expectSuccess(result, extractionUsed: false) else { return }
+        guard case .completeSubstep(let id) = dto.patchSet?.patches[0] else {
+            Issue.record("Expected completeSubstep at index 0")
+            return
+        }
+        #expect(id == subId)
     }
 }

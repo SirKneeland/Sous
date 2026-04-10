@@ -31,13 +31,25 @@ final class PatchCodableTests: XCTestCase {
     }
 
     func test_addStep_withAfterStepId() throws {
-        let patch = Patch.addStep(text: "Knead for 5 min", afterStepId: SeedRecipes.stepMixId)
+        let patch = Patch.addStep(text: "Knead for 5 min", afterStepId: SeedRecipes.stepMixId, preassignedId: nil)
         XCTAssertEqual(try roundTrip(patch), patch)
     }
 
     func test_addStep_withoutAfterStepId() throws {
-        let patch = Patch.addStep(text: "Knead for 5 min", afterStepId: nil)
+        let patch = Patch.addStep(text: "Knead for 5 min", afterStepId: nil, preassignedId: nil)
         XCTAssertEqual(try roundTrip(patch), patch)
+    }
+
+    func test_addStep_withPreassignedId_roundTrips() throws {
+        let preId = UUID()
+        let patch = Patch.addStep(text: "Parboil potatoes:", afterStepId: nil, preassignedId: preId)
+        let decoded = try roundTrip(patch)
+        XCTAssertEqual(decoded, patch)
+        if case .addStep(_, _, let decodedPreId) = decoded {
+            XCTAssertEqual(decodedPreId, preId)
+        } else {
+            XCTFail("Expected addStep")
+        }
     }
 
     func test_updateStep() throws {
@@ -91,7 +103,7 @@ final class PatchCodableTests: XCTestCase {
                 .addIngredient(text: "1 tsp yeast", afterId: nil),
                 .updateIngredient(id: SeedRecipes.ingredientSaltId, text: "2 tsp salt"),
                 .removeIngredient(id: SeedRecipes.ingredientWaterId),
-                .addStep(text: "Knead for 5 min", afterStepId: SeedRecipes.stepMixId),
+                .addStep(text: "Knead for 5 min", afterStepId: SeedRecipes.stepMixId, preassignedId: nil),
                 .updateStep(id: SeedRecipes.stepBakeId, text: "Bake at 350°F for 25 min"),
                 .addNote(text: "Round-trip test"),
             ],

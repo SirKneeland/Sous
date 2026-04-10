@@ -84,8 +84,8 @@ private actor DynamicImportOrchestrator: LLMOrchestrator {
                 .setTitle("Spaghetti Carbonara"),
                 .addIngredient(text: "200g spaghetti", afterId: nil),
                 .addIngredient(text: "100g guanciale", afterId: nil),
-                .addStep(text: "Boil pasta until al dente", afterStepId: nil),
-                .addStep(text: "Fry guanciale until crispy", afterStepId: nil),
+                .addStep(text: "Boil pasta until al dente", afterStepId: nil, preassignedId: nil),
+                .addStep(text: "Fry guanciale until crispy", afterStepId: nil, preassignedId: nil),
             ]
         )
         return .valid(

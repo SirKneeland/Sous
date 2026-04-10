@@ -34,7 +34,7 @@ extension PatchSetStatus: Codable {
 
 extension Patch: Codable {
     private enum CodingKeys: String, CodingKey {
-        case type, text, id, afterId, afterStepId, title
+        case type, text, id, afterId, afterStepId, preassignedId, title
         case parentStepId, subStepId, afterSubStepId
     }
 
@@ -52,10 +52,11 @@ extension Patch: Codable {
         case .removeIngredient(let id):
             try c.encode("removeIngredient", forKey: .type)
             try c.encode(id, forKey: .id)
-        case .addStep(let text, let afterStepId):
+        case .addStep(let text, let afterStepId, let preassignedId):
             try c.encode("addStep", forKey: .type)
             try c.encode(text, forKey: .text)
             try c.encodeIfPresent(afterStepId, forKey: .afterStepId)
+            try c.encodeIfPresent(preassignedId, forKey: .preassignedId)
         case .updateStep(let id, let text):
             try c.encode("updateStep", forKey: .type)
             try c.encode(id, forKey: .id)
@@ -109,7 +110,8 @@ extension Patch: Codable {
         case "addStep":
             self = .addStep(
                 text: try c.decode(String.self, forKey: .text),
-                afterStepId: try c.decodeIfPresent(UUID.self, forKey: .afterStepId)
+                afterStepId: try c.decodeIfPresent(UUID.self, forKey: .afterStepId),
+                preassignedId: try c.decodeIfPresent(UUID.self, forKey: .preassignedId)
             )
         case "updateStep":
             self = .updateStep(

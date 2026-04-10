@@ -443,9 +443,17 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             }
 
             // DTO → Patch (UUID parse failures are recoverable)
+            // Pre-pass: assign UUIDs to any add_step ops that carry a client_id so
+            // sibling add_substep ops can reference the correct parentStepId.
+            var clientIdToUUID: [String: UUID] = [:]
+            for dto in psDTO.patches {
+                if case .addStep(_, _, let clientId) = dto, let clientId {
+                    clientIdToUUID[clientId] = UUID()
+                }
+            }
             let patches: [Patch]
             do {
-                patches = try psDTO.patches.map { try toPatch($0) }
+                patches = try psDTO.patches.map { try toPatch($0, clientIdMap: clientIdToUUID) }
             } catch {
                 let sig = "validationRecoverable:INVALID_ID"
                 if sig == context.lastFailureSignature {
@@ -488,7 +496,7 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                 summary: psDTO.summary.map { [$0.title, $0.bullets?.joined(separator: "; ")].compactMap { $0 }.joined(separator: " — ") }
             )
 
-            switch PatchValidator.validate(patchSet: patchSet, recipe: request.recipeSnapshotForPrompt) {
+            switch PatchValidator.validate(patchSet: patchSet, recipe: request.recipeSnapshotForPrompt, hardAvoids: request.userPrefs.hardAvoids) {
             case .valid:
                 return .valid(
                     patchSet: patchSet,
@@ -705,19 +713,22 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             7. In assistant_message, briefly acknowledge the loaded recipe by name and invite the user to adapt it (serving size, substitutions, dietary changes, etc.). Keep it short — one or two sentences.
 
             FORMATTING RULES — for richly-formatted sources (ChatGPT output, markdown, emoji-decorated text):
-            8. Nested bullet points and sub-items belong to their parent step. Fold them into the parent step's text rather than creating separate steps. Example: if a step says "When soft + lightly golden:" followed by indented sub-bullets, those sub-bullets are part of that step — not independent steps.
+            8. When a section header introduces a numbered or lettered list of sub-steps (e.g. "Parboil the potatoes:" followed by "1. Fill pot…", "2. Add potatoes…"), emit the header as add_step with a short kebab-case client_id, then emit each numbered item as add_substep with parent_step_id matching that client_id. Keep each sub-step's text verbatim. Do NOT fold numbered sub-steps into the header text.
+               Example source: "Parboil the potatoes:\n1. Fill a large pot with salted water and bring to a boil\n2. Add diced potatoes and cook 8 minutes\n3. Drain and set aside"
+               Example patches: {"type":"add_step","text":"Parboil the potatoes:","after_step_id":null,"client_id":"parboil-phase"} then {"type":"add_substep","text":"Fill a large pot with salted water and bring to a boil","parent_step_id":"parboil-phase","after_substep_id":null} then {"type":"add_substep","text":"Add diced potatoes and cook 8 minutes","parent_step_id":"parboil-phase","after_substep_id":null} then {"type":"add_substep","text":"Drain and set aside","parent_step_id":"parboil-phase","after_substep_id":null}
             9. Emoji bullets used for tips or emphasis (e.g. 👉 Don't move too early) are annotations on their surrounding step context, not standalone steps. Incorporate them into the nearest logical step.
             10. Omit non-actionable narrative sections entirely. This includes sections titled things like "What success looks like", "Common failure modes", "Game plan", closing remarks, and upgrade suggestions. Only extract ingredients and actionable cooking steps.
             11. Section headers (e.g. "Meatloaf = crustmaxx", "Brioche = anti-sog system") are grouping labels, not steps. Omit them or fold their meaning into the first step of that section.
             12. Inline context like heat settings (e.g. "Gas: medium-high / Induction: 400°F") belongs to the step it accompanies — incorporate it into that step's text, not as a separate step.
 
             Output shape (patchSetId must be a new UUID you generate):
-            {"assistant_message":"...","patchSet":{"patchSetId":"<new-uuid>","baseRecipeId":"<copy id from RECIPE CONTEXT>","baseRecipeVersion":<copy version from RECIPE CONTEXT>,"patches":[{"type":"set_title","title":"..."},{"type":"add_ingredient","text":"...","after_id":null},{"type":"add_step","text":"...","after_step_id":null}]}}
+            {"assistant_message":"...","patchSet":{"patchSetId":"<new-uuid>","baseRecipeId":"<copy id from RECIPE CONTEXT>","baseRecipeVersion":<copy version from RECIPE CONTEXT>,"patches":[{"type":"set_title","title":"..."},{"type":"add_ingredient","text":"...","after_id":null},{"type":"add_step","text":"...","after_step_id":null},{"type":"add_substep","text":"...","parent_step_id":"<client_id>","after_substep_id":null}]}}
 
-            Patch operations (blank canvas — always null for after_id and after_step_id):
+            Patch operations (blank canvas — always null for after_id, after_step_id, and after_substep_id):
             {"type":"set_title","title":"..."}
             {"type":"add_ingredient","text":"...","after_id":null}
-            {"type":"add_step","text":"...","after_step_id":null}
+            {"type":"add_step","text":"...","after_step_id":null}                                    (add client_id:"<kebab-string>" when this step has numbered sub-steps)
+            {"type":"add_substep","text":"...","parent_step_id":"<client_id>","after_substep_id":null}
             {"type":"add_note","text":"..."}
             """
         } else if hasCanvas {
@@ -733,12 +744,13 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             RULES — never violate:
             1. Never reprint the full recipe. The canvas is the source of truth.
             2. Output JSON only. No markdown. No code fences. No prose outside JSON.
-            3. Never propose changes to any step with status "done".
-            4. When you cannot fulfill a request due to a constraint — such as a step being marked done, a hard-avoid ingredient conflict, or any other restriction — you must always explain the constraint clearly in assistant_message and offer a workaround or recovery path. Never return an empty assistant_message.
-            5. Handle vague, incomplete, or casual input gracefully. Don't ask the user to rephrase — read the intent, make a reasonable interpretation, and act on it. Only ask a question when you genuinely cannot proceed without one specific piece of information, and make that question feel natural, not like a form.
-            6. Emit patchSet when the user's message implies a recipe change — including when they are answering a clarifying question you previously asked. If intent is still genuinely unclear after all context, ask one short natural question and emit patchSet: null.
-            7. Equipment preferences in RECIPE CONTEXT are additive — assume standard home kitchen basics are always available. If no equipment is listed, assume a fully equipped standard home kitchen. Never restrict suggestions to only what's listed.
-            8. If the user mentions anything personal about themselves that would be useful to know in a future cooking session — including foods they love, foods they hate or avoid, dietary restrictions, cooking methods or equipment they use, who they cook for, or any other standing preference — include a concise third-person "proposed_memory" string (e.g. "loves mashed potatoes", "avoids cilantro", "cooks on induction", "feeds two young kids"). Write it as a short third-person phrase with no subject — not "I" or "User". Omit if it's a one-time request for this recipe ("add more salt to this"), a question, or already in the user's saved memories. When in doubt, propose it.
+            3. DONE STEPS ARE IMMUTABLE — HARD PROHIBITION. Before emitting any patchSet, check the "done step IDs (immutable)" list in RECIPE CONTEXT. Never include a patch that targets any of those IDs — not update_step, not remove_step, not any other operation. This applies even if the user explicitly asks. If the user asks to change a done step, set patchSet: null, explain in assistant_message that the step is already completed and cannot be changed, and offer a forward-looking workaround (e.g. add a corrective step after the done step). Wrong: {"type":"update_step","id":"<done-step-id>","text":"..."}. Correct: {"type":"add_step","text":"<corrective action>","after_step_id":"<done-step-id>"}.
+            4. HARD-AVOID CONFLICTS — HARD PROHIBITION. Before emitting any patchSet that adds or substitutes an ingredient, check hardAvoids in RECIPE CONTEXT. If the ingredient matches a hard-avoid — including variants and derived forms (e.g. shrimp = shellfish, peanuts = nuts) — you MUST: (a) set patchSet: null, (b) name the conflict explicitly in assistant_message (e.g. "shrimp is shellfish and you have 'no shellfish' listed"), and (c) ask the user how to proceed or offer a compliant alternative. Never silently add a violating ingredient. Never emit a patchSet containing it. This applies even if the user asks directly — flag first, patch only after explicit confirmation.
+            5. When you cannot fulfill a request due to a constraint — such as a step being marked done, a hard-avoid ingredient conflict, or any other restriction — you must always explain the constraint clearly in assistant_message and offer a workaround or recovery path. Never return an empty assistant_message.
+            6. Handle vague, incomplete, or casual input gracefully. Don't ask the user to rephrase — read the intent, make a reasonable interpretation, and act on it. Only ask a question when you genuinely cannot proceed without one specific piece of information, and make that question feel natural, not like a form.
+            7. Emit patchSet when the user's message implies a recipe change — including when they are answering a clarifying question you previously asked. If intent is still genuinely unclear after all context, ask one short natural question and emit patchSet: null.
+            8. Equipment preferences in RECIPE CONTEXT are additive — assume standard home kitchen basics are always available. If no equipment is listed, assume a fully equipped standard home kitchen. Never restrict suggestions to only what's listed.
+            9. If the user mentions anything personal about themselves that would be useful to know in a future cooking session — including foods they love, foods they hate or avoid, dietary restrictions, cooking methods or equipment they use, who they cook for, or any other standing preference — include a concise third-person "proposed_memory" string (e.g. "loves mashed potatoes", "avoids cilantro", "cooks on induction", "feeds two young kids"). Write it as a short third-person phrase with no subject — not "I" or "User". Omit if it's a one-time request for this recipe ("add more salt to this"), a question, or already in the user's saved memories. When in doubt, propose it.
 
             Output shape — no changes (proposed_memory is optional, omit when not relevant):
             {"assistant_message":"...","patchSet":null}
@@ -752,10 +764,22 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             {"type":"add_ingredient","text":"...","after_id":null}
             {"type":"update_ingredient","id":"<uuid>","text":"..."}
             {"type":"remove_ingredient","id":"<uuid>"}
-            {"type":"add_step","text":"...","after_step_id":null}
+            {"type":"add_step","text":"...","after_step_id":null}            (add client_id:"<kebab-string>" when this new step will have sub-steps added in the same patchSet)
             {"type":"update_step","id":"<uuid>","text":"..."}
             {"type":"remove_step","id":"<uuid>"}
+            {"type":"add_substep","text":"...","parent_step_id":"<uuid-or-client_id>","after_substep_id":null}   (parent_step_id is the UUID of an existing step, or the client_id of a new add_step in the same patchSet)
+            {"type":"update_substep","id":"<uuid>","text":"..."}
+            {"type":"remove_substep","id":"<uuid>"}
+            {"type":"complete_substep","id":"<uuid>"}
             {"type":"add_note","text":"..."}
+
+            STEP DECOMPOSITION — few-shot example:
+            Scenario: step s3 has id "a1b2c3d4-0000-0000-0000-000000000003" and text "Make the sauce: whisk soy sauce, sesame oil, garlic, ginger, and cornstarch." User says "Can you break that sauce step into smaller pieces?"
+            WRONG — never do this:
+            {"patches":[{"type":"remove_step","id":"a1b2c3d4-0000-0000-0000-000000000003"},{"type":"add_step","text":"Whisk soy sauce and sesame oil","after_step_id":null},{"type":"add_step","text":"Add minced garlic and grated ginger","after_step_id":null},{"type":"add_step","text":"Stir in cornstarch until smooth","after_step_id":null}]}
+            CORRECT — always do this:
+            {"patches":[{"type":"update_step","id":"a1b2c3d4-0000-0000-0000-000000000003","text":"Make the sauce:"},{"type":"add_substep","text":"Whisk together soy sauce and sesame oil","parent_step_id":"a1b2c3d4-0000-0000-0000-000000000003","after_substep_id":null},{"type":"add_substep","text":"Add minced garlic and grated ginger","parent_step_id":"a1b2c3d4-0000-0000-0000-000000000003","after_substep_id":null},{"type":"add_substep","text":"Stir in cornstarch until smooth","parent_step_id":"a1b2c3d4-0000-0000-0000-000000000003","after_substep_id":null}]}
+            Rule: when decomposing a step, ALWAYS update_step the parent to a short header label and emit add_substep for each piece. NEVER remove_step + add_step.
             """
         } else {
             return """
@@ -817,6 +841,11 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             "personalityMode: \(prefs.personalityMode)"
         ]
 
+        if !prefs.hardAvoids.isEmpty {
+            let avoidsWarning = prefs.hardAvoids.joined(separator: ", ")
+            lines.append("⚠️ HARD AVOIDS ACTIVE: \(avoidsWarning). Any patchSet containing these ingredients is invalid and must not be generated. If the user's request requires one of these ingredients, set patchSet: null, name the conflict explicitly in assistant_message, and ask the user how to proceed.")
+        }
+
         if let serving = prefs.servingSize {
             lines.append("defaultServings: \(serving) people")
         }
@@ -840,9 +869,17 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
 
     // MARK: - DTO → Patch
 
-    private enum ConversionError: Error { case invalidUUID }
+    private enum ConversionError: Error {
+        case invalidUUID
+        /// Operation type is recognised at the DTO layer but has no corresponding
+        /// Patch case in the current data model (e.g. complete_substep).
+        case unsupportedOperation
+    }
 
-    private func toPatch(_ dto: LLMPatchOpDTO) throws -> Patch {
+    /// `clientIdMap` carries the pre-generated UUIDs for any `addStep` DTOs that
+    /// supplied a `client_id`.  Must be built before calling this function (see the
+    /// pre-pass in `decodeAndValidate`).
+    private func toPatch(_ dto: LLMPatchOpDTO, clientIdMap: [String: UUID] = [:]) throws -> Patch {
         func uuid(_ s: String) throws -> UUID {
             guard let u = UUID(uuidString: s) else { throw ConversionError.invalidUUID }
             return u
@@ -854,8 +891,11 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             return .updateIngredient(id: try uuid(idStr), text: text)
         case .removeIngredient(let idStr):
             return .removeIngredient(id: try uuid(idStr))
-        case .addStep(let text, let afterStepIdStr):
-            return .addStep(text: text, afterStepId: try afterStepIdStr.map { try uuid($0) })
+        case .addStep(let text, let afterStepIdStr, let clientId):
+            // Use the pre-generated UUID when a client_id was supplied, so sibling
+            // addSubStep patches can reference this step via parentStepId.
+            let preassignedId = clientId.flatMap { clientIdMap[$0] }
+            return .addStep(text: text, afterStepId: try afterStepIdStr.map { try uuid($0) }, preassignedId: preassignedId)
         case .updateStep(let idStr, let text):
             return .updateStep(id: try uuid(idStr), text: text)
         case .removeStep(let idStr):
@@ -864,6 +904,21 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             return .addNote(text: text)
         case .setTitle(let title):
             return .setTitle(title)
+        case .addSubstep(let text, let parentClientId, let afterSubstepIdStr):
+            // Look up the pre-assigned UUID for the parent step.  If the model
+            // referenced an unknown client_id, fall back to a flat addStep so the
+            // import still succeeds rather than failing the whole patchSet.
+            guard let parentUUID = clientIdMap[parentClientId] else {
+                return .addStep(text: text, afterStepId: nil, preassignedId: nil)
+            }
+            return .addSubStep(parentStepId: parentUUID, text: text,
+                               afterSubStepId: try afterSubstepIdStr.map { try uuid($0) })
+        case .updateSubstep(let idStr, let text):
+            return .updateStep(id: try uuid(idStr), text: text)
+        case .removeSubstep(let idStr):
+            return .removeStep(id: try uuid(idStr))
+        case .completeSubstep:
+            throw ConversionError.unsupportedOperation
         }
     }
 

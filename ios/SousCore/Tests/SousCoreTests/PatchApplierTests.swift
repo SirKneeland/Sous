@@ -99,7 +99,7 @@ struct PatchApplierTests {
         let patchSet = PatchSet(
             baseRecipeId: recipe.id,
             baseRecipeVersion: 1,
-            patches: [.addStep(text: "Slice and serve", afterStepId: nil)]
+            patches: [.addStep(text: "Slice and serve", afterStepId: nil, preassignedId: nil)]
         )
         let updated = try PatchApplier.apply(patchSet: patchSet, to: recipe)
         #expect(updated.steps.count == 4)
@@ -113,7 +113,7 @@ struct PatchApplierTests {
         let patchSet = PatchSet(
             baseRecipeId: recipe.id,
             baseRecipeVersion: 1,
-            patches: [.addStep(text: "Knead dough", afterStepId: SeedRecipes.stepMixId)]
+            patches: [.addStep(text: "Knead dough", afterStepId: SeedRecipes.stepMixId, preassignedId: nil)]
         )
         let updated = try PatchApplier.apply(patchSet: patchSet, to: recipe)
         #expect(updated.steps.count == 4)
@@ -307,7 +307,7 @@ struct PatchApplierTests {
         let patchSet = PatchSet(
             baseRecipeId: recipe.id,
             baseRecipeVersion: 1,
-            patches: [.addStep(text: "Check crust", afterStepId: SeedRecipes.stepBakeId)]
+            patches: [.addStep(text: "Check crust", afterStepId: SeedRecipes.stepBakeId, preassignedId: nil)]
         )
         let updated = try PatchApplier.apply(patchSet: patchSet, to: recipe)
         #expect(updated.steps.count == 4)

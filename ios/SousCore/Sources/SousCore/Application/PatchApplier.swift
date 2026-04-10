@@ -40,8 +40,9 @@ public enum PatchApplier {
             case .removeIngredient(let id):
                 ingredients.removeAll { $0.id == id }
 
-            case .addStep(let text, let afterStepId):
-                let newStep = Step(text: text, status: .todo)
+            case .addStep(let text, let afterStepId, let preassignedId):
+                let stepId = preassignedId ?? UUID()
+                let newStep = Step(id: stepId, text: text, status: .todo)
                 if let afterStepId = afterStepId, let idx = steps.firstIndex(where: { $0.id == afterStepId }) {
                     steps.insert(newStep, at: idx + 1)
                 } else {

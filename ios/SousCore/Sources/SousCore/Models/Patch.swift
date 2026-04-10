@@ -4,7 +4,11 @@ public enum Patch: Equatable, Sendable {
     case addIngredient(text: String, afterId: UUID?)
     case updateIngredient(id: UUID, text: String)
     case removeIngredient(id: UUID)
-    case addStep(text: String, afterStepId: UUID?)
+    /// `preassignedId` lets the orchestrator specify the UUID that PatchApplier will
+    /// assign to the new step, enabling sibling `addSubStep` patches in the same
+    /// patchSet to reference it via `parentStepId`. When nil, PatchApplier generates
+    /// a fresh UUID as before.
+    case addStep(text: String, afterStepId: UUID?, preassignedId: UUID?)
     case updateStep(id: UUID, text: String)
     case removeStep(id: UUID)
     case addNote(text: String)

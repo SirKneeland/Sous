@@ -1082,7 +1082,7 @@ final class AppStore: ObservableObject {
                 .updateIngredient(id: Self.ingredientSaltId, text: "2 tsp salt"),
                 .removeIngredient(id: Self.ingredientWaterId),
 
-                .addStep(text: "Knead dough for 5 minutes", afterStepId: Self.stepMixId),
+                .addStep(text: "Knead dough for 5 minutes", afterStepId: Self.stepMixId, preassignedId: nil),
                 .updateStep(id: Self.stepBakeId, text: "Bake at 350°F for 30 min"),
 
                 .addNote(text: "From UI"),

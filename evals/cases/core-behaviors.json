@@ -298,6 +298,59 @@
     }
   },
   {
+    "name": "import-substep-structure",
+    "description": "Import of a recipe where a phase header 'Parboil the potatoes:' is followed by 5 numbered sub-steps. The model must emit the header as add_step with a client_id and each numbered item as add_substep with the matching parent_step_id — not fold them into the header text.",
+    "promptType": "import",
+    "input": {
+      "recipeState": {
+        "version": 0,
+        "title": "",
+        "ingredients": [],
+        "steps": []
+      },
+      "chatHistory": [],
+      "userMessage": "Warm Potato Salad\n\nIngredients:\n- 1.5 lbs Yukon Gold potatoes, diced\n- 3 tbsp olive oil\n- 2 tbsp white wine vinegar\n- 1 tsp Dijon mustard\n- 2 stalks celery, sliced\n- 2 tbsp fresh parsley, chopped\n- Salt and pepper to taste\n\nInstructions:\n\nParboil the potatoes:\n1. Fill a large pot with salted water and bring to a boil\n2. Add diced potatoes and cook for 8 minutes until just tender\n3. Drain and transfer to a large bowl\n4. Toss with 1 tbsp olive oil while still warm\n5. Season with salt and set aside\n\nMake the dressing:\nWhisk together remaining olive oil, white wine vinegar, and Dijon mustard.\n\nAssemble the salad:\nAdd sliced celery and chopped parsley to the potatoes. Pour dressing over and toss gently. Adjust seasoning and serve warm or at room temperature."
+    },
+    "expected": {
+      "shouldPatch": true,
+      "notes": "The source text has a phase header 'Parboil the potatoes:' followed by 5 numbered sub-steps. The model must emit the header as add_step with a client_id field (e.g. 'parboil-phase'), then emit each of the 5 numbered items as add_substep with a parent_step_id matching that client_id. The 'Make the dressing' and 'Assemble the salad' sections are single-action steps and should be emitted as regular add_step patches. The patchSet must also include set_title and add_ingredient patches for all ingredients listed. A failure mode is folding the 5 numbered items into the header step text instead of emitting them as add_substep operations."
+    }
+  },
+  {
+    "name": "mid-cook-substep-edit",
+    "skip": true,
+    "skipReason": "Known model capability gap: gpt-5.4-mini consistently uses remove_step + add_step instead of update_step + add_substep when decomposing steps. Scored 0 on every run (6/6). Re-enable when the eval model is upgraded.",
+    "description": "Canvas exists with a multi-action sauce step (todo). User asks to break that step into smaller pieces. Sous should emit add_substep operations targeting the existing step's UUID, not fold everything into a single update_step.",
+    "promptType": "has_canvas",
+    "input": {
+      "recipeState": {
+        "version": 2,
+        "title": "Weeknight Stir-Fry",
+        "ingredients": [
+          { "id": "i1", "name": "chicken breast", "quantity": "1", "unit": "lb", "checked": true },
+          { "id": "i2", "name": "soy sauce", "quantity": "3", "unit": "tbsp", "checked": false },
+          { "id": "i3", "name": "sesame oil", "quantity": "1", "unit": "tbsp", "checked": false },
+          { "id": "i4", "name": "garlic", "quantity": "3", "unit": "cloves", "checked": false },
+          { "id": "i5", "name": "fresh ginger", "quantity": "1", "unit": "tsp", "checked": false },
+          { "id": "i6", "name": "cornstarch", "quantity": "1", "unit": "tsp", "checked": false }
+        ],
+        "steps": [
+          { "id": "s1", "text": "Slice chicken breast into thin strips.", "status": "done" },
+          { "id": "s2", "text": "Heat wok over high heat until smoking.", "status": "done" },
+          { "id": "s3", "text": "Make the sauce: whisk together soy sauce, sesame oil, minced garlic, grated ginger, and cornstarch until smooth.", "status": "todo" },
+          { "id": "s4", "text": "Stir-fry chicken 3–4 minutes until cooked through.", "status": "todo" },
+          { "id": "s5", "text": "Pour sauce over chicken and toss to coat. Cook 1 minute more.", "status": "todo" }
+        ]
+      },
+      "chatHistory": [],
+      "userMessage": "Can you break that sauce step into smaller pieces?"
+    },
+    "expected": {
+      "shouldPatch": true,
+      "notes": "User wants step s3 decomposed into individual sub-steps. Sous must emit a patchSet that either (a) emits update_step targeting s3 to shorten its text to a phase header (e.g. 'Make the sauce:') and then emits add_substep operations with parent_step_id 's3' for each individual action, or (b) emits only add_substep operations with parent_step_id 's3'. Must not modify done steps s1 or s2. Must not fold everything into a single update_step rewrite that stays as a top-level step with no sub-steps."
+    }
+  },
+  {
     "name": "rejected-patch-context",
     "description": "A previous patch adding rosemary was rejected by the user. Sous must not re-propose rosemary in the next turn.",
     "promptType": "has_canvas",

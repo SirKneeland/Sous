@@ -333,7 +333,7 @@ struct PatchReviewView: View {
 
         for patch in patchSet.patches {
             switch patch {
-            case .addStep(let text, let afterStepId):
+            case .addStep(let text, let afterStepId, _):
                 let newRow = DiffRow.added(id: UUID(), text: text)
                 if let afterStepId, let idx = rows.firstIndex(where: { $0.id == afterStepId }) {
                     rows.insert(newRow, at: idx + 1)
@@ -439,6 +439,8 @@ struct PatchReviewView: View {
             return "Invalid sub-step ID: \(id.uuidString)"
         case .parentStepDone(let id):
             return "Parent step is already done: \(id.uuidString)"
+        case .hardAvoidViolation(let ingredient):
+            return "Contains a hard-avoid ingredient: \(ingredient)"
         }
     }
 }

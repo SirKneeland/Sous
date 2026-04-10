@@ -11,6 +11,8 @@ public enum PatchValidationError: Equatable, Sendable {
     case invalidSubStepId(UUID)
     /// A completeSubStep was attempted on a parent step whose effectiveStatus is already .done.
     case parentStepDone(UUID)
+    /// A patch introduces text containing an ingredient that matches a hard-avoid preference.
+    case hardAvoidViolation(ingredient: String)
 
     public var code: PatchValidationErrorCode {
         switch self {
@@ -30,6 +32,8 @@ public enum PatchValidationError: Equatable, Sendable {
             return .INVALID_SUBSTEP_ID
         case .parentStepDone:
             return .PARENT_STEP_DONE
+        case .hardAvoidViolation:
+            return .HARD_AVOID_VIOLATION
         }
     }
 }
@@ -42,6 +46,7 @@ public enum PatchValidationErrorCode: String, Sendable {
     case INTERNAL_CONFLICT
     case INVALID_SUBSTEP_ID
     case PARENT_STEP_DONE
+    case HARD_AVOID_VIOLATION
 }
 
 public enum PatchValidationResult: Equatable, Sendable {
@@ -50,7 +55,13 @@ public enum PatchValidationResult: Equatable, Sendable {
 }
 
 public enum PatchValidator {
-    public static func validate(patchSet: PatchSet, recipe: Recipe) -> PatchValidationResult {
+    /// Returns the first hard-avoid keyword found as a case-insensitive substring in `text`, or nil.
+    private static func hardAvoidMatch(in text: String, hardAvoids: [String]) -> String? {
+        let lower = text.lowercased()
+        return hardAvoids.first { lower.contains($0.lowercased()) }
+    }
+
+    public static func validate(patchSet: PatchSet, recipe: Recipe, hardAvoids: [String] = []) -> PatchValidationResult {
         var errors: [PatchValidationError] = []
 
         // Version check
@@ -65,7 +76,10 @@ public enum PatchValidator {
 
         for patch in patchSet.patches {
             switch patch {
-            case .addIngredient(_, let afterId):
+            case .addIngredient(let text, let afterId):
+                if let match = hardAvoidMatch(in: text, hardAvoids: hardAvoids) {
+                    errors.append(.hardAvoidViolation(ingredient: match))
+                }
                 if let afterId = afterId {
                     let existsInRecipe = recipe.ingredients.contains { $0.id == afterId }
                     let alreadyRemoved = removedIngredientIds.contains(afterId)
@@ -74,7 +88,10 @@ public enum PatchValidator {
                     }
                 }
 
-            case .updateIngredient(let id, _):
+            case .updateIngredient(let id, let text):
+                if let match = hardAvoidMatch(in: text, hardAvoids: hardAvoids) {
+                    errors.append(.hardAvoidViolation(ingredient: match))
+                }
                 let existsInRecipe = recipe.ingredients.contains { $0.id == id }
                 let alreadyRemoved = removedIngredientIds.contains(id)
                 if !existsInRecipe || alreadyRemoved {
@@ -90,7 +107,10 @@ public enum PatchValidator {
                     removedIngredientIds.insert(id)
                 }
 
-            case .addStep(_, let afterStepId):
+            case .addStep(let text, let afterStepId, _):
+                if let match = hardAvoidMatch(in: text, hardAvoids: hardAvoids) {
+                    errors.append(.hardAvoidViolation(ingredient: match))
+                }
                 if let afterStepId = afterStepId {
                     let existsInRecipe = recipe.steps.contains { $0.id == afterStepId }
                     let alreadyRemoved = removedStepIds.contains(afterStepId)
@@ -99,7 +119,10 @@ public enum PatchValidator {
                     }
                 }
 
-            case .updateStep(let id, _):
+            case .updateStep(let id, let text):
+                if let match = hardAvoidMatch(in: text, hardAvoids: hardAvoids) {
+                    errors.append(.hardAvoidViolation(ingredient: match))
+                }
                 let alreadyRemoved = removedStepIds.contains(id)
                 guard let step = recipe.steps.first(where: { $0.id == id }), !alreadyRemoved else {
                     errors.append(.invalidStepId(id))
@@ -131,7 +154,10 @@ public enum PatchValidator {
             case .setTitle:
                 break
 
-            case .addSubStep(let parentStepId, _, let afterSubStepId):
+            case .addSubStep(let parentStepId, let text, let afterSubStepId):
+                if let match = hardAvoidMatch(in: text, hardAvoids: hardAvoids) {
+                    errors.append(.hardAvoidViolation(ingredient: match))
+                }
                 let parentRemoved = removedStepIds.contains(parentStepId)
                 guard let parent = recipe.steps.first(where: { $0.id == parentStepId }), !parentRemoved else {
                     errors.append(.invalidStepId(parentStepId))
