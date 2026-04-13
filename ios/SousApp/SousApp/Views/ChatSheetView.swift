@@ -15,6 +15,7 @@ struct ChatSheetView: View {
     @State private var composerHeight: CGFloat = 36
     @State private var showPhotoSheet = false
     @State private var inputBarDragOffset: CGFloat = 0
+    @State private var peakDragVelocity: CGFloat = 0
     @FocusState private var isComposerFocused: Bool
 
     var body: some View {
@@ -438,16 +439,23 @@ struct ChatSheetView: View {
         DragGesture(minimumDistance: 10)
             .onChanged { value in
                 guard !isFullscreen else { return }
+                // Reset peak at the start of each new gesture (first event is always small).
+                if abs(value.translation.height) < 15 && abs(value.translation.width) < 15 {
+                    peakDragVelocity = 0
+                }
                 let raw = value.translation.height
                 guard raw > 0 else {
                     inputBarDragOffset = 0
                     return
                 }
                 inputBarDragOffset = min(raw * 0.65, 60)
+                let vy = value.velocity.height
+                if vy > peakDragVelocity { peakDragVelocity = vy }
             }
             .onEnded { value in
                 guard !isFullscreen else { return }
-                if value.translation.height >= 20 {
+                let commits = value.translation.height >= 50 || peakDragVelocity >= 400
+                if commits {
                     inputBarDragOffset = 0
                     thumbDropCommit()
                 } else {

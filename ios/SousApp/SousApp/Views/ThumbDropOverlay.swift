@@ -68,6 +68,15 @@ struct ThumbDropOverlay: UIViewRepresentable {
         private var cancelFired = false
         /// Guards against firing the entry haptic more than once per gesture.
         private var entryHapticFired = false
+        /// Slingshot thresholds: fire once as translation crosses 25/50/75% of the
+        /// 20pt commit distance. Each fires at most once per gesture — back-and-forth
+        /// movement does not re-trigger a threshold that has already fired.
+        private var sling1Fired = false  // 30pt → .light
+        private var sling2Fired = false  // 60pt → .medium
+        private var sling3Fired = false  // 90pt → .rigid
+        /// Peak downward velocity (pt/s) seen during .changed. End-state velocity
+        /// is unreliable on fast flicks (reads negative at lift-off); peak is stable.
+        private var peakVelocity: CGFloat = 0
 
         init(isActive: Bool,
              onOffsetChanged: @escaping (CGFloat) -> Void,
@@ -85,6 +94,10 @@ struct ThumbDropOverlay: UIViewRepresentable {
                 hasFailed = false
                 cancelFired = false
                 entryHapticFired = false
+                sling1Fired = false
+                sling2Fired = false
+                sling3Fired = false
+                peakVelocity = 0
 
             case .changed:
                 guard !hasFailed else { return }
@@ -103,11 +116,28 @@ struct ThumbDropOverlay: UIViewRepresentable {
                 }
 
                 if dy > 0 {
+                    // Track peak downward velocity across the full gesture.
+                    let vy = gesture.velocity(in: gesture.view).y
+                    if vy > peakVelocity { peakVelocity = vy }
                     // Fire the entry haptic once when the gesture first passes the
                     // angle gate and is confirmed as a valid downward ThumbDrop.
                     if !entryHapticFired {
                         entryHapticFired = true
                         UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    }
+                    // Slingshot haptics: fire once as translation crosses each
+                    // threshold. Back-and-forth movement does not re-trigger.
+                    if dy >= 30 && !sling1Fired {
+                        sling1Fired = true
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    }
+                    if dy >= 60 && !sling2Fired {
+                        sling2Fired = true
+                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    }
+                    if dy >= 90 && !sling3Fired {
+                        sling3Fired = true
+                        UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
                     }
                     // Dampen offset as the existing input bar gesture does.
                     onOffsetChanged(min(dy * 0.65, 60))
@@ -119,7 +149,8 @@ struct ThumbDropOverlay: UIViewRepresentable {
             case .ended:
                 guard !hasFailed else { return }
                 let translation = gesture.translation(in: gesture.view)
-                if translation.y >= 20 {
+                let commits = translation.y >= 50 || peakVelocity >= 400
+                if commits {
                     onOffsetChanged(0)
                     onCommit()
                 } else {
