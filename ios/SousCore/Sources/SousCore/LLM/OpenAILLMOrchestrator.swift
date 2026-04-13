@@ -751,6 +751,7 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             7. Emit patchSet when the user's message implies a recipe change — including when they are answering a clarifying question you previously asked. If intent is still genuinely unclear after all context, ask one short natural question and emit patchSet: null.
             8. Equipment preferences in RECIPE CONTEXT are additive — assume standard home kitchen basics are always available. If no equipment is listed, assume a fully equipped standard home kitchen. Never restrict suggestions to only what's listed.
             9. If the user mentions anything personal about themselves that would be useful to know in a future cooking session — including foods they love, foods they hate or avoid, dietary restrictions, cooking methods or equipment they use, who they cook for, or any other standing preference — include a concise third-person "proposed_memory" string (e.g. "loves mashed potatoes", "avoids cilantro", "cooks on induction", "feeds two young kids"). Write it as a short third-person phrase with no subject — not "I" or "User". Omit if it's a one-time request for this recipe ("add more salt to this"), a question, or already in the user's saved memories. When in doubt, propose it.
+            10. assistant_message must always be plain conversational prose — never JSON, never a patchSet, never any structured data. The patchSet always goes in the top-level patchSet field of the response object. Embedding a patchSet or any JSON inside assistant_message is always wrong.
 
             Output shape — no changes (proposed_memory is optional, omit when not relevant):
             {"assistant_message":"...","patchSet":null}
@@ -780,6 +781,20 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             CORRECT — always do this:
             {"patches":[{"type":"update_step","id":"a1b2c3d4-0000-0000-0000-000000000003","text":"Make the sauce:"},{"type":"add_substep","text":"Whisk together soy sauce and sesame oil","parent_step_id":"a1b2c3d4-0000-0000-0000-000000000003","after_substep_id":null},{"type":"add_substep","text":"Add minced garlic and grated ginger","parent_step_id":"a1b2c3d4-0000-0000-0000-000000000003","after_substep_id":null},{"type":"add_substep","text":"Stir in cornstarch until smooth","parent_step_id":"a1b2c3d4-0000-0000-0000-000000000003","after_substep_id":null}]}
             Rule: when decomposing a step, ALWAYS update_step the parent to a short header label and emit add_substep for each piece. NEVER remove_step + add_step.
+
+            MOVING A STEP — few-shot example:
+            Scenario: step s3 has id "a1b2c3d4-0000-0000-0000-000000000003" and text "Brown the sausage." It appears in the middle of the recipe. User says "Move the sausage browning to the beginning."
+            WRONG — never do this:
+            {"patches":[{"type":"add_step","text":"Brown the sausage.","after_step_id":null}]}
+            CORRECT — always do this:
+            {"patches":[{"type":"add_step","text":"Brown the sausage.","after_step_id":null},{"type":"remove_step","id":"a1b2c3d4-0000-0000-0000-000000000003"}]}
+            Rule: moving a step always requires both add_step at the new position AND remove_step on the original. Never add without removing. Both must be in the same patchSet.
+
+            REWRITING / WIPING THE PROCEDURE — few-shot example:
+            Scenario: the recipe has steps s1–s5 in the wrong order. User says "Wipe the steps and start over" or "The order is wrong, redo the procedure."
+            WRONG — never do this: emit only add_step patches for the correct steps, leaving original steps in place.
+            CORRECT — always do this: emit remove_step for every step being replaced, then emit add_step for each step in the correct sequence, all in the same patchSet.
+            Rule: "start over," "redo," or "wipe" means remove every incorrect or displaced step AND add the full correct sequence. Never leave a step in place unless it is explicitly correct and correctly positioned.
             """
         } else {
             return """

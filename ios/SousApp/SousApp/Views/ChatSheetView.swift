@@ -25,8 +25,20 @@ struct ChatSheetView: View {
                 mainChatView
             }
         }
+        // Root-level ThumbDrop zone: activates for the entire bottom fifth of the
+        // screen when the chat sheet is presented in non-fullscreen (sheet) mode.
+        // The input bar's own DragGesture remains unchanged and coexists with this.
+        .background {
+            ThumbDropOverlay(
+                isActive: !isFullscreen,
+                onOffsetChanged: { inputBarDragOffset = $0 },
+                onCommit: thumbDropCommit,
+                onCancel: thumbDropCancel
+            )
+        }
 #if DEBUG
         .modifier(DebugTapExportModifier(store: store))
+
 #endif
         .onAppear {
             if store.quotedRowContext != nil {
@@ -435,21 +447,32 @@ struct ChatSheetView: View {
             }
             .onEnded { value in
                 guard !isFullscreen else { return }
-                let downward = value.translation.height >= 20
-                guard downward else {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                        inputBarDragOffset = 0
-                    }
-                    return
+                if value.translation.height >= 20 {
+                    inputBarDragOffset = 0
+                    thumbDropCommit()
+                } else {
+                    thumbDropCancel()
                 }
-                inputBarDragOffset = 0
-                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                UIApplication.shared.sendAction(
-                    #selector(UIResponder.resignFirstResponder),
-                    to: nil, from: nil, for: nil
-                )
-                store.send(.closeChat)
             }
+    }
+
+    /// Fires the ThumbDrop commit action: haptic, keyboard dismiss, close chat.
+    /// Called by both the input bar DragGesture and the root-level ThumbDropOverlay.
+    private func thumbDropCommit() {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder),
+            to: nil, from: nil, for: nil
+        )
+        store.send(.closeChat)
+    }
+
+    /// Springs the input bar back to rest. Called when a ThumbDrop gesture is
+    /// cancelled or does not meet the commit threshold.
+    private func thumbDropCancel() {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            inputBarDragOffset = 0
+        }
     }
 
     // MARK: - Send Logic

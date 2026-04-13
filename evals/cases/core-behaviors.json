@@ -382,5 +382,99 @@
       "shouldPatch": false,
       "notes": "The previous patch adding rosemary was explicitly rejected by the user ('No thanks, skip the rosemary'). Sous must not re-propose rosemary or any variation of it. Should respond with cooking guidance for the next step (e.g. what to do now in the recipe) without mentioning or suggesting rosemary again."
     }
+  },
+  {
+    "name": "move-step-to-beginning",
+    "description": "Sausage browning is step 4 of 6 in a Sunday sauce. User asks to move it to the first step. Sous must emit both add_step at the new position AND remove_step on the original — never add without removing.",
+    "promptType": "has_canvas",
+    "input": {
+      "recipeState": {
+        "version": 1,
+        "title": "Sunday Sauce",
+        "ingredients": [
+          { "id": "i1", "name": "Italian sausage links", "quantity": "1", "unit": "lb", "checked": false },
+          { "id": "i2", "name": "olive oil", "quantity": "2", "unit": "tbsp", "checked": false },
+          { "id": "i3", "name": "yellow onion", "quantity": "1", "unit": "large", "checked": false },
+          { "id": "i4", "name": "garlic", "quantity": "4", "unit": "cloves", "checked": false },
+          { "id": "i5", "name": "crushed tomatoes", "quantity": "28", "unit": "oz", "checked": false },
+          { "id": "i6", "name": "tomato paste", "quantity": "2", "unit": "tbsp", "checked": false },
+          { "id": "i7", "name": "dry red wine", "quantity": "0.5", "unit": "cup", "checked": false }
+        ],
+        "steps": [
+          { "id": "s1", "text": "Heat olive oil in a large Dutch oven over medium heat.", "status": "todo" },
+          { "id": "s2", "text": "Sauté onion until softened, about 5 minutes. Add garlic and cook 1 minute more.", "status": "todo" },
+          { "id": "s3", "text": "Stir in tomato paste and cook 2 minutes until darkened.", "status": "todo" },
+          { "id": "s4", "text": "Brown the sausage in a separate skillet over medium-high heat, turning until golden on all sides, about 8 minutes.", "status": "todo" },
+          { "id": "s5", "text": "Pour in crushed tomatoes and red wine. Add browned sausage. Stir to combine.", "status": "todo" },
+          { "id": "s6", "text": "Reduce heat to low and simmer uncovered for 2 hours, stirring occasionally.", "status": "todo" }
+        ]
+      },
+      "chatHistory": [],
+      "userMessage": "Move the sausage browning to the first step."
+    },
+    "expected": {
+      "shouldPatch": true,
+      "notes": "User wants step s4 (sausage browning) moved to the beginning of the recipe. Sous must emit a patchSet containing BOTH an add_step for the sausage browning content with after_step_id null (to place it first) AND a remove_step targeting id 's4' to delete the original. The critical failure mode is emitting only add_step without a corresponding remove_step — that leaves a duplicate sausage-browning step in the recipe. A patchSet with only add_step and no remove_step is incorrect. A patchSet with only remove_step and no add_step is also incorrect. Both operations must be present together."
+    }
+  },
+  {
+    "name": "wipe-and-restart-procedure",
+    "description": "Sunday sauce steps are in the wrong order. User asks to wipe the steps and restart with sausage browning first. Sous must remove every existing step and add all replacement steps — never add new steps while leaving displaced originals in place.",
+    "promptType": "has_canvas",
+    "input": {
+      "recipeState": {
+        "version": 1,
+        "title": "Sunday Sauce",
+        "ingredients": [
+          { "id": "i1", "name": "Italian sausage links", "quantity": "1", "unit": "lb", "checked": false },
+          { "id": "i2", "name": "olive oil", "quantity": "2", "unit": "tbsp", "checked": false },
+          { "id": "i3", "name": "yellow onion", "quantity": "1", "unit": "large", "checked": false },
+          { "id": "i4", "name": "garlic", "quantity": "4", "unit": "cloves", "checked": false },
+          { "id": "i5", "name": "crushed tomatoes", "quantity": "28", "unit": "oz", "checked": false },
+          { "id": "i6", "name": "tomato paste", "quantity": "2", "unit": "tbsp", "checked": false },
+          { "id": "i7", "name": "dry red wine", "quantity": "0.5", "unit": "cup", "checked": false }
+        ],
+        "steps": [
+          { "id": "s1", "text": "Heat olive oil in a large Dutch oven over medium heat.", "status": "todo" },
+          { "id": "s2", "text": "Sauté onion until softened, about 5 minutes. Add garlic and cook 1 minute more.", "status": "todo" },
+          { "id": "s3", "text": "Stir in tomato paste and cook 2 minutes until darkened.", "status": "todo" },
+          { "id": "s4", "text": "Brown the sausage in a separate skillet over medium-high heat, turning until golden on all sides, about 8 minutes.", "status": "todo" },
+          { "id": "s5", "text": "Pour in crushed tomatoes and red wine. Add browned sausage. Stir to combine.", "status": "todo" },
+          { "id": "s6", "text": "Reduce heat to low and simmer uncovered for 2 hours, stirring occasionally.", "status": "todo" }
+        ]
+      },
+      "chatHistory": [],
+      "userMessage": "This order is wrong. Wipe the steps and start over. Sausage browning goes first."
+    },
+    "expected": {
+      "shouldPatch": true,
+      "notes": "User explicitly asked to wipe the steps and restart with a corrected order (sausage browning first). Sous must emit a patchSet containing remove_step for every existing step (s1 through s6 — all six must be removed) plus add_step patches for the replacement steps in the correct sequence, starting with sausage browning. The critical failure mode is emitting only add_step patches without removing the originals — that leaves all six displaced steps in the recipe alongside the new ones, resulting in a doubled, garbled step list. Every original step ID must appear in a remove_step operation. The new sequence must begin with sausage browning as the first step."
+    }
+  },
+  {
+    "name": "assistant-message-no-json",
+    "description": "User asks to add a step. Sous must emit the patchSet in the top-level patchSet field and keep assistant_message as plain prose — never embed JSON or a patchSet inside assistant_message.",
+    "promptType": "has_canvas",
+    "input": {
+      "recipeState": {
+        "version": 1,
+        "title": "Simple Pasta",
+        "ingredients": [
+          { "id": "i1", "text": "200g spaghetti" },
+          { "id": "i2", "text": "2 cloves garlic" },
+          { "id": "i3", "text": "3 tbsp olive oil" }
+        ],
+        "steps": [
+          { "id": "s1", "text": "Boil salted water.", "status": "todo" },
+          { "id": "s2", "text": "Cook pasta until al dente.", "status": "todo" }
+        ]
+      },
+      "chatHistory": [],
+      "userMessage": "Add a step to toss the pasta with garlic oil."
+    },
+    "expected": {
+      "shouldPatch": true,
+      "notes": "Sous must return a patchSet with an add_step patch for tossing pasta with garlic oil. The assistant_message must be plain conversational prose only — it must not contain any JSON, patchSet structure, or structured data. Embedding the patchSet or any JSON object inside assistant_message is always wrong. The patchSet belongs exclusively in the top-level patchSet field of the response object."
+    }
   }
 ]
