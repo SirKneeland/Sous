@@ -16,6 +16,11 @@ import UIKit
 ///
 /// ContentView measures this view's height via onHeightChange and applies a matching
 /// .safeAreaInset to RecipeCanvasView so scroll content is never hidden behind the bar.
+///
+/// ThumbDrop (recipe canvas → chat) is handled by a root-level ThumbDropOverlay that
+/// installs a UIPanGestureRecognizer on the window, covering the bottom 30% of the
+/// screen. It uses OR commit logic (≥50pt translation OR ≥400pt/s peak velocity) and
+/// fires the same slingshot haptic sequence as the chat→canvas direction.
 struct BottomZoneView: View {
     var timerManager: StepTimerManager
     var onOpenChat: () -> Void
@@ -66,26 +71,25 @@ struct BottomZoneView: View {
                 .onAppear { onHeightChange(geo.size.height) }
                 .onChange(of: geo.size.height) { _, h in onHeightChange(h) }
         })
-        .simultaneousGesture(thumbDropGesture)
-    }
-
-    private var thumbDropGesture: some Gesture {
-        DragGesture(minimumDistance: 10)
-            .onChanged { value in
-                let raw = value.translation.height
-                guard raw > 0 else { return }
-                dragOffset = min(raw * 0.65, 60)
-            }
-            .onEnded { value in
-                if value.translation.height >= 20 {
-                    dragOffset = 0
+        // Root-level ThumbDrop zone for the recipe canvas → chat direction.
+        // ThumbDropOverlay installs a UIPanGestureRecognizer on the window and gates to
+        // the bottom 30% of the screen (matching the chat→canvas side). The view lifecycle
+        // auto-removes the recognizer when BottomZoneView leaves the hierarchy (i.e. when
+        // the chat sheet opens), so no explicit isActive toggle is needed here.
+        .background {
+            ThumbDropOverlay(
+                isActive: true,
+                onOffsetChanged: { dragOffset = $0 },
+                onCommit: {
                     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                     onOpenChat()
-                } else {
+                },
+                onCancel: {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                         dragOffset = 0
                     }
                 }
-            }
+            )
+        }
     }
 }
