@@ -43,11 +43,12 @@
 - Then a recovery step is inserted in the future
 - And later flavor steps compensate
 
-### US-06: Cooking Mode
-- Given a recipe
-- When user enters cooking mode
-- Then one step is enlarged and focused
-- And user can advance steps
+### US-06: Mark a Step Done
+- Given a recipe with steps in Cook Mode
+- When the user right-swipes a step row
+- Then the step is marked `done`
+- And is visually locked with strikethrough styling
+- And cannot be modified by the AI
 
 ### US-07: Undo
 - Given a patch is applied
@@ -209,3 +210,88 @@
 - Given a recipe is being imported
 - Then the AI must not alter, substitute, or editorialize during extraction
 - And all subsequent changes must go through the normal patch flow
+
+### US-31: Swipe to Mark Done
+- Given a recipe canvas with steps or ingredients
+- When the user right-swipes a row
+- Then the item is marked done
+- And ingredients check without strikethrough; steps check with strikethrough
+
+### US-32: Swipe to Ask Sous
+- Given a recipe canvas with steps or ingredients
+- When the user left-swipes a row
+- Then the chat sheet opens
+- And the swiped row is quoted as context in the chat input
+- And the user can type a question about that specific item
+
+### US-33: Start a Step Timer
+- Given a recipe step contains a time reference
+- When the user taps the inline timer affordance
+- Then a timer starts for that duration (or a picker appears for ambiguous ranges)
+- And a banner appears above the Talk to Sous button showing the label and live
+  countdown
+
+### US-34: Pause and Resume a Timer
+- Given a timer is running
+- When the user opens the timer sheet and taps Pause
+- Then the timer pauses and the button label changes to Resume
+- When the user taps Resume
+- Then the timer continues from where it stopped
+
+### US-35: Delete a Timer
+- Given a timer sheet is open
+- When the user taps Delete Timer
+- Then the timer is removed from the step and the sheet dismisses
+- And the step can now be marked done
+
+### US-36: Timer Completion Notification
+- Given a timer is running and the app is backgrounded
+- When the timer reaches zero
+- Then a local notification fires
+- And the notification is cleared if the app relaunches or a new recipe is started
+
+### US-37: Request Mise en Place
+- Given a recipe canvas exists and no Mise en Place section has been generated
+- When the user taps the Mise en Place trigger
+- Then on first use a confirmation modal explains the feature
+- Then the AI extracts prep steps into a MISE EN PLACE section between
+  Ingredients and Procedure
+- And extracted steps are removed from the Procedure
+- And the trigger is hidden
+
+### US-38: Check a Mise en Place Component
+- Given a Mise en Place section exists with vessel groups
+- When the user taps a component within a vessel group
+- Then that component is checked independently
+- When all components in a group are checked
+- Then the group header auto-completes
+
+### US-39: Collapse and Expand Ingredients
+- Given a recipe canvas with an Ingredients section
+- When the user taps the collapse toggle
+- Then the Ingredients section collapses and the state persists for the session
+- When an accepted patch modifies ingredients
+- Then the Ingredients section auto-expands
+
+### US-40: Delete Active Recipe from History
+- Given the user is viewing the History sheet
+- And the currently active recipe is in the list
+- When the user deletes that recipe
+- Then a confirmation modal warns them they are deleting the recipe currently
+  on the canvas
+- When they confirm
+- Then the recipe is removed from History and the app navigates to zero state
+
+### US-41: ThumbDrop to Open Chat
+- Given the user is in Cook Mode
+- When the user swipes down on the Talk to Sous button or anywhere in the
+  bottom 30% of the screen
+- Then the ThumbDrop gesture fires with a slingshot haptic sequence
+- And Chat Mode opens
+
+### US-42: ThumbDrop to Close Chat
+- Given the user is in Chat Mode
+- When the user swipes down on the input bar or anywhere in the bottom 30%
+  of the screen
+- Then the ThumbDrop gesture fires with a slingshot haptic sequence
+- And the chat sheet dismisses returning to Cook Mode

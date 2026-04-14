@@ -55,7 +55,7 @@ Chat is a temporary interaction mode layered on top of the recipe.
 ### Cook Mode
 
 - Full recipe canvas visible and scrollable.
-- "Open Chat" button pinned to the bottom of the screen — always visible regardless of recipe length.
+- A 'Talk to Sous' button is pinned to the bottom of the screen and always visible regardless of recipe length. Swiping down on this button or anywhere in the bottom 30% of the screen triggers the ThumbDrop gesture to open Chat Mode.
 - No chat transcript visible.
 - No scrim.
 
@@ -67,6 +67,7 @@ Chat is a temporary interaction mode layered on top of the recipe.
 - Only chat scrolls; recipe does not scroll in this mode.
 - Chat sheet opens scrolled to the most recent message.
 - Chat sheet supports detents (collapsed / medium / large).
+- Swiping down on the input bar or anywhere in the bottom 30% of the screen triggers the ThumbDrop gesture to dismiss the chat sheet and return to Cook Mode.
 
 The scrim ensures clear hierarchy and prevents dual-surface scroll conflicts.
 
@@ -100,6 +101,9 @@ Rules:
 - The AI is forbidden from editing any step marked `done`.
 - If a user request would require altering a completed step:
   - The AI must add a recovery step or note *after* the current step.
+- Ingredient checkboxes tick without applying strikethrough — legibility is preserved for shopping/reference use. Step and Mise en Place checkboxes apply strikethrough on check. Checkboxes remain visually active (full opacity) regardless of checked state for all item types.
+- The Ingredients section is collapsible. Collapsed state persists per session. The section auto-expands when an accepted patch modifies ingredients.
+- Steps support nested sub-steps. Sub-steps are independently checkable and rendered indented below their parent.
 
 ---
 
@@ -327,101 +331,174 @@ Memories are phrased in third person (e.g. "hates cilantro", "cooking for two yo
 
 ---
 
+## Step Timers
+
+Sous detects time references in recipe steps and surfaces them as tappable timer
+affordances inline in the step text.
+
+### Detection and Affordance
+
+- When a step contains a time reference (e.g. "cook for 5 minutes", "rest for
+  1–2 hours"), the time text is highlighted and rendered with an inline timer SF
+  Symbol.
+- Tapping the affordance starts the timer immediately for exact durations.
+- For ambiguous ranges (e.g. "1–2 hours"), a duration picker sheet appears first.
+- The tap target covers both the icon and the time text as a single unit.
+
+### Timer Behavior
+
+- A running timer displays a banner above the Talk to Sous button.
+- Multiple timers can run simultaneously; banners stack above the button.
+- Each banner shows a short on-device AI-generated label (2–4 words, action and
+  ingredient only — e.g. "cook lamb") and the live countdown.
+- The banner stack never pushes the Talk to Sous button down; it overlays the
+  canvas with the button anchored at its fixed position.
+- A step with an active timer cannot be marked done until the timer completes or
+  is deleted.
+
+### Timer Sheet Controls
+
+- **Pause / Resume** — pauses and resumes a running timer without dismissing the
+  sheet.
+- **Adjust** — hours/minutes pickers to change the remaining time.
+- **Delete Timer** — removes the timer from the step entirely.
+- The live countdown is displayed right-justified in the sheet header row
+  alongside the "ADJUST TIMER" label.
+
+### Background Behavior
+
+- When the app is backgrounded, a local notification fires on timer completion.
+- Notifications are cleared cleanly on New Recipe and app relaunch (no stale
+  alerts).
+
+### On-Device Summarization
+
+- Timer banner labels are generated on-device using Apple Foundation Models
+  (iOS 26+).
+- If unavailable, the step text is truncated as a fallback.
+- Summarization is asynchronous; the banner appears immediately with a
+  placeholder and updates when the summary resolves.
+
+---
+
+## Mise en Place
+
+Users can request a Mise en Place extraction from the recipe canvas at any time
+before cooking begins.
+
+- A tappable trigger (carrot icon) appears in the recipe canvas header once a
+  recipe canvas exists.
+- Tapping it calls the LLM to extract prep work from the Procedure and surface
+  it in a dedicated MISE EN PLACE section between INGREDIENTS and PROCEDURE.
+- Extracted steps are removed from the Procedure to avoid duplication.
+- The trigger is hidden once the Mise en Place section exists.
+
+### Vessel Grouping
+
+- The LLM groups ingredients needed simultaneously into named vessels (e.g.
+  "Spice Bowl", "Meat Plate").
+- Vessels are numbered only when the same type appears more than once (e.g.
+  "Bowl 1", "Bowl 2").
+- Each component within a vessel group is independently checkable.
+- A group header auto-completes when all its components are checked.
+
+### First-Time Confirmation
+
+- On first use, a confirmation modal explains what Mise en Place does and offers
+  a "Don't show again" checkbox.
+- Subsequent triggers skip the modal.
+
+### Rules
+
+- Mise en Place extraction skips Patch Review — user intent is explicit.
+- No explicit undo. If the user wants to revert, they start a new recipe.
+- Mise en Place item states (checked/unchecked) are reset on New Recipe, but the
+  section itself persists if the session is restored from Recent Recipes.
+
+---
+
 ## Recipe Import
 
-Sous lets users bring any existing recipe into the app — from a photo, screenshot, or pasted text — and immediately start working with it.
+Users can bring an existing recipe into Sous from outside the app. Import is
+available only from the zero state screen (no active recipe canvas).
 
-### Entry Point
+### Entry Points
 
-The zero state screen presents two options:
-- **"Talk to a recipe"** — primary CTA, imports an existing recipe
-- **"Or create one"** — leads to the existing exploration flow
-
-### Import Sources
-
-Tapping "Talk to a recipe" opens a sheet offering three input methods:
-- Camera — photograph a cookbook page, recipe card, etc.
-- Photo library — upload a screenshot (NYT Cooking, another AI, a website photo)
-- Paste text — paste raw recipe text directly
+- **Camera** — capture a photo of a physical recipe card, cookbook page, or
+  packaging.
+- **Photo Library** — select a saved screenshot or photo.
+- **Paste Text** — paste raw recipe text from any source.
 
 ### Extraction Behavior
 
-1. AI extracts the recipe faithfully — title, ingredients, steps — with no interpretation, substitution, or editorializing.
-2. Any line where confidence is low is flagged inline with [??] appended.
-3. Title is taken from the source if detectable; otherwise AI generates a reasonable one.
-4. The recipe canvas is generated immediately on extraction.
-5. The first AI chat message acknowledges the loaded recipe and asks what the user wants to adapt (e.g. serving size, dietary changes, ingredient swaps).
-6. All subsequent changes follow the normal patch flow.
+- The AI faithfully extracts the recipe as written. It must not alter,
+  substitute, or editorialize during extraction.
+- Any line where confidence is low is flagged with [??] inline.
+- A two-stage progress indicator shows: "Analyzing image…" then "Sous-ing up
+  the recipe…"
 
-### Routing
+### Post-Import
 
-New intent added to the LLM routing model: `import_existing_recipe`
+- Import skips the Exploration phase entirely and routes directly into
+  cooking/edit mode.
+- The AI sends a first chat message acknowledging the loaded recipe and inviting
+  adaptations.
+- All subsequent changes go through the normal patch flow.
 
-- `has_canvas=false` + `intent=import_existing_recipe` → extract and generate canvas directly, skip exploration phase entirely
-- No branching questions, no option cards
+### On-Device OCR
 
-### Guardrails
+- Photo imports use an on-device Apple Vision OCR pipeline before sending to the
+  LLM, reducing API payload size.
+- Non-Latin scripts (e.g. Japanese, Chinese) pass through the OCR layer and are
+  handled by the LLM.
 
-- The AI must not alter the recipe during extraction. Faithfulness is the hard constraint.
-- Best-effort extraction is always preferred over refusing to proceed.
-- Adaptations only happen via the patch flow, after the user initiates them.
+---
 
+## ThumbDrop Gesture
 
-## Step Timers
+ThumbDrop is the named gesture for transitioning between Cook Mode and Chat Mode.
+It is a consistent downward swipe in both directions — always toward the bottom
+of the screen.
 
-Sous detects time references in recipe steps and exposes an inline timer affordance for each one.
+- **Cook Mode → Chat Mode**: swipe down on the Talk to Sous button at the bottom
+  of the recipe canvas.
+- **Chat Mode → Cook Mode**: swipe down on the input bar (camera button + text
+  field + send button row) at the bottom of the chat sheet.
 
-### Time Detection and Affordance
+### Trigger Zone
 
-When a step contains a time reference (e.g. "bake for 30 minutes", "simmer for 5 to 6 hours"), the time text is highlighted in the step with a timer icon adjacent to it. Steps with no detectable time reference show no affordance.
+- The gesture is active across the bottom 30% of the screen in both modes, not
+  just the button or input bar itself.
+- A root-level UIPanGestureRecognizer detects swipes originating anywhere in
+  this zone and routes them through the ThumbDrop logic.
+- The recognizer runs simultaneously with scroll and tap recognizers — it never
+  blocks chat scrolling, tap targets, or long-press actions.
 
-### Timer Start Flow
+### Visual Feedback
 
-- **Exact time** — tapping the affordance starts the timer immediately.
-- **Range/ambiguous time** (e.g. "2–3 minutes", "5 to 6 hours") — tapping opens a duration picker pre-filled with the lower number in the range. The user confirms to start.
+- The primary action element (Talk to Sous button in Cook Mode; input bar in
+  Chat Mode) translates downward with the thumb during the gesture as visual
+  confirmation.
+- On commit, the element snaps back as the mode transition fires.
+- On cancel, the element springs back to its original position.
 
-### Active Timer Limits
+### Haptic Sequence
 
-Maximum 3 concurrent timers. Attempting to start a 4th does nothing except fire an error haptic. A step may only have one active timer at a time.
+ThumbDrop uses a slingshot haptic sequence that builds tension during the drag:
 
-### Timer Banner
+- Gesture recognized: .light impact
+- 30pt of travel: .light impact
+- 60pt of travel: .medium impact
+- 90pt of travel: .rigid impact
+- Commit: .medium impact
 
-While timers are running and the user is on the recipe screen, a fixed banner stack appears just above the chat button. Each banner shows:
-- A short (~3 word) on-device summary of the step
-- A live countdown
-- A pencil icon to adjust time remaining
+Each band fires once per gesture and does not re-fire if the thumb reverses.
 
-Tapping a banner (outside the pencil) scrolls to the step the timer is for and highlights it in terracotta until the user next interacts with anything.
+### Commit Thresholds
 
-Up to 3 banners stack vertically. Terracotta background, white text.
-
-### Step Completion Guard
-
-A step with an active timer cannot be marked done. Attempting to do so does nothing except fire an error haptic. Once the timer expires or is dismissed, the step can be marked done normally.
-
-### Timer Done State
-
-When a timer expires:
-- If the app is foregrounded: the banner expands to a large panel (approximately keyboard height) showing the step summary and "TIMER DONE" in large text. Terracotta background, white text.
-- If the app is backgrounded: a local notification fires.
-- Tapping the notification foregrounds the app and triggers the done panel.
-- Tapping the done panel dismisses it, scrolls to the step, and highlights it in terracotta.
-
-If multiple timers expire simultaneously, done panels are shown one at a time in sequence.
-
-### Timer Persistence
-
-Active timer state persists across app backgrounding and relaunch. Timers that expired while the app was closed show the done state on next foreground.
-
-### Short Step Summary
-
-The ~3 word step summary displayed in the timer banner is generated on-device at timer creation using Apple's FoundationModels framework where available, with a fallback to truncated step text. It is generated once and stored with the timer session.
-
-### Non-Goals (Timers)
-
-- Live Activities (explicitly deferred — planned for a future milestone)
-- Timers surviving device restart (local notification only)
-- Timer history or logs
+Commit triggers on either condition:
+- Downward translation ≥ 50pt, or
+- Peak downward velocity ≥ 400pt/s (tracked during drag, not at lift)
 
 ---
 
@@ -437,6 +514,6 @@ Out of scope until explicitly added to the roadmap:
 - Collaboration with other users
 - Monetization or paywalls
 - Preference inference or automated learning
-- Inline image display in chat (future paid feature)
+- Inline generated image display in chat responses (future paid feature)
 - Generated images (future paid feature)
 - Voice input/output (future paid feature)
