@@ -17,6 +17,8 @@ struct RecipeCanvasView: View {
     var onStartNew: () -> Void = {}
     var onOpenRecents: () -> Void = {}
     var onResetRecipe: () -> Void = {}
+    var onUpdateTitle: (String) -> Void = { _ in }
+    var onEditingTitleChanged: (Bool) -> Void = { _ in }
     /// Called when the user swipes left on a row and taps "Ask Sous".
     /// Arguments: (rowType, rowText) where rowType is "ingredient" or "step".
     var onAskSousAbout: (String, String) -> Void = { _, _ in }
@@ -34,6 +36,9 @@ struct RecipeCanvasView: View {
     @State private var showingMiseEnPlaceModal: Bool = false
     @State private var modalDontShowAgain: Bool = false
     @State private var showingResetConfirmation: Bool = false
+    @State private var isEditingTitle: Bool = false
+    @State private var titleDraft: String = ""
+    @FocusState private var isTitleFocused: Bool
 
     init(
         recipe: Recipe,
@@ -45,6 +50,8 @@ struct RecipeCanvasView: View {
         onStartNew: @escaping () -> Void = {},
         onOpenRecents: @escaping () -> Void = {},
         onResetRecipe: @escaping () -> Void = {},
+        onUpdateTitle: @escaping (String) -> Void = { _ in },
+        onEditingTitleChanged: @escaping (Bool) -> Void = { _ in },
         onAskSousAbout: @escaping (String, String) -> Void = { _, _ in },
         miseEnPlaceIsLoading: Bool = false,
         miseEnPlaceError: String? = nil,
@@ -64,6 +71,8 @@ struct RecipeCanvasView: View {
         self.onStartNew = onStartNew
         self.onOpenRecents = onOpenRecents
         self.onResetRecipe = onResetRecipe
+        self.onUpdateTitle = onUpdateTitle
+        self.onEditingTitleChanged = onEditingTitleChanged
         self.onAskSousAbout = onAskSousAbout
         self.miseEnPlaceIsLoading = miseEnPlaceIsLoading
         self.miseEnPlaceError = miseEnPlaceError
@@ -85,10 +94,42 @@ struct RecipeCanvasView: View {
                 // MARK: Header
                 HStack(alignment: .top, spacing: 8) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(recipe.title.uppercased())
-                            .font(.sousTitle)
-                            .foregroundStyle(Color.sousText)
-                            .fixedSize(horizontal: false, vertical: true)
+                        if isEditingTitle {
+                            TextField("", text: $titleDraft, axis: .vertical)
+                                .font(.sousTitle)
+                                .foregroundStyle(Color.sousText)
+                                .textCase(.uppercase)
+                                .autocorrectionDisabled()
+                                .submitLabel(.done)
+                                .lineLimit(nil)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .focused($isTitleFocused)
+                                .onChange(of: titleDraft) { _, newValue in
+                                    // axis: .vertical swallows the return key as a newline;
+                                    // detect it here and treat as submit.
+                                    if newValue.contains("\n") {
+                                        titleDraft = newValue.replacingOccurrences(of: "\n", with: "")
+                                        commitTitleEdit()
+                                    }
+                                }
+                                .onChange(of: isTitleFocused) { _, focused in
+                                    // Commit when focus leaves the field (e.g. user taps
+                                    // a list row or dismisses the keyboard). iOS text
+                                    // selection does not blur the field, so this is safe.
+                                    if !focused { commitTitleEdit() }
+                                }
+                        } else {
+                            Text(recipe.title.uppercased())
+                                .font(.sousTitle)
+                                .foregroundStyle(Color.sousText)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .onTapGesture {
+                                    titleDraft = recipe.title
+                                    isEditingTitle = true
+                                    isTitleFocused = true
+                                    onEditingTitleChanged(true)
+                                }
+                        }
                         Text("REV. \(recipe.version)")
                             .font(.sousCaption)
                             .foregroundStyle(Color.sousMuted)
@@ -466,6 +507,18 @@ struct RecipeCanvasView: View {
         } message: {
             Text("Your chat history will be kept.")
         }
+    }
+
+    // MARK: - Title editing
+
+    private func commitTitleEdit() {
+        guard isEditingTitle else { return }
+        isTitleFocused = false
+        isEditingTitle = false
+        onEditingTitleChanged(false)
+        let trimmed = titleDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        onUpdateTitle(trimmed)
     }
 
     // MARK: - Mise en place flat row helpers

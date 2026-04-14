@@ -19,6 +19,8 @@ struct ContentView: View {
     @State private var ingredientsExpanded: Bool = true
     /// Whether the collapsible top nav bar (New / History / Settings) is currently revealed.
     @State private var navBarVisible: Bool = false
+    /// True while the user is editing the recipe title inline.
+    @State private var isTitleEditing: Bool = false
 
     private var hasDoneBanner: Bool { !timerManager.doneQueue.isEmpty }
 
@@ -35,6 +37,7 @@ struct ContentView: View {
             && !store.uiState.isSheetPresented
             && !store.uiState.isPatchReview
             && !hasDoneBanner
+            && !isTitleEditing
     }
 
     var body: some View {
@@ -75,6 +78,8 @@ struct ContentView: View {
                         timerManager.clearAll()
                         ingredientsExpanded = true
                     },
+                    onUpdateTitle: { newTitle in store.updateTitle(newTitle) },
+                    onEditingTitleChanged: { editing in isTitleEditing = editing },
                     onAskSousAbout: { type, text in
                         let rowType: QuotedRowContext.RowType = type == "ingredient" ? .ingredient : .step
                         store.openChatWithRowContext(type: rowType, text: text)

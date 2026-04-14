@@ -754,6 +754,13 @@ final class AppStore: ObservableObject {
         saveSession()
     }
 
+    func updateTitle(_ newTitle: String) {
+        var recipe = uiState.recipe
+        recipe.title = newTitle
+        uiState = uiState.replacingRecipe(recipe)
+        saveSession()
+    }
+
     private func runMiseEnPlaceLLM() async {
         defer {
             miseEnPlaceTask = nil
