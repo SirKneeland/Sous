@@ -55,7 +55,7 @@ Chat is a temporary interaction mode layered on top of the recipe.
 ### Cook Mode
 
 - Full recipe canvas visible and scrollable.
-- A 'Talk to Sous' button is pinned to the bottom of the screen and always visible regardless of recipe length. Swiping down on this button or anywhere in the bottom 30% of the screen triggers the ThumbDrop gesture to open Chat Mode.
+- A 'Talk to Sous' button is pinned to the bottom of the screen and always visible regardless of recipe length. Swiping down on this button or anywhere in the bottom 25% of the screen triggers the ThumbDrop gesture to open Chat Mode.
 - No chat transcript visible.
 - No scrim.
 
@@ -67,7 +67,7 @@ Chat is a temporary interaction mode layered on top of the recipe.
 - Only chat scrolls; recipe does not scroll in this mode.
 - Chat sheet opens scrolled to the most recent message.
 - Chat sheet supports detents (collapsed / medium / large).
-- Swiping down on the input bar or anywhere in the bottom 30% of the screen triggers the ThumbDrop gesture to dismiss the chat sheet and return to Cook Mode.
+- Swiping down on the input bar or anywhere in the bottom 25% of the screen triggers the ThumbDrop gesture to dismiss the chat sheet and return to Cook Mode.
 
 The scrim ensures clear hierarchy and prevents dual-surface scroll conflicts.
 
@@ -467,7 +467,7 @@ of the screen.
 
 ### Trigger Zone
 
-- The gesture is active across the bottom 30% of the screen in both modes, not
+- The gesture is active across the bottom 25% of the screen in both modes, not
   just the button or input bar itself.
 - A root-level UIPanGestureRecognizer detects swipes originating anywhere in
   this zone and routes them through the ThumbDrop logic.

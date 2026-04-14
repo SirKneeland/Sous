@@ -285,13 +285,13 @@
 ### US-41: ThumbDrop to Open Chat
 - Given the user is in Cook Mode
 - When the user swipes down on the Talk to Sous button or anywhere in the
-  bottom 30% of the screen
+  bottom 25% of the screen
 - Then the ThumbDrop gesture fires with a slingshot haptic sequence
 - And Chat Mode opens
 
 ### US-42: ThumbDrop to Close Chat
 - Given the user is in Chat Mode
-- When the user swipes down on the input bar or anywhere in the bottom 30%
+- When the user swipes down on the input bar or anywhere in the bottom 25%
   of the screen
 - Then the ThumbDrop gesture fires with a slingshot haptic sequence
 - And the chat sheet dismisses returning to Cook Mode

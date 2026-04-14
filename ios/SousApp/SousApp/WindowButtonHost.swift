@@ -18,7 +18,7 @@ import UIKit
 /// .safeAreaInset to RecipeCanvasView so scroll content is never hidden behind the bar.
 ///
 /// ThumbDrop (recipe canvas → chat) is handled by a root-level ThumbDropOverlay that
-/// installs a UIPanGestureRecognizer on the window, covering the bottom 30% of the
+/// installs a UIPanGestureRecognizer on the window, covering the bottom 25% of the
 /// screen. It uses OR commit logic (≥50pt translation OR ≥400pt/s peak velocity) and
 /// fires the same slingshot haptic sequence as the chat→canvas direction.
 struct BottomZoneView: View {
@@ -73,7 +73,7 @@ struct BottomZoneView: View {
         })
         // Root-level ThumbDrop zone for the recipe canvas → chat direction.
         // ThumbDropOverlay installs a UIPanGestureRecognizer on the window and gates to
-        // the bottom 30% of the screen (matching the chat→canvas side). The view lifecycle
+        // the bottom 25% of the screen (matching the chat→canvas side). The view lifecycle
         // auto-removes the recognizer when BottomZoneView leaves the hierarchy (i.e. when
         // the chat sheet opens), so no explicit isActive toggle is needed here.
         .background {

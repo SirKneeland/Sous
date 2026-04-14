@@ -181,7 +181,7 @@ struct ThumbDropOverlay: UIViewRepresentable {
             // screen space on non-zoomed displays.
             let touchInWindow = gestureRecognizer.location(in: nil)
             let screenHeight = UIScreen.main.bounds.height
-            return touchInWindow.y >= screenHeight * 0.7
+            return touchInWindow.y >= screenHeight * 0.75
         }
 
         /// Always allow simultaneous recognition so this gesture never steals
