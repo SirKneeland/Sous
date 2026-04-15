@@ -44,24 +44,6 @@ struct PatchReviewView: View {
                             }
                         }
 
-                        // MARK: Step Status
-                        SousSectionLabel(title: "Step Status")
-                            .padding(.top, changes.isEmpty ? 20 : 24)
-                            .padding(.bottom, 12)
-
-                        ForEach(recipe.steps, id: \.id) { step in
-                            HStack(spacing: 12) {
-                                statusBadge(for: step)
-                                Text(step.text)
-                                    .font(.sousBody)
-                                    .foregroundStyle(step.status == .done ? Color.sousMuted : Color.sousText)
-                                    .strikethrough(step.status == .done, color: Color.sousMuted)
-                                    .lineLimit(2)
-                                Spacer()
-                            }
-                            .padding(.vertical, 10)
-                            SousRule()
-                        }
 
 #if DEBUG
                         DisclosureGroup("Debug") {
@@ -281,27 +263,6 @@ struct PatchReviewView: View {
 
         case .unchanged:
             EmptyView()
-        }
-    }
-
-    // MARK: - Status Badge
-
-    @ViewBuilder
-    private func statusBadge(for step: Step) -> some View {
-        if step.status == .done {
-            Text("DONE")
-                .font(.sousCaption)
-                .foregroundStyle(Color.sousBackground)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
-                .background(Color.sousText)
-        } else {
-            Text("TODO")
-                .font(.sousCaption)
-                .foregroundStyle(Color.sousTerracotta)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
-                .overlay(Rectangle().stroke(Color.sousTerracotta, lineWidth: 1))
         }
     }
 
