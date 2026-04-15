@@ -105,6 +105,27 @@ struct PatchReviewView: View {
             }
             .background(Color.sousBackground)
 
+            // MARK: Last Assistant Message
+            if let lastAssistantMessage = store.chatTranscript.last(where: { $0.role == .assistant }) {
+                SousRule()
+                VStack(alignment: .leading, spacing: 8) {
+                    SousSectionLabel(title: "Sous Says...")
+                        .padding(.horizontal, 20)
+                        .padding(.top, 14)
+                    HStack {
+                        MarkdownTextView(text: lastAssistantMessage.text, textColor: .sousText)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color.sousBackground)
+                            .overlay(Rectangle().stroke(Color.sousText, lineWidth: 1))
+                        Spacer(minLength: 48)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 14)
+                }
+                .background(Color.sousSurface)
+            }
+
             // MARK: Action Bar
             SousRule()
             HStack(spacing: 0) {
