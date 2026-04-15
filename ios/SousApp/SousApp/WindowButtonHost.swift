@@ -88,6 +88,10 @@ struct BottomZoneView: View {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                         dragOffset = 0
                     }
+                },
+                onUpwardCommit: {
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    onOpenChat()
                 }
             )
         }

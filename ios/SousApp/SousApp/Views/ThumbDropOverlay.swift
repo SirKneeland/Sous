@@ -18,18 +18,23 @@ import UIKit
 struct ThumbDropOverlay: UIViewRepresentable {
     /// True when the chat sheet is presented in non-fullscreen (sheet) mode.
     var isActive: Bool
-    /// Called with the current drag offset (0–60 pt) as the gesture progresses.
+    /// Called with the current drag offset (-60–60 pt) as the gesture progresses.
+    /// Negative values mean the element is being dragged upward.
     var onOffsetChanged: (CGFloat) -> Void
-    /// Called when the gesture commits: ≥20 pt downward, predominantly vertical.
+    /// Called when the gesture commits downward: ≥50 pt down or ≥400 pt/s peak velocity.
     var onCommit: () -> Void
-    /// Called when the gesture cancels or fails — consumer should spring the input bar back.
+    /// Called when the gesture cancels or fails — consumer should spring the element back.
     var onCancel: () -> Void
+    /// Called when the gesture commits upward: ≥50 pt up or ≥400 pt/s peak upward velocity.
+    /// Pass nil to disable upward commit detection (default).
+    var onUpwardCommit: (() -> Void)? = nil
 
     func makeCoordinator() -> Coordinator {
         Coordinator(isActive: isActive,
                     onOffsetChanged: onOffsetChanged,
                     onCommit: onCommit,
-                    onCancel: onCancel)
+                    onCancel: onCancel,
+                    onUpwardCommit: onUpwardCommit)
     }
 
     func makeUIView(context: Context) -> ThumbDropHostView {
@@ -51,6 +56,7 @@ struct ThumbDropOverlay: UIViewRepresentable {
         context.coordinator.onOffsetChanged = onOffsetChanged
         context.coordinator.onCommit = onCommit
         context.coordinator.onCancel = onCancel
+        context.coordinator.onUpwardCommit = onUpwardCommit
     }
 
     // MARK: - Coordinator
@@ -60,6 +66,7 @@ struct ThumbDropOverlay: UIViewRepresentable {
         var onOffsetChanged: (CGFloat) -> Void
         var onCommit: () -> Void
         var onCancel: () -> Void
+        var onUpwardCommit: (() -> Void)?
 
         /// Set to true when the angle gate fires mid-gesture so we ignore
         /// subsequent `.changed` events and don't call `onCommit` at `.ended`.
@@ -68,24 +75,30 @@ struct ThumbDropOverlay: UIViewRepresentable {
         private var cancelFired = false
         /// Guards against firing the entry haptic more than once per gesture.
         private var entryHapticFired = false
-        /// Slingshot thresholds: fire once as translation crosses 25/50/75% of the
-        /// 20pt commit distance. Each fires at most once per gesture — back-and-forth
-        /// movement does not re-trigger a threshold that has already fired.
+        /// Downward slingshot thresholds. Each fires at most once per gesture.
         private var sling1Fired = false  // 30pt → .light
         private var sling2Fired = false  // 60pt → .medium
         private var sling3Fired = false  // 90pt → .rigid
+        /// Upward slingshot thresholds (mirrored). Each fires at most once per gesture.
+        private var slingUp1Fired = false  // -30pt → .light
+        private var slingUp2Fired = false  // -60pt → .medium
+        private var slingUp3Fired = false  // -90pt → .rigid
         /// Peak downward velocity (pt/s) seen during .changed. End-state velocity
         /// is unreliable on fast flicks (reads negative at lift-off); peak is stable.
         private var peakVelocity: CGFloat = 0
+        /// Peak upward velocity magnitude (pt/s). Stored as positive for easy comparison.
+        private var peakUpwardVelocity: CGFloat = 0
 
         init(isActive: Bool,
              onOffsetChanged: @escaping (CGFloat) -> Void,
              onCommit: @escaping () -> Void,
-             onCancel: @escaping () -> Void) {
+             onCancel: @escaping () -> Void,
+             onUpwardCommit: (() -> Void)? = nil) {
             self.isActive = isActive
             self.onOffsetChanged = onOffsetChanged
             self.onCommit = onCommit
             self.onCancel = onCancel
+            self.onUpwardCommit = onUpwardCommit
         }
 
         @objc func handlePan(_ gesture: UIPanGestureRecognizer) {
@@ -97,7 +110,11 @@ struct ThumbDropOverlay: UIViewRepresentable {
                 sling1Fired = false
                 sling2Fired = false
                 sling3Fired = false
+                slingUp1Fired = false
+                slingUp2Fired = false
+                slingUp3Fired = false
                 peakVelocity = 0
+                peakUpwardVelocity = 0
 
             case .changed:
                 guard !hasFailed else { return }
@@ -141,18 +158,46 @@ struct ThumbDropOverlay: UIViewRepresentable {
                     }
                     // Dampen offset as the existing input bar gesture does.
                     onOffsetChanged(min(dy * 0.65, 60))
+                } else if dy < 0, onUpwardCommit != nil {
+                    // Moving upward — mirror of downward tracking, only when an
+                    // upward commit handler is registered (e.g. cook mode bottom zone).
+                    let vy = gesture.velocity(in: gesture.view).y
+                    let vyUp = -vy  // positive magnitude of upward velocity
+                    if vyUp > peakUpwardVelocity { peakUpwardVelocity = vyUp }
+                    if !entryHapticFired {
+                        entryHapticFired = true
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    }
+                    if dy <= -30 && !slingUp1Fired {
+                        slingUp1Fired = true
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    }
+                    if dy <= -60 && !slingUp2Fired {
+                        slingUp2Fired = true
+                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    }
+                    if dy <= -90 && !slingUp3Fired {
+                        slingUp3Fired = true
+                        UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+                    }
+                    // Dampen upward offset symmetrically: negative value moves element up.
+                    onOffsetChanged(max(dy * 0.65, -60))
                 } else {
-                    // Moving upward — keep input bar at rest.
+                    // Moving upward with no upward handler — keep element at rest.
                     onOffsetChanged(0)
                 }
 
             case .ended:
                 guard !hasFailed else { return }
                 let translation = gesture.translation(in: gesture.view)
-                let commits = translation.y >= 50 || peakVelocity >= 400
-                if commits {
+                let commitsDown = translation.y >= 50 || peakVelocity >= 400
+                let commitsUp = translation.y <= -50 || peakUpwardVelocity >= 400
+                if commitsDown {
                     onOffsetChanged(0)
                     onCommit()
+                } else if commitsUp, let onUpwardCommit {
+                    onOffsetChanged(0)
+                    onUpwardCommit()
                 } else {
                     fireCancel()
                 }

@@ -16,6 +16,10 @@ struct ChatSheetView: View {
     @State private var showPhotoSheet = false
     @State private var inputBarDragOffset: CGFloat = 0
     @State private var peakDragVelocity: CGFloat = 0
+    // Slingshot haptic gates — reset at the start of each gesture.
+    @State private var sling1Fired = false  // 30 pt → .light
+    @State private var sling2Fired = false  // 60 pt → .medium
+    @State private var sling3Fired = false  // 90 pt → .rigid
     @FocusState private var isComposerFocused: Bool
 
     var body: some View {
@@ -130,9 +134,22 @@ struct ChatSheetView: View {
             SousRule()
             transcript
                 .overlay(alignment: .bottom) { generatePill }
-            SousRule()
             attachmentStrip
+            SousRule()
+                .opacity(inputBarDragOffset == 0 ? 1 : 0)
             composerBar
+            Color.clear
+                .frame(width: 0, height: 0)
+                .sheet(isPresented: $showPhotoSheet) {
+                    PhotoAcquisitionSheet(
+                        onAcquired: { asset in
+                            photoSend.attach(asset)
+                            showPhotoSheet = false
+                            isComposerFocused = true
+                        },
+                        onCancel: { showPhotoSheet = false }
+                    )
+                }
         }
         .background(isFullscreen ? Color.sousBackground : Color.sousSurface)
         .animation(.easeOut(duration: 0.25), value: store.canGenerateRecipe)
@@ -336,16 +353,7 @@ struct ChatSheetView: View {
                     .overlay(Rectangle().stroke(Color.sousText, lineWidth: 1))
             }
             .buttonStyle(.plain)
-            .sheet(isPresented: $showPhotoSheet) {
-                PhotoAcquisitionSheet(
-                    onAcquired: { asset in
-                        photoSend.attach(asset)
-                        showPhotoSheet = false
-                        isComposerFocused = true
-                    },
-                    onCancel: { showPhotoSheet = false }
-                )
-            }
+            .zIndex(1)
 
             // Text input (with optional quoted context chip above)
             VStack(spacing: 0) {
@@ -407,6 +415,7 @@ struct ChatSheetView: View {
             }
             .buttonStyle(.plain)
             .disabled(!canSend)
+            .zIndex(1)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -430,6 +439,7 @@ struct ChatSheetView: View {
             }
         }
         .simultaneousGesture(thumbDropGesture)
+        .zIndex(1)
         .offset(y: inputBarDragOffset)
     }
 
@@ -439,22 +449,48 @@ struct ChatSheetView: View {
         DragGesture(minimumDistance: 10)
             .onChanged { value in
                 guard !isFullscreen else { return }
-                // Reset peak at the start of each new gesture (first event is always small).
+                // Reset peak and haptic gates at the start of each new gesture.
                 if abs(value.translation.height) < 15 && abs(value.translation.width) < 15 {
                     peakDragVelocity = 0
+                    sling1Fired = false
+                    sling2Fired = false
+                    sling3Fired = false
                 }
                 let raw = value.translation.height
-                guard raw > 0 else {
-                    inputBarDragOffset = 0
-                    return
-                }
-                inputBarDragOffset = min(raw * 0.65, 60)
                 let vy = value.velocity.height
-                if vy > peakDragVelocity { peakDragVelocity = vy }
+                let dist = abs(raw)
+                if raw > 0 {
+                    // Downward drag: dampen and clamp offset downward.
+                    inputBarDragOffset = min(raw * 0.65, 60)
+                    if vy > peakDragVelocity { peakDragVelocity = vy }
+                } else if raw < 0 {
+                    // Upward drag: mirror offset symmetrically (negative = moves up).
+                    inputBarDragOffset = max(raw * 0.65, -60)
+                    // Store upward velocity as a negative value for threshold comparison.
+                    if vy < peakDragVelocity { peakDragVelocity = vy }
+                } else {
+                    inputBarDragOffset = 0
+                }
+                // Slingshot haptics — fire once as |translation| crosses each threshold,
+                // regardless of drag direction. Back-and-forth motion does not re-trigger.
+                if dist >= 30 && !sling1Fired {
+                    sling1Fired = true
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                }
+                if dist >= 60 && !sling2Fired {
+                    sling2Fired = true
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                }
+                if dist >= 90 && !sling3Fired {
+                    sling3Fired = true
+                    UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+                }
             }
             .onEnded { value in
                 guard !isFullscreen else { return }
-                let commits = value.translation.height >= 50 || peakDragVelocity >= 400
+                let dy = value.translation.height
+                let commits = dy >= 50 || peakDragVelocity >= 400
+                    || dy <= -50 || peakDragVelocity <= -400
                 if commits {
                     inputBarDragOffset = 0
                     thumbDropCommit()
@@ -522,6 +558,7 @@ private struct ComposerHeightPreferenceKey: PreferenceKey {
         value = nextValue()
     }
 }
+
 
 // MARK: - Thinking Bubble
 
