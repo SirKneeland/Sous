@@ -15,6 +15,7 @@ struct ChatSheetView: View {
     @State private var composerHeight: CGFloat = 36
     @State private var showPhotoSheet = false
     @State private var inputBarDragOffset: CGFloat = 0
+    @State private var sheetBounceOffset: CGFloat = 0
     @State private var peakDragVelocity: CGFloat = 0
     // Slingshot haptic gates — reset at the start of each gesture.
     @State private var sling1Fired = false  // 30 pt → .light
@@ -30,6 +31,7 @@ struct ChatSheetView: View {
                 mainChatView
             }
         }
+        .offset(y: sheetBounceOffset)
         // Root-level ThumbDrop zone: activates for the entire bottom fifth of the
         // screen when the chat sheet is presented in non-fullscreen (sheet) mode.
         // The input bar's own DragGesture remains unchanged and coexists with this.
@@ -492,7 +494,6 @@ struct ChatSheetView: View {
                 let commits = dy >= 50 || peakDragVelocity >= 400
                     || dy <= -50 || peakDragVelocity <= -400
                 if commits {
-                    inputBarDragOffset = 0
                     thumbDropCommit()
                 } else {
                     thumbDropCancel()
@@ -500,7 +501,7 @@ struct ChatSheetView: View {
             }
     }
 
-    /// Fires the ThumbDrop commit action: haptic, keyboard dismiss, close chat.
+    /// Fires the ThumbDrop commit action: haptic, anticipation bounce, then dismiss.
     /// Called by both the input bar DragGesture and the root-level ThumbDropOverlay.
     private func thumbDropCommit() {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
@@ -508,7 +509,13 @@ struct ChatSheetView: View {
             #selector(UIResponder.resignFirstResponder),
             to: nil, from: nil, for: nil
         )
-        store.send(.closeChat)
+        withAnimation(.spring(response: 0.12, dampingFraction: 0.55)) {
+            sheetBounceOffset = -18
+            inputBarDragOffset = 0
+        } completion: {
+            store.send(.closeChat)
+            sheetBounceOffset = 0
+        }
     }
 
     /// Springs the input bar back to rest. Called when a ThumbDrop gesture is
