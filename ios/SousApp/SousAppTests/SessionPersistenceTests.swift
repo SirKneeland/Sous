@@ -128,6 +128,56 @@ final class SessionPersistenceTests: XCTestCase {
         XCTAssertEqual(loaded?.nextLLMContext?.lastPatchDecision?.decidedAtMs, 99999)
     }
 
+    // MARK: - Collapsed section state (v3)
+
+    func test_snapshot_preservesCollapsedSectionState() throws {
+        let snapshot = SessionSnapshot(
+            schemaVersion: SessionSnapshot.currentSchemaVersion,
+            hasCanvas: true,
+            recipe: makeRecipe(),
+            pendingPatchSet: nil,
+            chatMessages: [],
+            nextLLMContext: nil,
+            savedAt: Date(),
+            ingredientsExpanded: false,
+            stepsCompletedExpanded: true
+        )
+        try SessionPersistence.save(snapshot, to: testURL)
+        let loaded = SessionPersistence.load(from: testURL)
+
+        XCTAssertEqual(loaded?.ingredientsExpanded, false,
+                       "ingredientsExpanded must survive round-trip")
+        XCTAssertEqual(loaded?.stepsCompletedExpanded, true,
+                       "stepsCompletedExpanded must survive round-trip")
+    }
+
+    func test_v2Migration_appliesNewRecipeDefaults() throws {
+        // Simulate a v2 JSON payload (no ingredientsExpanded / stepsCompletedExpanded keys).
+        let recipe = makeRecipe()
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let recipeJson = String(data: try encoder.encode(recipe), encoding: .utf8)!
+        let v2Json = """
+        {
+          "schemaVersion": 2,
+          "hasCanvas": true,
+          "recipe": \(recipeJson),
+          "chatMessages": [],
+          "savedAt": "2024-01-01T00:00:00Z"
+        }
+        """
+        try v2Json.data(using: .utf8)!.write(to: testURL)
+        let loaded = SessionPersistence.load(from: testURL)
+
+        XCTAssertNotNil(loaded, "v2 JSON must decode successfully as a migration")
+        XCTAssertEqual(loaded?.schemaVersion, SessionSnapshot.currentSchemaVersion,
+                       "Migrated snapshot must be normalised to the current schema version")
+        XCTAssertEqual(loaded?.ingredientsExpanded, true,
+                       "ingredientsExpanded must default to true when missing from v2 JSON")
+        XCTAssertEqual(loaded?.stepsCompletedExpanded, false,
+                       "stepsCompletedExpanded must default to false when missing from v2 JSON")
+    }
+
     // MARK: - Failure modes
 
     func test_load_returnsNil_whenFileAbsent() {

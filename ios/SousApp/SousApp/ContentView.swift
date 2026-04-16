@@ -14,11 +14,6 @@ struct ContentView: View {
     /// Measured height of BottomZoneView. Applied as .safeAreaInset to RecipeCanvasView
     /// so scroll content is never hidden behind the bar.
     @State private var bottomZoneHeight: CGFloat = 0
-    /// Controls whether the Ingredients section is expanded. Lifted here so it survives
-    /// RecipeCanvasView being replaced by PatchReviewView.
-    @State private var ingredientsExpanded: Bool = true
-    /// Controls whether the completed steps section is expanded.
-    @State private var stepsCompletedExpanded: Bool = true
     /// Whether the collapsible top nav bar (New / History / Settings) is currently revealed.
     @State private var navBarVisible: Bool = false
     /// True while the user is editing the recipe title inline.
@@ -81,8 +76,6 @@ struct ContentView: View {
                     onResetRecipe: {
                         store.resetRecipe()
                         timerManager.clearAll()
-                        ingredientsExpanded = true
-                        stepsCompletedExpanded = true
                     },
                     onUpdateTitle: { newTitle in store.updateTitle(newTitle) },
                     onEditingTitleChanged: { editing in isTitleEditing = editing },
@@ -96,8 +89,8 @@ struct ContentView: View {
                     timerManager: timerManager,
                     scrollToStepId: $scrollToStepId,
                     highlightedStepId: $highlightedStepId,
-                    ingredientsExpanded: $ingredientsExpanded,
-                    stepsCompletedExpanded: $stepsCompletedExpanded,
+                    ingredientsExpanded: $store.ingredientsExpanded,
+                    stepsCompletedExpanded: $store.stepsCompletedExpanded,
                     navBarVisible: $navBarVisible,
                     bottomZoneHeight: bottomZoneHeight
                 )
@@ -147,23 +140,6 @@ struct ContentView: View {
         .onChange(of: store.hasCanvas) { _, hasCanvas in
             // Show nav bar when the canvas first appears (user is at the top).
             if hasCanvas { navBarVisible = true }
-        }
-        .onChange(of: store.uiState.recipe.id) { _, _ in
-            ingredientsExpanded = true
-            stepsCompletedExpanded = true
-        }
-        .onChange(of: store.uiState) { prev, current in
-            // Auto-expand ingredients when accepting a patch that has ingredient changes.
-            if case .patchReview(_, let patchSet, _, _) = prev,
-               case .recipeOnly = current,
-               patchSet.patches.contains(where: {
-                   switch $0 {
-                   case .addIngredient, .updateIngredient, .removeIngredient: return true
-                   default: return false
-                   }
-               }) {
-                ingredientsExpanded = true
-            }
         }
         .sheet(isPresented: Binding(
             get: { store.hasCanvas && store.uiState.isSheetPresented && !store.uiState.isPatchReview },

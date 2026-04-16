@@ -97,6 +97,13 @@ final class AppStore: ObservableObject {
     /// The recipe row the user asked Sous about via the swipe action. Shown as a quote chip
     /// in the chat composer; consumed and cleared when the user sends a message.
     @Published var quotedRowContext: QuotedRowContext? = nil
+    /// Whether the Ingredients section is expanded on the recipe canvas.
+    /// Persisted in SessionSnapshot so it survives relaunch and recipe switches.
+    @Published var ingredientsExpanded: Bool = true
+    /// Whether completed steps are shown on the recipe canvas.
+    /// When false, done steps are hidden while TODO steps remain visible.
+    /// Persisted in SessionSnapshot so it survives relaunch and recipe switches.
+    @Published var stepsCompletedExpanded: Bool = false
 
     private let maxMessages = 200
     private let liveLLMModel = "gpt-5.4-mini"
@@ -114,6 +121,7 @@ final class AppStore: ObservableObject {
     private var llmTask: Task<Void, Never>?
     /// Separate task slot for mise en place — independent of the chat LLM task.
     private var miseEnPlaceTask: Task<Void, Never>?
+    private var cancellables: Set<AnyCancellable> = []
     /// Monotonically incremented per send. Used by the deferred cleanup to avoid
     /// clearing a newer task's reference when an old (cancelled) task finishes.
     private var llmGeneration = 0
@@ -184,6 +192,8 @@ final class AppStore: ObservableObject {
                 hasCanvas = snapshot.hasCanvas
                 chatTranscript = snapshot.chatMessages
                 nextLLMContext = snapshot.nextLLMContext
+                ingredientsExpanded = snapshot.ingredientsExpanded
+                stepsCompletedExpanded = snapshot.stepsCompletedExpanded
                 if snapshot.hasCanvas {
                     if let patch = snapshot.pendingPatchSet {
                         // Auto-advance past patchProposed: restore directly into patchReview.
@@ -237,6 +247,24 @@ final class AppStore: ObservableObject {
                 ChatMessage(role: .assistant, text: "Tip: use the Debug panel to simulate a patch if you want to test the review flow."),
             ]
         }
+
+        // Persist collapsed-section state whenever the user toggles either section.
+        // .dropFirst() skips the initial emission so these don't fire during init/restore.
+        // newValue is passed through to saveSession because @Published fires in willSet —
+        // before the backing store is updated — so reading self.ingredientsExpanded /
+        // self.stepsCompletedExpanded at sink time would capture the old value.
+        $ingredientsExpanded
+            .dropFirst()
+            .sink { [weak self] newValue in
+                self?.saveSession(ingredientsExpanded: newValue)
+            }
+            .store(in: &cancellables)
+        $stepsCompletedExpanded
+            .dropFirst()
+            .sink { [weak self] newValue in
+                self?.saveSession(stepsCompletedExpanded: newValue)
+            }
+            .store(in: &cancellables)
     }
 
     deinit {
@@ -314,6 +342,8 @@ final class AppStore: ObservableObject {
         )
         chatTranscript = []
         nextLLMContext = nil
+        ingredientsExpanded = true
+        stepsCompletedExpanded = false
     }
 
     /// Starts a new session immediately (previous session stays on disk in Recent Recipes).
@@ -351,6 +381,8 @@ final class AppStore: ObservableObject {
             miseEnPlace: resetMEP
         )
         uiState = .recipeOnly(recipe: reset)
+        ingredientsExpanded = true
+        stepsCompletedExpanded = false
         saveSession()
     }
 
@@ -378,7 +410,10 @@ final class AppStore: ObservableObject {
     }
 
     /// Resumes a previous session immediately (switch is non-destructive — current session stays on disk).
+    /// No-ops if the snapshot's recipe ID matches the already-active session, preventing spurious
+    /// duplicate resumes triggered by RecentRecipesView's initial render on app launch.
     func requestResumeSession(_ snapshot: SessionSnapshot) {
+        guard snapshot.recipe.id != uiState.recipe.id else { return }
         resumeSession(snapshot)
     }
 
@@ -389,6 +424,9 @@ final class AppStore: ObservableObject {
         hasCanvas = snapshot.hasCanvas
         chatTranscript = snapshot.chatMessages
         nextLLMContext = snapshot.nextLLMContext
+        // uiState must be set before ingredientsExpanded / stepsCompletedExpanded so that
+        // the Combine sinks — which call saveSession() — write to the new recipe's file,
+        // not the outgoing recipe's file.
         if snapshot.hasCanvas {
             if let patch = snapshot.pendingPatchSet {
                 // Auto-advance past patchProposed: restore directly into patchReview.
@@ -405,6 +443,8 @@ final class AppStore: ObservableObject {
         } else {
             uiState = .chatOpen(recipe: snapshot.recipe, draftUserText: "", hidden: HiddenContext())
         }
+        ingredientsExpanded = snapshot.ingredientsExpanded
+        stepsCompletedExpanded = snapshot.stepsCompletedExpanded
     }
 
     // MARK: - Live LLM toggle
@@ -1015,6 +1055,15 @@ final class AppStore: ObservableObject {
                     decision: .accepted,
                     decidedAtMs: Int(Date().timeIntervalSinceReferenceDate * 1000)
                 ))
+                // Auto-expand ingredients when accepting a patch that touched them.
+                if ps.patches.contains(where: {
+                    switch $0 {
+                    case .addIngredient, .updateIngredient, .removeIngredient: return true
+                    default: return false
+                    }
+                }) {
+                    ingredientsExpanded = true
+                }
             }
         case .rejectPatch:
             if case .patchReview(_, let ps, _, _) = prev, case .chatOpen = uiState {
@@ -1043,13 +1092,25 @@ final class AppStore: ObservableObject {
     /// Called synchronously on the main actor.  The JSON payload is small
     /// (recipe + ≤20 messages + optional patch) so the write is negligible.
     /// `Data.write(options: .atomic)` handles crash-safety via temp-file + rename.
-    private func saveSession() {
+    private func saveSession(
+        ingredientsExpanded overrideIngredients: Bool? = nil,
+        stepsCompletedExpanded overrideStepsCompleted: Bool? = nil
+    ) {
         guard isPersistenceEnabled else { return }
         let url = SessionPersistence.fileURL(for: uiState.recipe.id, in: sessionsDirectory)
-        try? SessionPersistence.save(makeSnapshot(), to: url)
+        try? SessionPersistence.save(
+            makeSnapshot(
+                ingredientsExpanded: overrideIngredients,
+                stepsCompletedExpanded: overrideStepsCompleted
+            ),
+            to: url
+        )
     }
 
-    private func makeSnapshot() -> SessionSnapshot {
+    private func makeSnapshot(
+        ingredientsExpanded overrideIngredients: Bool? = nil,
+        stepsCompletedExpanded overrideStepsCompleted: Bool? = nil
+    ) -> SessionSnapshot {
         let pendingPatch: PatchSet? = {
             switch uiState {
             case .patchProposed(_, let ps, _, _),
@@ -1073,7 +1134,9 @@ final class AppStore: ObservableObject {
             pendingPatchSet: pendingPatch,
             chatMessages: messages,
             nextLLMContext: nextLLMContext,
-            savedAt: Date()
+            savedAt: Date(),
+            ingredientsExpanded: overrideIngredients ?? ingredientsExpanded,
+            stepsCompletedExpanded: overrideStepsCompleted ?? stepsCompletedExpanded
         )
     }
 
