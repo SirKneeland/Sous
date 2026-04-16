@@ -29,6 +29,7 @@ struct RecipeCanvasView: View {
     @Binding var scrollToStepId: UUID?
     @Binding var highlightedStepId: UUID?
     @Binding var ingredientsExpanded: Bool
+    @Binding var stepsCompletedExpanded: Bool
     @Binding var navBarVisible: Bool
 
     @State private var checkedIngredients: Set<UUID> = []
@@ -39,6 +40,8 @@ struct RecipeCanvasView: View {
     @State private var isEditingTitle: Bool = false
     @State private var titleDraft: String = ""
     @FocusState private var isTitleFocused: Bool
+    @State private var stepCollapseStates: [String: StepCollapsePhase] = [:]
+    @State private var stepDrainScales: [String: CGFloat] = [:]
 
     init(
         recipe: Recipe,
@@ -60,6 +63,7 @@ struct RecipeCanvasView: View {
         scrollToStepId: Binding<UUID?> = .constant(nil),
         highlightedStepId: Binding<UUID?> = .constant(nil),
         ingredientsExpanded: Binding<Bool> = .constant(true),
+        stepsCompletedExpanded: Binding<Bool> = .constant(true),
         navBarVisible: Binding<Bool> = .constant(true)
     ) {
         self.recipe = recipe
@@ -81,6 +85,7 @@ struct RecipeCanvasView: View {
         self._scrollToStepId = scrollToStepId
         self._highlightedStepId = highlightedStepId
         self._ingredientsExpanded = ingredientsExpanded
+        self._stepsCompletedExpanded = stepsCompletedExpanded
         self._navBarVisible = navBarVisible
     }
 
@@ -135,9 +140,6 @@ struct RecipeCanvasView: View {
                             .foregroundStyle(Color.sousMuted)
                     }
                     Spacer()
-                    SousIconButton(systemName: "arrow.counterclockwise") {
-                        showingResetConfirmation = true
-                    }
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 20)
@@ -277,10 +279,31 @@ struct RecipeCanvasView: View {
 
                 // MARK: Procedure header (with mise en place trigger)
                 HStack(alignment: .center) {
-                    Text("PROCEDURE")
-                        .font(.sousSectionHeader)
-                        .foregroundStyle(Color.sousTerracotta)
-                        .kerning(1.2)
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            stepsCompletedExpanded.toggle()
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            HStack(spacing: 4) {
+                                Text("PROCEDURE")
+                                    .font(.sousSectionHeader)
+                                    .foregroundStyle(Color.sousTerracotta)
+                                    .kerning(1.2)
+                                if !stepsCompletedExpanded && completedFlatSteps.count > 0 {
+                                    Text("· \(completedFlatSteps.count) done")
+                                        .font(.sousCaption)
+                                        .foregroundStyle(Color.sousMuted)
+                                }
+                            }
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(Color.sousTerracotta)
+                                .rotationEffect(.degrees(stepsCompletedExpanded ? 0 : -90))
+                                .animation(.easeInOut(duration: 0.2), value: stepsCompletedExpanded)
+                        }
+                    }
+                    .buttonStyle(.plain)
                     Spacer()
                     if recipe.miseEnPlace == nil {
                         miseEnPlaceTrigger
@@ -307,7 +330,7 @@ struct RecipeCanvasView: View {
                         .listRowSeparator(.hidden)
                 }
 
-                // MARK: Step rows
+                // MARK: Step rows (all steps in original order)
                 ForEach(Array(recipe.steps.enumerated()), id: \.element.id) { index, step in
                     if let subSteps = step.subSteps, !subSteps.isEmpty {
                         let items = subSteps.map { NestedStepItem(id: $0.id, text: $0.text, isDone: $0.effectiveStatus == .done) }
@@ -331,80 +354,93 @@ struct RecipeCanvasView: View {
                         .listRowSeparator(.visible, edges: .bottom)
                         .listRowSeparatorTint(Color.sousSeparator)
                     } else {
-                        let isDone = step.status == .done
-                        let isHighlighted = !isDone && highlightedStepId == step.id
-                        HStack(alignment: .top, spacing: 12) {
-                            Button {
-                                if step.status == .todo { onMarkStepDone(step.id) }
-                            } label: {
-                                SousCheckbox(isChecked: isDone)
-                                    .padding(.top, 2)
-                            }
-                            .buttonStyle(.plain)
-
-                            if let tm = timerManager, !isDone {
-                                TimerAffordanceText(
-                                    step: step,
-                                    stepIndex: index,
-                                    isHighlighted: isHighlighted,
-                                    timerManager: tm,
-                                    onClearHighlight: {
-                                        withAnimation(.easeInOut(duration: 0.3)) {
-                                            highlightedStepId = nil
-                                        }
-                                    }
-                                )
-                            } else {
-                                Text(step.text)
-                                    .font(.sousBody)
-                                    .foregroundStyle(isDone ? Color.sousMuted : Color.sousText)
-                                    .strikethrough(isDone, color: Color.sousMuted)
-                                    .multilineTextAlignment(.leading)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .onTapGesture {
-                                        withAnimation(.easeInOut(duration: 0.3)) {
-                                            highlightedStepId = nil
-                                        }
-                                    }
-                            }
-                        }
-                        .padding(.vertical, 10)
-                        .padding(.horizontal, 20)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .id(step.id)
-                        .listRowInsets(EdgeInsets())
-                        .listRowBackground(
-                            isHighlighted
-                                ? Color.sousHighlightBackground
-                                : Color.clear
-                        )
-                        .animation(.easeInOut(duration: 0.3), value: isHighlighted)
-                        .simultaneousGesture(
-                            LongPressGesture(minimumDuration: 0.5)
-                                .onEnded { _ in
-                                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                                    onAskSousAbout("step", step.text)
-                                }
-                        )
-                        .listRowSeparator(.visible, edges: .bottom)
-                        .listRowSeparatorTint(Color.sousSeparator)
-                        .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                            if !isDone {
+                        let isDone = step.effectiveStatus == .done
+                        let collapsePhase = stepCollapseStates[step.id.uuidString]
+                        if !isDone || stepsCompletedExpanded || collapsePhase != nil {
+                            let isHighlighted = !isDone && highlightedStepId == step.id
+                            HStack(alignment: .top, spacing: 12) {
                                 Button {
-                                    onMarkStepDone(step.id)
+                                    if step.status == .todo { handleMarkStepDone(step.id) }
                                 } label: {
-                                    Label("Done", systemImage: "checkmark")
+                                    SousCheckbox(isChecked: isDone)
+                                        .padding(.top, 2)
                                 }
-                                .tint(Color.sousGreen)
+                                .buttonStyle(.plain)
+
+                                if let tm = timerManager, !isDone {
+                                    TimerAffordanceText(
+                                        step: step,
+                                        stepIndex: index,
+                                        isHighlighted: isHighlighted,
+                                        timerManager: tm,
+                                        onClearHighlight: {
+                                            withAnimation(.easeInOut(duration: 0.3)) {
+                                                highlightedStepId = nil
+                                            }
+                                        }
+                                    )
+                                } else {
+                                    Text(step.text)
+                                        .font(.sousBody)
+                                        .foregroundStyle(isDone ? Color.sousMuted : Color.sousText)
+                                        .strikethrough(isDone, color: Color.sousMuted)
+                                        .multilineTextAlignment(.leading)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .onTapGesture {
+                                            withAnimation(.easeInOut(duration: 0.3)) {
+                                                highlightedStepId = nil
+                                            }
+                                        }
+                                }
                             }
-                        }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                            Button {
-                                onAskSousAbout("step", step.text)
-                            } label: {
-                                Label("Ask Sous", systemImage: "bubble.left")
+                            .padding(.vertical, 10)
+                            .padding(.horizontal, 20)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .id(step.id)
+                            .overlay(alignment: .top) {
+                                if collapsePhase == .draining {
+                                    Rectangle()
+                                        .fill(Color.sousTerracotta)
+                                        .frame(height: 2)
+                                        .scaleEffect(x: stepDrainScales[step.id.uuidString] ?? 1.0, y: 1, anchor: .leading)
+                                }
                             }
-                            .tint(Color.sousTerracotta)
+                            .opacity(collapsePhase == .fading ? 0 : 1)
+                            .listRowInsets(EdgeInsets())
+                            .listRowBackground(
+                                isHighlighted
+                                    ? Color.sousHighlightBackground
+                                    : Color.clear
+                            )
+                            .animation(.easeInOut(duration: 0.3), value: isHighlighted)
+                            .simultaneousGesture(
+                                LongPressGesture(minimumDuration: 0.5)
+                                    .onEnded { _ in
+                                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                        onAskSousAbout("step", step.text)
+                                    }
+                            )
+                            .listRowSeparator(.visible, edges: .bottom)
+                            .listRowSeparatorTint(Color.sousSeparator)
+                            .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                                if !isDone {
+                                    Button {
+                                        handleMarkStepDone(step.id)
+                                    } label: {
+                                        Label("Done", systemImage: "checkmark")
+                                    }
+                                    .tint(Color.sousGreen)
+                                }
+                            }
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button {
+                                    onAskSousAbout("step", step.text)
+                                } label: {
+                                    Label("Ask Sous", systemImage: "bubble.left")
+                                }
+                                .tint(Color.sousTerracotta)
+                            }
+                            .transition(.opacity.combined(with: .move(edge: .bottom)))
                         }
                     }
                 }
@@ -432,6 +468,21 @@ struct RecipeCanvasView: View {
                             .listRowSeparator(.hidden)
                     }
                 }
+
+                // Reset Recipe button at bottom of canvas
+                Button {
+                    showingResetConfirmation = true
+                } label: {
+                    Text("Reset Recipe")
+                        .font(.sousCaption)
+                        .foregroundStyle(Color.sousMuted)
+                }
+                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
 
                 // Bottom breathing room
                 Color.clear.frame(height: 20)
@@ -480,6 +531,12 @@ struct RecipeCanvasView: View {
                 }
                 scrollToStepId = nil
             }
+            .onChange(of: stepsCompletedExpanded) { _, expanded in
+                if expanded {
+                    stepCollapseStates.removeAll()
+                    stepDrainScales.removeAll()
+                }
+            }
             .sheet(isPresented: $showingMiseEnPlaceModal) {
                 MiseEnPlaceConfirmationModal(
                     dontShowAgain: $modalDontShowAgain,
@@ -519,6 +576,47 @@ struct RecipeCanvasView: View {
         let trimmed = titleDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         onUpdateTitle(trimmed)
+    }
+
+    // MARK: - Step collapse helpers
+
+    /// Flat steps that are done, in original recipe order. Used for the "N done" count in the header.
+    private var completedFlatSteps: [Step] {
+        recipe.steps.filter { step in
+            (step.subSteps == nil || step.subSteps!.isEmpty) && step.effectiveStatus == .done
+        }
+    }
+
+    /// Marks a step done, triggering the two-phase drain animation when the
+    /// completed section is collapsed.
+    private func handleMarkStepDone(_ stepId: UUID) {
+        onMarkStepDone(stepId)
+        guard !stepsCompletedExpanded else { return }
+        let idStr = stepId.uuidString
+        // Set scale to 1.0 and phase synchronously so SwiftUI commits them
+        // before the Task runs on the next run-loop iteration.
+        stepDrainScales[idStr] = 1.0
+        stepCollapseStates[idStr] = .draining
+        Task { @MainActor in
+            // Phase 1: drain bar shrinks from 1.0 → 0.0 over 5 seconds.
+            // withAnimation runs after the synchronous frame so SwiftUI
+            // correctly interpolates from the committed 1.0 value.
+            withAnimation(.linear(duration: 5.0)) {
+                stepDrainScales[idStr] = 0.0
+            }
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            guard stepCollapseStates[idStr] == .draining else { return }
+            // Phase 2: fade row to opacity 0.
+            withAnimation(.easeInOut(duration: 0.3)) {
+                stepCollapseStates[idStr] = .fading
+            }
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            // Remove entry so the list row collapses upward.
+            withAnimation(.easeInOut(duration: 0.3)) {
+                stepCollapseStates.removeValue(forKey: idStr)
+                stepDrainScales.removeValue(forKey: idStr)
+            }
+        }
     }
 
     // MARK: - Mise en place flat row helpers
@@ -667,6 +765,10 @@ private struct MEPFlatRow: Identifiable {
         }
     }
 }
+
+// MARK: - Step collapse phase
+
+private enum StepCollapsePhase { case draining, fading }
 
 // MARK: - Nested step group support
 
