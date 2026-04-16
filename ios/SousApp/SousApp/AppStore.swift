@@ -1029,7 +1029,7 @@ final class AppStore: ObservableObject {
         }
         // Persist after events that change recipe state, pending patch, or nextLLMContext.
         switch event {
-        case .patchReceived, .acceptPatch, .rejectPatch, .markStepDone, .markSubStepDone:
+        case .patchReceived, .acceptPatch, .rejectPatch, .markStepDone, .markStepUndone, .markSubStepDone:
             saveSession()
         default:
             break

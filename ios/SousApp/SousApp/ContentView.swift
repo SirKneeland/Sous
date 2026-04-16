@@ -67,6 +67,9 @@ struct ContentView: View {
                         }
                         store.send(.markStepDone(stepId: id))
                     },
+                    onMarkStepUndone: { id in
+                        store.send(.markStepUndone(stepId: id))
+                    },
                     onMarkSubStepDone: { parentId, subId in
                         store.send(.markSubStepDone(parentStepId: parentId, subStepId: subId))
                     },
@@ -95,7 +98,8 @@ struct ContentView: View {
                     highlightedStepId: $highlightedStepId,
                     ingredientsExpanded: $ingredientsExpanded,
                     stepsCompletedExpanded: $stepsCompletedExpanded,
-                    navBarVisible: $navBarVisible
+                    navBarVisible: $navBarVisible,
+                    bottomZoneHeight: bottomZoneHeight
                 )
                 // Reserve space for the collapsible nav bar so list content
                 // is never hidden behind it when revealed.

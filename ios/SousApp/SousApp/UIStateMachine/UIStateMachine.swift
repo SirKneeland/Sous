@@ -72,6 +72,30 @@ public enum UIStateMachine {
             )
             return state.replacingRecipe(updated)
 
+        // MARK: markStepUndone — drain-phase cancellation only
+        // Reverts a done step back to todo. Only reachable when the drain
+        // animation is active; the UI guards the call site.
+
+        case (_, .markStepUndone(let stepId)):
+            let recipe = state.recipe
+            guard recipe.steps.contains(where: { $0.id == stepId && $0.status == .done }) else {
+                return state
+            }
+            let updatedSteps = recipe.steps.map { step -> Step in
+                guard step.id == stepId else { return step }
+                return Step(id: step.id, text: step.text, status: .todo)
+            }
+            let updated = Recipe(
+                id: recipe.id,
+                version: recipe.version + 1,
+                title: recipe.title,
+                ingredients: recipe.ingredients,
+                steps: updatedSteps,
+                notes: recipe.notes,
+                miseEnPlace: recipe.miseEnPlace
+            )
+            return state.replacingRecipe(updated)
+
         // MARK: markSubStepDone — user-initiated, works in any state
 
         case (_, .markSubStepDone(let parentStepId, let subStepId)):

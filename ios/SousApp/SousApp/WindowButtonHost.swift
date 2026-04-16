@@ -33,6 +33,7 @@ struct BottomZoneView: View {
         VStack(spacing: 0) {
             if !timerManager.activeSessions.isEmpty {
                 TimerBannerStack(timerManager: timerManager, onTapBanner: onTimerBannerTap)
+                    .allowsHitTesting(true)
             }
             SousRule()
             Button {
@@ -55,6 +56,7 @@ struct BottomZoneView: View {
             .background(Color.sousBackground)
             .offset(y: dragOffset)
             .zIndex(1) // keep button above chevron strip during drag translation
+            .allowsHitTesting(true)
             // ThumbDrop affordance hint
             Image(systemName: "chevron.down")
                 .font(.system(size: 12, weight: .light))
@@ -64,6 +66,7 @@ struct BottomZoneView: View {
                 .background(Color.sousBackground)
                 .allowsHitTesting(false)
         }
+        .allowsHitTesting(false)
         .background(Color.sousBackground.ignoresSafeArea(edges: .bottom))
         // Report height to ContentView for the matching safeAreaInset on RecipeCanvasView.
         .background(GeometryReader { geo in

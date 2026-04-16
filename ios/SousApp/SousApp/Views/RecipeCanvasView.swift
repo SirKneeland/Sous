@@ -10,6 +10,7 @@ private struct ScrollState: Equatable {
 struct RecipeCanvasView: View {
     let recipe: Recipe
     var onMarkStepDone: (UUID) -> Void = { _ in }
+    var onMarkStepUndone: (UUID) -> Void = { _ in }
     var onMarkSubStepDone: (UUID, UUID) -> Void = { _, _ in }
     var onMarkMiseEnPlaceDone: (UUID) -> Void = { _ in }
     var onTriggerMiseEnPlace: () -> Void = {}
@@ -31,12 +32,14 @@ struct RecipeCanvasView: View {
     @Binding var ingredientsExpanded: Bool
     @Binding var stepsCompletedExpanded: Bool
     @Binding var navBarVisible: Bool
+    var bottomZoneHeight: CGFloat = 0
 
     @State private var checkedIngredients: Set<UUID> = []
     @AppStorage("miseEnPlaceConfirmed") private var miseEnPlaceConfirmed: Bool = false
     @State private var showingMiseEnPlaceModal: Bool = false
     @State private var modalDontShowAgain: Bool = false
     @State private var showingResetConfirmation: Bool = false
+    @State private var resetButtonPressed: Bool = false
     @State private var isEditingTitle: Bool = false
     @State private var titleDraft: String = ""
     @FocusState private var isTitleFocused: Bool
@@ -46,6 +49,7 @@ struct RecipeCanvasView: View {
     init(
         recipe: Recipe,
         onMarkStepDone: @escaping (UUID) -> Void = { _ in },
+        onMarkStepUndone: @escaping (UUID) -> Void = { _ in },
         onMarkSubStepDone: @escaping (UUID, UUID) -> Void = { _, _ in },
         onMarkMiseEnPlaceDone: @escaping (UUID) -> Void = { _ in },
         onTriggerMiseEnPlace: @escaping () -> Void = {},
@@ -64,10 +68,12 @@ struct RecipeCanvasView: View {
         highlightedStepId: Binding<UUID?> = .constant(nil),
         ingredientsExpanded: Binding<Bool> = .constant(true),
         stepsCompletedExpanded: Binding<Bool> = .constant(true),
-        navBarVisible: Binding<Bool> = .constant(true)
+        navBarVisible: Binding<Bool> = .constant(true),
+        bottomZoneHeight: CGFloat = 0
     ) {
         self.recipe = recipe
         self.onMarkStepDone = onMarkStepDone
+        self.onMarkStepUndone = onMarkStepUndone
         self.onMarkSubStepDone = onMarkSubStepDone
         self.onMarkMiseEnPlaceDone = onMarkMiseEnPlaceDone
         self.onTriggerMiseEnPlace = onTriggerMiseEnPlace
@@ -87,6 +93,7 @@ struct RecipeCanvasView: View {
         self._ingredientsExpanded = ingredientsExpanded
         self._stepsCompletedExpanded = stepsCompletedExpanded
         self._navBarVisible = navBarVisible
+        self.bottomZoneHeight = bottomZoneHeight
     }
 
     var body: some View {
@@ -360,7 +367,17 @@ struct RecipeCanvasView: View {
                             let isHighlighted = !isDone && highlightedStepId == step.id
                             HStack(alignment: .top, spacing: 12) {
                                 Button {
-                                    if step.status == .todo { handleMarkStepDone(step.id) }
+                                    // Check drain state FIRST — if draining, cancel and revert.
+                                    // Must not fall through to any logic that touches stepsCompletedExpanded.
+                                    if collapsePhase == .draining {
+                                        stepCollapseStates.removeValue(forKey: step.id.uuidString)
+                                        stepDrainScales.removeValue(forKey: step.id.uuidString)
+                                        onMarkStepUndone(step.id)
+                                        return
+                                    }
+                                    if step.status == .todo {
+                                        handleMarkStepDone(step.id)
+                                    }
                                 } label: {
                                     SousCheckbox(isChecked: isDone)
                                         .padding(.top, 2)
@@ -471,21 +488,34 @@ struct RecipeCanvasView: View {
 
                 // Reset Recipe button at bottom of canvas
                 Button {
+                    resetButtonPressed = true
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                     showingResetConfirmation = true
                 } label: {
-                    Text("Reset Recipe")
-                        .font(.sousCaption)
-                        .foregroundStyle(Color.sousMuted)
+                    HStack(spacing: 8) {
+                        Image(systemName: "repeat")
+                            .font(.system(size: 13, weight: .semibold))
+                        Text("Reset Recipe")
+                            .font(.sousButton)
+                    }
+                    .foregroundStyle(resetButtonPressed ? Color.white : Color.sousTerracotta)
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: 44)
+                    .background(resetButtonPressed ? Color.sousTerracotta : Color.clear)
+                    .overlay(Rectangle().stroke(Color.sousTerracotta, lineWidth: 1))
                 }
                 .buttonStyle(.plain)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
+                .contentShape(Rectangle())
+                .padding(.horizontal, 20)
+                .padding(.top, 32)
+                .padding(.bottom, 8)
                 .listRowInsets(EdgeInsets())
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
 
-                // Bottom breathing room
-                Color.clear.frame(height: 20)
+                // Bottom breathing room — sized to bottomZoneHeight so the Reset
+                // button scrolls fully clear of the BottomZoneView frame.
+                Color.clear.frame(height: bottomZoneHeight)
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
@@ -557,10 +587,13 @@ struct RecipeCanvasView: View {
         } // end ScrollViewReader
         .alert("Start over?", isPresented: $showingResetConfirmation) {
             Button("Reset", role: .destructive) {
+                resetButtonPressed = false
                 checkedIngredients = []
                 onResetRecipe()
             }
-            Button("Cancel", role: .cancel) {}
+            Button("Cancel", role: .cancel) {
+                resetButtonPressed = false
+            }
         } message: {
             Text("Your chat history will be kept.")
         }
@@ -601,10 +634,10 @@ struct RecipeCanvasView: View {
             // Phase 1: drain bar shrinks from 1.0 → 0.0 over 5 seconds.
             // withAnimation runs after the synchronous frame so SwiftUI
             // correctly interpolates from the committed 1.0 value.
-            withAnimation(.linear(duration: 5.0)) {
+            withAnimation(.linear(duration: 3.0)) {
                 stepDrainScales[idStr] = 0.0
             }
-            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
             guard stepCollapseStates[idStr] == .draining else { return }
             // Phase 2: fade row to opacity 0.
             withAnimation(.easeInOut(duration: 0.3)) {
