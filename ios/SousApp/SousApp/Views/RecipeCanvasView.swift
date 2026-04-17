@@ -23,6 +23,7 @@ struct RecipeCanvasView: View {
     /// Called when the user swipes left on a row and taps "Ask Sous".
     /// Arguments: (rowType, rowText) where rowType is "ingredient" or "step".
     var onAskSousAbout: (String, String) -> Void = { _, _ in }
+    var onMarkMiseEnPlaceUndone: (UUID) -> Void = { _ in }
     var miseEnPlaceIsLoading: Bool = false
     var miseEnPlaceError: String? = nil
     var llmDebugStatus: String? = nil
@@ -31,6 +32,7 @@ struct RecipeCanvasView: View {
     @Binding var highlightedStepId: UUID?
     @Binding var ingredientsExpanded: Bool
     @Binding var stepsCompletedExpanded: Bool
+    @Binding var miseEnPlaceExpanded: Bool
     @Binding var navBarVisible: Bool
     var bottomZoneHeight: CGFloat = 0
 
@@ -45,6 +47,8 @@ struct RecipeCanvasView: View {
     @FocusState private var isTitleFocused: Bool
     @State private var stepCollapseStates: [String: StepCollapsePhase] = [:]
     @State private var stepDrainScales: [String: CGFloat] = [:]
+    @State private var mepDrainStates: [String: StepCollapsePhase] = [:]
+    @State private var mepDrainScales: [String: CGFloat] = [:]
 
     init(
         recipe: Recipe,
@@ -52,6 +56,7 @@ struct RecipeCanvasView: View {
         onMarkStepUndone: @escaping (UUID) -> Void = { _ in },
         onMarkSubStepDone: @escaping (UUID, UUID) -> Void = { _, _ in },
         onMarkMiseEnPlaceDone: @escaping (UUID) -> Void = { _ in },
+        onMarkMiseEnPlaceUndone: @escaping (UUID) -> Void = { _ in },
         onTriggerMiseEnPlace: @escaping () -> Void = {},
         onOpenSettings: @escaping () -> Void = {},
         onStartNew: @escaping () -> Void = {},
@@ -68,6 +73,7 @@ struct RecipeCanvasView: View {
         highlightedStepId: Binding<UUID?> = .constant(nil),
         ingredientsExpanded: Binding<Bool> = .constant(true),
         stepsCompletedExpanded: Binding<Bool> = .constant(true),
+        miseEnPlaceExpanded: Binding<Bool> = .constant(true),
         navBarVisible: Binding<Bool> = .constant(true),
         bottomZoneHeight: CGFloat = 0
     ) {
@@ -76,6 +82,7 @@ struct RecipeCanvasView: View {
         self.onMarkStepUndone = onMarkStepUndone
         self.onMarkSubStepDone = onMarkSubStepDone
         self.onMarkMiseEnPlaceDone = onMarkMiseEnPlaceDone
+        self.onMarkMiseEnPlaceUndone = onMarkMiseEnPlaceUndone
         self.onTriggerMiseEnPlace = onTriggerMiseEnPlace
         self.onOpenSettings = onOpenSettings
         self.onStartNew = onStartNew
@@ -92,6 +99,7 @@ struct RecipeCanvasView: View {
         self._highlightedStepId = highlightedStepId
         self._ingredientsExpanded = ingredientsExpanded
         self._stepsCompletedExpanded = stepsCompletedExpanded
+        self._miseEnPlaceExpanded = miseEnPlaceExpanded
         self._navBarVisible = navBarVisible
         self.bottomZoneHeight = bottomZoneHeight
     }
@@ -240,47 +248,90 @@ struct RecipeCanvasView: View {
 
                 // MARK: Mise en place section (once populated)
                 if let mepEntries = recipe.miseEnPlace, !mepEntries.isEmpty {
-                    SousSectionLabel(title: "Mise en place")
-                        .padding(.horizontal, 20)
-                        .padding(.top, 24)
-                        .padding(.bottom, 12)
-                        .frame(maxWidth: .infinity)
-                        .listRowInsets(EdgeInsets())
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            miseEnPlaceExpanded.toggle()
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            HStack(spacing: 4) {
+                                Text("MISE EN PLACE")
+                                    .font(.sousSectionHeader)
+                                    .foregroundStyle(Color.sousTerracotta)
+                                    .kerning(1.2)
+                                if !miseEnPlaceExpanded && completedMEPRows.count > 0 {
+                                    Text("· \(completedMEPRows.count) done")
+                                        .font(.sousCaption)
+                                        .foregroundStyle(Color.sousMuted)
+                                }
+                            }
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(Color.sousTerracotta)
+                                .rotationEffect(.degrees(miseEnPlaceExpanded ? 0 : -90))
+                                .animation(.easeInOut(duration: 0.2), value: miseEnPlaceExpanded)
+                            Spacer()
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 24)
+                    .padding(.bottom, 12)
+                    .frame(maxWidth: .infinity)
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
 
                     ForEach(flatMEPRows(mepEntries)) { row in
-                        mepFlatRowView(row)
-                            .padding(.horizontal, 20)
-                            .simultaneousGesture(
-                                LongPressGesture(minimumDuration: 0.5)
-                                    .onEnded { _ in
-                                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                                        onAskSousAbout("mise en place", row.askSousText)
+                        let mepPhase = mepDrainStates[row.id.uuidString]
+                        if !row.isDone || miseEnPlaceExpanded || mepPhase != nil {
+                            let undoOverride: (() -> Void)? = mepPhase == .draining ? {
+                                mepDrainStates.removeValue(forKey: row.id.uuidString)
+                                mepDrainScales.removeValue(forKey: row.id.uuidString)
+                                onMarkMiseEnPlaceUndone(row.id)
+                            } : nil
+                            mepFlatRowView(row, tapOverride: undoOverride)
+                                .padding(.horizontal, 20)
+                                .overlay(alignment: .top) {
+                                    if mepPhase == .draining {
+                                        Rectangle()
+                                            .fill(Color.sousTerracotta)
+                                            .frame(height: 2)
+                                            .scaleEffect(x: mepDrainScales[row.id.uuidString] ?? 1.0, y: 1, anchor: .leading)
                                     }
-                            )
-                            .listRowInsets(EdgeInsets())
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.visible, edges: .bottom)
-                            .listRowSeparatorTint(Color.sousSeparator)
-                            .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                                if !row.isDone {
+                                }
+                                .opacity(mepPhase == .fading ? 0 : 1)
+                                .simultaneousGesture(
+                                    LongPressGesture(minimumDuration: 0.5)
+                                        .onEnded { _ in
+                                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                            onAskSousAbout("mise en place", row.askSousText)
+                                        }
+                                )
+                                .listRowInsets(EdgeInsets())
+                                .listRowBackground(Color.clear)
+                                .listRowSeparator(.visible, edges: .bottom)
+                                .listRowSeparatorTint(Color.sousSeparator)
+                                .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                                    if !row.isDone {
+                                        Button {
+                                            for id in row.completeIds { handleMarkMEPDone(id) }
+                                        } label: {
+                                            Label("Done", systemImage: "checkmark")
+                                        }
+                                        .tint(Color.sousGreen)
+                                    }
+                                }
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                     Button {
-                                        for id in row.completeIds { onMarkMiseEnPlaceDone(id) }
+                                        onAskSousAbout("mise en place", row.askSousText)
                                     } label: {
-                                        Label("Done", systemImage: "checkmark")
+                                        Label("Ask Sous", systemImage: "bubble.left")
                                     }
-                                    .tint(Color.sousGreen)
+                                    .tint(Color.sousTerracotta)
                                 }
-                            }
-                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                Button {
-                                    onAskSousAbout("mise en place", row.askSousText)
-                                } label: {
-                                    Label("Ask Sous", systemImage: "bubble.left")
-                                }
-                                .tint(Color.sousTerracotta)
-                            }
+                                .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        }
                     }
                 }
 
@@ -613,6 +664,12 @@ struct RecipeCanvasView: View {
 
     // MARK: - Step collapse helpers
 
+    /// Completed MEP rows (solo or groupComponent), used for the "N done" count in the MEP header.
+    private var completedMEPRows: [MEPFlatRow] {
+        guard let entries = recipe.miseEnPlace else { return [] }
+        return flatMEPRows(entries).filter { $0.isDone && !$0.isGroupHeader }
+    }
+
     /// Flat steps that are done, in original recipe order. Used for the "N done" count in the header.
     private var completedFlatSteps: [Step] {
         recipe.steps.filter { step in
@@ -652,6 +709,30 @@ struct RecipeCanvasView: View {
         }
     }
 
+    /// Marks an MEP row done and starts the drain animation when the section is collapsed.
+    private func handleMarkMEPDone(_ id: UUID) {
+        onMarkMiseEnPlaceDone(id)
+        guard !miseEnPlaceExpanded else { return }
+        let idStr = id.uuidString
+        mepDrainScales[idStr] = 1.0
+        mepDrainStates[idStr] = .draining
+        Task { @MainActor in
+            withAnimation(.linear(duration: 3.0)) {
+                mepDrainScales[idStr] = 0.0
+            }
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            guard mepDrainStates[idStr] == .draining else { return }
+            withAnimation(.easeInOut(duration: 0.3)) {
+                mepDrainStates[idStr] = .fading
+            }
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            withAnimation(.easeInOut(duration: 0.3)) {
+                mepDrainStates.removeValue(forKey: idStr)
+                mepDrainScales.removeValue(forKey: idStr)
+            }
+        }
+    }
+
     // MARK: - Mise en place flat row helpers
 
     private func flatMEPRows(_ entries: [MiseEnPlaceEntry]) -> [MEPFlatRow] {
@@ -679,11 +760,15 @@ struct RecipeCanvasView: View {
     }
 
     @ViewBuilder
-    private func mepFlatRowView(_ row: MEPFlatRow) -> some View {
+    private func mepFlatRowView(_ row: MEPFlatRow, tapOverride: (() -> Void)? = nil) -> some View {
         switch row.kind {
         case .solo(let instruction, let isDone):
             Button {
-                if !isDone { onMarkMiseEnPlaceDone(row.id) }
+                if let override = tapOverride {
+                    override()
+                } else if !isDone {
+                    handleMarkMEPDone(row.id)
+                }
             } label: {
                 HStack(alignment: .top, spacing: 12) {
                     SousCheckbox(isChecked: isDone)
@@ -701,7 +786,11 @@ struct RecipeCanvasView: View {
 
         case .groupHeader(let vesselName, let isDone, let incompleteIds):
             Button {
-                for id in incompleteIds { onMarkMiseEnPlaceDone(id) }
+                if let override = tapOverride {
+                    override()
+                } else {
+                    for id in incompleteIds { handleMarkMEPDone(id) }
+                }
             } label: {
                 HStack(alignment: .top, spacing: 12) {
                     SousCheckbox(isChecked: isDone)
@@ -719,7 +808,8 @@ struct RecipeCanvasView: View {
 
         case .groupComponent(let text, let isDone, _):
             NestedStepChildRow(text: text, isDone: isDone) {
-                onMarkMiseEnPlaceDone(row.id)
+                if let override = tapOverride { override() }
+                else { handleMarkMEPDone(row.id) }
             }
         }
     }
@@ -778,6 +868,11 @@ private struct MEPFlatRow: Identifiable {
         case .groupHeader(_, let d, _): return d
         case .groupComponent(_, let d, _): return d
         }
+    }
+
+    var isGroupHeader: Bool {
+        if case .groupHeader = kind { return true }
+        return false
     }
 
     /// IDs to mark done when the user taps this row's "Done" action.

@@ -10,10 +10,11 @@ import SousCore
 /// - `chatMessages` holds the last 20 user/assistant messages from the session.
 /// - `nextLLMContext` preserves the last accept/reject decision so the model
 ///   receives it on the very next call after relaunch.
-/// - `ingredientsExpanded` / `stepsCompletedExpanded` persist the canvas
-///   collapsed-section state across relaunch and recipe switches (added in v3).
+/// - `ingredientsExpanded` / `stepsCompletedExpanded` / `miseEnPlaceExpanded`
+///   persist the canvas collapsed-section state across relaunch and recipe
+///   switches (v3 added the first two; v4 added miseEnPlaceExpanded).
 struct SessionSnapshot: Codable, Sendable {
-    static let currentSchemaVersion = 3
+    static let currentSchemaVersion = 4
 
     let schemaVersion: Int
     /// Whether a recipe canvas exists in the session (false = blank/exploration state).
@@ -28,8 +29,10 @@ struct SessionSnapshot: Codable, Sendable {
     /// Whether the completed-steps section is expanded. When false, done steps
     /// are hidden while TODO steps remain visible.
     let stepsCompletedExpanded: Bool
+    /// Whether the mise en place section is expanded. Defaults to false (collapsed).
+    let miseEnPlaceExpanded: Bool
 
-    /// Memberwise initializer with new-recipe defaults for the v3 fields.
+    /// Memberwise initializer with new-recipe defaults for the v3/v4 fields.
     init(
         schemaVersion: Int,
         hasCanvas: Bool,
@@ -39,7 +42,8 @@ struct SessionSnapshot: Codable, Sendable {
         nextLLMContext: NextLLMContext?,
         savedAt: Date,
         ingredientsExpanded: Bool = true,
-        stepsCompletedExpanded: Bool = false
+        stepsCompletedExpanded: Bool = false,
+        miseEnPlaceExpanded: Bool = false
     ) {
         self.schemaVersion = schemaVersion
         self.hasCanvas = hasCanvas
@@ -50,6 +54,7 @@ struct SessionSnapshot: Codable, Sendable {
         self.savedAt = savedAt
         self.ingredientsExpanded = ingredientsExpanded
         self.stepsCompletedExpanded = stepsCompletedExpanded
+        self.miseEnPlaceExpanded = miseEnPlaceExpanded
     }
 
     /// Custom decoder that migrates v2 sessions to v3 by supplying new-recipe
@@ -75,5 +80,7 @@ struct SessionSnapshot: Codable, Sendable {
         // v3 fields — absent in v2 JSON; apply new-recipe defaults when missing.
         ingredientsExpanded = try container.decodeIfPresent(Bool.self, forKey: .ingredientsExpanded) ?? true
         stepsCompletedExpanded = try container.decodeIfPresent(Bool.self, forKey: .stepsCompletedExpanded) ?? false
+        // v4 field — absent in v3 JSON; default to collapsed.
+        miseEnPlaceExpanded = try container.decodeIfPresent(Bool.self, forKey: .miseEnPlaceExpanded) ?? false
     }
 }

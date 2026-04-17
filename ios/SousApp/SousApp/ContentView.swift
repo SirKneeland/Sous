@@ -69,6 +69,7 @@ struct ContentView: View {
                         store.send(.markSubStepDone(parentStepId: parentId, subStepId: subId))
                     },
                     onMarkMiseEnPlaceDone: { id in store.markMiseEnPlaceDone(id) },
+                    onMarkMiseEnPlaceUndone: { id in store.markMiseEnPlaceUndone(id) },
                     onTriggerMiseEnPlace: { store.triggerMiseEnPlace() },
                     onOpenSettings: { showSettings = true },
                     onStartNew: { store.requestNewSession(); timerManager.clearAll() },
@@ -91,6 +92,7 @@ struct ContentView: View {
                     highlightedStepId: $highlightedStepId,
                     ingredientsExpanded: $store.ingredientsExpanded,
                     stepsCompletedExpanded: $store.stepsCompletedExpanded,
+                    miseEnPlaceExpanded: $store.miseEnPlaceExpanded,
                     navBarVisible: $navBarVisible,
                     bottomZoneHeight: bottomZoneHeight
                 )

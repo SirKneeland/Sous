@@ -104,6 +104,9 @@ final class AppStore: ObservableObject {
     /// When false, done steps are hidden while TODO steps remain visible.
     /// Persisted in SessionSnapshot so it survives relaunch and recipe switches.
     @Published var stepsCompletedExpanded: Bool = false
+    /// Whether the mise en place section is expanded on the recipe canvas.
+    /// Persisted in SessionSnapshot so it survives relaunch and recipe switches.
+    @Published var miseEnPlaceExpanded: Bool = false
 
     private let maxMessages = 200
     private let liveLLMModel = "gpt-5.4-mini"
@@ -194,6 +197,7 @@ final class AppStore: ObservableObject {
                 nextLLMContext = snapshot.nextLLMContext
                 ingredientsExpanded = snapshot.ingredientsExpanded
                 stepsCompletedExpanded = snapshot.stepsCompletedExpanded
+                miseEnPlaceExpanded = snapshot.miseEnPlaceExpanded
                 if snapshot.hasCanvas {
                     if let patch = snapshot.pendingPatchSet {
                         // Auto-advance past patchProposed: restore directly into patchReview.
@@ -263,6 +267,12 @@ final class AppStore: ObservableObject {
             .dropFirst()
             .sink { [weak self] newValue in
                 self?.saveSession(stepsCompletedExpanded: newValue)
+            }
+            .store(in: &cancellables)
+        $miseEnPlaceExpanded
+            .dropFirst()
+            .sink { [weak self] newValue in
+                self?.saveSession(miseEnPlaceExpanded: newValue)
             }
             .store(in: &cancellables)
     }
@@ -344,6 +354,7 @@ final class AppStore: ObservableObject {
         nextLLMContext = nil
         ingredientsExpanded = true
         stepsCompletedExpanded = false
+        miseEnPlaceExpanded = false
     }
 
     /// Starts a new session immediately (previous session stays on disk in Recent Recipes).
@@ -383,6 +394,7 @@ final class AppStore: ObservableObject {
         uiState = .recipeOnly(recipe: reset)
         ingredientsExpanded = true
         stepsCompletedExpanded = false
+        miseEnPlaceExpanded = false
         saveSession()
     }
 
@@ -445,6 +457,7 @@ final class AppStore: ObservableObject {
         }
         ingredientsExpanded = snapshot.ingredientsExpanded
         stepsCompletedExpanded = snapshot.stepsCompletedExpanded
+        miseEnPlaceExpanded = snapshot.miseEnPlaceExpanded
     }
 
     // MARK: - Live LLM toggle
@@ -765,8 +778,38 @@ final class AppStore: ObservableObject {
         miseEnPlaceTask = Task { await self.runMiseEnPlaceLLM() }
     }
 
-    /// Marks a mise en place item as done. One-way — matches the procedure step behavior.
+    /// Reverts a mise en place item to not-done. Only called during the drain-phase
+    /// countdown window; the UI guards the call site.
     /// The `id` may be a solo entry's ID or a component's ID inside a group.
+    func markMiseEnPlaceUndone(_ id: UUID) {
+        var recipe = uiState.recipe
+        guard var entries = recipe.miseEnPlace else { return }
+        var found = false
+        for i in entries.indices {
+            let entry = entries[i]
+            switch entry.content {
+            case .solo(let instruction, true) where entry.id == id:
+                entries[i] = MiseEnPlaceEntry(id: entry.id, content: .solo(instruction: instruction, isDone: false))
+                found = true
+            case .group(let vesselName, var components):
+                if let j = components.firstIndex(where: { $0.id == id && $0.isDone }) {
+                    components[j] = MiseEnPlaceComponent(id: components[j].id, text: components[j].text, isDone: false)
+                    entries[i] = MiseEnPlaceEntry(id: entry.id, content: .group(vesselName: vesselName, components: components))
+                    found = true
+                }
+            default:
+                break
+            }
+            if found { break }
+        }
+        guard found else { return }
+        recipe.miseEnPlace = entries
+        uiState = uiState.replacingRecipe(recipe)
+        saveSession()
+    }
+
+    /// Marks a mise en place item as done. The `id` may be a solo entry's ID or
+    /// a component's ID inside a group.
     func markMiseEnPlaceDone(_ id: UUID) {
         var recipe = uiState.recipe
         guard var entries = recipe.miseEnPlace else { return }
@@ -1094,14 +1137,16 @@ final class AppStore: ObservableObject {
     /// `Data.write(options: .atomic)` handles crash-safety via temp-file + rename.
     private func saveSession(
         ingredientsExpanded overrideIngredients: Bool? = nil,
-        stepsCompletedExpanded overrideStepsCompleted: Bool? = nil
+        stepsCompletedExpanded overrideStepsCompleted: Bool? = nil,
+        miseEnPlaceExpanded overrideMiseEnPlace: Bool? = nil
     ) {
         guard isPersistenceEnabled else { return }
         let url = SessionPersistence.fileURL(for: uiState.recipe.id, in: sessionsDirectory)
         try? SessionPersistence.save(
             makeSnapshot(
                 ingredientsExpanded: overrideIngredients,
-                stepsCompletedExpanded: overrideStepsCompleted
+                stepsCompletedExpanded: overrideStepsCompleted,
+                miseEnPlaceExpanded: overrideMiseEnPlace
             ),
             to: url
         )
@@ -1109,7 +1154,8 @@ final class AppStore: ObservableObject {
 
     private func makeSnapshot(
         ingredientsExpanded overrideIngredients: Bool? = nil,
-        stepsCompletedExpanded overrideStepsCompleted: Bool? = nil
+        stepsCompletedExpanded overrideStepsCompleted: Bool? = nil,
+        miseEnPlaceExpanded overrideMiseEnPlace: Bool? = nil
     ) -> SessionSnapshot {
         let pendingPatch: PatchSet? = {
             switch uiState {
@@ -1136,7 +1182,8 @@ final class AppStore: ObservableObject {
             nextLLMContext: nextLLMContext,
             savedAt: Date(),
             ingredientsExpanded: overrideIngredients ?? ingredientsExpanded,
-            stepsCompletedExpanded: overrideStepsCompleted ?? stepsCompletedExpanded
+            stepsCompletedExpanded: overrideStepsCompleted ?? stepsCompletedExpanded,
+            miseEnPlaceExpanded: overrideMiseEnPlace ?? miseEnPlaceExpanded
         )
     }
 
