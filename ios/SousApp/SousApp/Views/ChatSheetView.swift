@@ -637,6 +637,8 @@ private struct MemoryProposalToast: View {
     @State private var isDisplayShimmering = false
     @State private var editStreamTask: Task<Void, Never>? = nil
     @State private var saveStreamTask: Task<Void, Never>? = nil
+    @State private var prefetchedFirstPerson: String? = nil
+    @State private var prefetchTask: Task<Void, Never>? = nil
 
     private let ticker = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
     private let countdownDuration: TimeInterval = 6.0
@@ -710,26 +712,31 @@ private struct MemoryProposalToast: View {
                         Button("EDIT") {
                             timerPaused = true
                             isEditing = true
-                            isEditShimmering = true
-                            editText = ""
-                            editStreamTask?.cancel()
-                            editStreamTask = Task {
-                                if #available(iOS 26, macOS 26, *) {
-                                    var gotFirst = false
-                                    for await partial in MemoryPersonConverter.streamToFirstPerson(text: text) {
-                                        if Task.isCancelled { break }
-                                        if !gotFirst { isEditShimmering = false; gotFirst = true }
-                                        editText = partial
-                                    }
-                                    if !gotFirst && !Task.isCancelled {
+                            if let cached = prefetchedFirstPerson {
+                                editText = cached
+                                isEditShimmering = false
+                            } else {
+                                isEditShimmering = true
+                                editText = ""
+                                editStreamTask?.cancel()
+                                editStreamTask = Task {
+                                    if #available(iOS 26, macOS 26, *) {
+                                        var gotFirst = false
+                                        for await partial in MemoryPersonConverter.streamToFirstPerson(text: text) {
+                                            if Task.isCancelled { break }
+                                            if !gotFirst { isEditShimmering = false; gotFirst = true }
+                                            editText = partial
+                                        }
+                                        if !gotFirst && !Task.isCancelled {
+                                            editText = MemoryPersonConverter.naiveToFirstPerson(text)
+                                            isEditShimmering = false
+                                        }
+                                    } else {
+                                        try? await Task.sleep(nanoseconds: 80_000_000)
+                                        guard !Task.isCancelled else { return }
                                         editText = MemoryPersonConverter.naiveToFirstPerson(text)
                                         isEditShimmering = false
                                     }
-                                } else {
-                                    try? await Task.sleep(nanoseconds: 80_000_000)
-                                    guard !Task.isCancelled else { return }
-                                    editText = MemoryPersonConverter.naiveToFirstPerson(text)
-                                    isEditShimmering = false
                                 }
                             }
                         }
@@ -757,6 +764,17 @@ private struct MemoryProposalToast: View {
         .overlay(Rectangle().stroke(Color.sousText, lineWidth: 1))
         .padding(.horizontal, 16)
         .simultaneousGesture(TapGesture().onEnded { timerPaused = true })
+        .onAppear {
+            prefetchTask = Task {
+                let result = await MemoryPersonConverter.toFirstPerson(text: text)
+                guard !Task.isCancelled else { return }
+                prefetchedFirstPerson = result
+            }
+        }
+        .onDisappear {
+            prefetchTask?.cancel()
+            prefetchTask = nil
+        }
         .onReceive(ticker) { _ in
             guard !timerPaused && !hasSaved && !isEditing else { return }
             let elapsed = Date().timeIntervalSince(startDate)
