@@ -639,6 +639,7 @@ private struct MemoryProposalToast: View {
     @State private var saveStreamTask: Task<Void, Never>? = nil
     @State private var prefetchedFirstPerson: String? = nil
     @State private var prefetchTask: Task<Void, Never>? = nil
+    @FocusState private var isFieldFocused: Bool
 
     private let ticker = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
     private let countdownDuration: TimeInterval = 6.0
@@ -665,6 +666,7 @@ private struct MemoryProposalToast: View {
                             .foregroundStyle(Color.sousText)
                             .padding(8)
                             .overlay(Rectangle().stroke(Color.sousSeparator, lineWidth: 1))
+                            .focused($isFieldFocused)
                             .onSubmit { commitSave() }
                     }
                     HStack(spacing: 12) {
@@ -673,6 +675,7 @@ private struct MemoryProposalToast: View {
                             .foregroundStyle(Color.sousTerracotta)
                             .buttonStyle(.plain)
                         Button("CANCEL") {
+                            isFieldFocused = false
                             editStreamTask?.cancel()
                             editStreamTask = nil
                             isEditShimmering = false
@@ -712,6 +715,7 @@ private struct MemoryProposalToast: View {
                         Button("EDIT") {
                             timerPaused = true
                             isEditing = true
+                            isFieldFocused = true
                             if let cached = prefetchedFirstPerson {
                                 editText = cached
                                 isEditShimmering = false
@@ -787,6 +791,7 @@ private struct MemoryProposalToast: View {
     }
 
     private func commitSave() {
+        isFieldFocused = false
         let snapshot = editText
         isEditing = false
         isDisplayShimmering = true
