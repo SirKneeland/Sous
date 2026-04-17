@@ -57,6 +57,16 @@ struct ChatSheetView: View {
                 isComposerFocused = true
             }
         }
+        .sheet(isPresented: $showPhotoSheet) {
+            PhotoAcquisitionSheet(
+                onAcquired: { asset in
+                    photoSend.attach(asset)
+                    showPhotoSheet = false
+                    isComposerFocused = true
+                },
+                onCancel: { showPhotoSheet = false }
+            )
+        }
     }
 
     // MARK: - Blank State
@@ -140,18 +150,6 @@ struct ChatSheetView: View {
             SousRule()
                 .opacity(inputBarDragOffset == 0 ? 1 : 0)
             composerBar
-            Color.clear
-                .frame(width: 0, height: 0)
-                .sheet(isPresented: $showPhotoSheet) {
-                    PhotoAcquisitionSheet(
-                        onAcquired: { asset in
-                            photoSend.attach(asset)
-                            showPhotoSheet = false
-                            isComposerFocused = true
-                        },
-                        onCancel: { showPhotoSheet = false }
-                    )
-                }
         }
         .background(isFullscreen ? Color.sousBackground : Color.sousSurface)
         .animation(.easeOut(duration: 0.25), value: store.canGenerateRecipe)
