@@ -66,7 +66,13 @@ enum MemoryPersonConverter {
                         lastContent = content
                         continuation.yield(content)
                     }
-                    if lastContent.isEmpty { continuation.yield(fallback) }
+                    if lastContent.isEmpty {
+                        continuation.yield(fallback)
+                    } else {
+                        var stripped = lastContent
+                        if stripped.last == "." { stripped = String(stripped.dropLast()) }
+                        if stripped != lastContent && !stripped.isEmpty { continuation.yield(stripped) }
+                    }
                 } catch {
                     continuation.yield(fallback)
                 }
@@ -81,7 +87,8 @@ enum MemoryPersonConverter {
         guard case .available = SystemLanguageModel.default.availability else { return nil }
         let session = LanguageModelSession()
         guard let response = try? await session.respond(to: prompt) else { return nil }
-        let trimmed = response.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        var trimmed = response.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.last == "." { trimmed = String(trimmed.dropLast()) }
         return trimmed.isEmpty ? nil : trimmed
     }
 
@@ -98,14 +105,16 @@ enum MemoryPersonConverter {
     // MARK: - Naive fallback
 
     static func naiveToFirstPerson(_ text: String) -> String {
-        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if t.lowercased().hasPrefix("you ") { return "I " + t.dropFirst(4) }
+        var t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if t.lowercased().hasPrefix("you ") { t = "I " + t.dropFirst(4) }
+        if t.last == "." { t = String(t.dropLast()) }
         return t
     }
 
     static func naiveToSecondPerson(_ text: String) -> String {
-        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if t.lowercased().hasPrefix("i ") { return "You " + t.dropFirst(2) }
+        var t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if t.lowercased().hasPrefix("i ") { t = "You " + t.dropFirst(2) }
+        if t.last == "." { t = String(t.dropLast()) }
         return t
     }
 }

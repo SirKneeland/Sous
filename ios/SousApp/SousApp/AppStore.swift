@@ -301,8 +301,9 @@ final class AppStore: ObservableObject {
 
     /// Adds a new memory and persists it.
     func addMemory(_ text: String) {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        var trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        if trimmed.last == "." { trimmed = String(trimmed.dropLast()) }
         memories.append(MemoryItem(text: trimmed))
         saveMemories()
     }
@@ -310,7 +311,9 @@ final class AppStore: ObservableObject {
     /// Replaces an existing memory (matched by id) and persists.
     func updateMemory(_ item: MemoryItem) {
         guard let idx = memories.firstIndex(where: { $0.id == item.id }) else { return }
-        memories[idx] = item
+        var sanitized = item
+        if sanitized.text.last == "." { sanitized.text = String(sanitized.text.dropLast()) }
+        memories[idx] = sanitized
         saveMemories()
     }
 

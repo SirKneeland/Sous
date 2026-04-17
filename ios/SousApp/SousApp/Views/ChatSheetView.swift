@@ -639,7 +639,7 @@ private struct MemoryProposalToast: View {
     @State private var saveStreamTask: Task<Void, Never>? = nil
 
     private let ticker = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
-    private let countdownDuration: TimeInterval = 10.0
+    private let countdownDuration: TimeInterval = 6.0
 
     init(text: String, onSave: @escaping (String) -> Void, onDismiss: @escaping () -> Void) {
         self.text = text
@@ -792,6 +792,7 @@ private struct MemoryProposalToast: View {
                 displayText = MemoryPersonConverter.naiveToSecondPerson(snapshot)
                 isDisplayShimmering = false
             }
+            if displayText.last == "." { displayText = String(displayText.dropLast()) }
             startDate = Date()
             displayProgress = 1.0
             timerPaused = false
