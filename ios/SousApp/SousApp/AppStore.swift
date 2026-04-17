@@ -70,6 +70,10 @@ final class AppStore: ObservableObject {
     /// Nil means use SessionPersistence.sessionsDirectory (Documents).
     private let sessionsDirectory: URL?
 
+    /// Override in tests to isolate photo file I/O.
+    /// Nil means use PhotoPersistence.defaultBaseDirectory (Documents/photos).
+    private let photosBaseDirectory: URL?
+
     /// Override in tests to isolate UserDefaults reads/writes.
     /// Nil means use UserDefaults.standard.
     private let preferencesDefaults: UserDefaults?
@@ -158,12 +162,14 @@ final class AppStore: ObservableObject {
     init(testOrchestrator: (any LLMOrchestrator)? = nil,
          testMiseEnPlaceService: (any MiseEnPlaceServiceProtocol)? = nil,
          sessionsDirectory: URL? = nil,
+         photosBaseDirectory: URL? = nil,
          preferencesDefaults: UserDefaults? = nil,
          keyProvider: any OpenAIKeyProviding = KeychainOpenAIKeyProvider()) {
         self.testOrchestrator = testOrchestrator
         self.testMiseEnPlaceService = testMiseEnPlaceService
         self.keyProvider = keyProvider
         self.sessionsDirectory = sessionsDirectory
+        self.photosBaseDirectory = photosBaseDirectory
         self.preferencesDefaults = preferencesDefaults
         isPersistenceEnabled = (testOrchestrator == nil)
         hasAPIKey = keyProvider.currentKey() != nil
@@ -410,13 +416,16 @@ final class AppStore: ObservableObject {
     func deleteRecentSession(_ snapshot: SessionSnapshot) {
         guard isPersistenceEnabled else { return }
         SessionPersistence.delete(recipeId: snapshot.recipe.id, in: sessionsDirectory)
+        PhotoPersistence.deletePhotoDirectory(for: snapshot.recipe.id, baseDirectory: photosBaseDirectory)
     }
 
     /// Deletes the currently active recipe's session from disk and transitions to a new blank session.
     /// Called when the user confirms deletion of the active recipe from the History screen.
     func deleteActiveSessionAndStartNew() {
         if isPersistenceEnabled {
-            SessionPersistence.delete(recipeId: uiState.recipe.id, in: sessionsDirectory)
+            let recipeId = uiState.recipe.id
+            SessionPersistence.delete(recipeId: recipeId, in: sessionsDirectory)
+            PhotoPersistence.deletePhotoDirectory(for: recipeId, baseDirectory: photosBaseDirectory)
         }
         startNewSession()
     }
@@ -665,9 +674,26 @@ final class AppStore: ObservableObject {
 
     /// Appends a user chat message after successful photo preparation.
     /// Called by the view only after `PhotoSendCoordinator.send(text:recipe:)` returns non-nil.
-    func appendPhotoMessage(_ text: String) {
+    /// If `imageData` is provided, the JPEG bytes are written to disk and the relative path
+    /// is stored in the message for inline rendering.
+    func appendPhotoMessage(_ text: String, imageData: Data? = nil) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        append(ChatMessage(role: .user, text: trimmed.isEmpty ? "[Photo]" : trimmed))
+        let messageId = UUID()
+        var photoPath: String? = nil
+        if let data = imageData, isPersistenceEnabled {
+            photoPath = PhotoPersistence.save(
+                imageData: data,
+                messageId: messageId,
+                recipeId: uiState.recipe.id,
+                baseDirectory: photosBaseDirectory
+            )
+        }
+        append(ChatMessage(
+            id: messageId,
+            role: .user,
+            text: trimmed.isEmpty ? "[Photo]" : trimmed,
+            photoPath: photoPath
+        ))
     }
 
     /// Dispatches a multimodal LLM call using the prepared image.

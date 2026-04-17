@@ -543,7 +543,7 @@ struct ChatSheetView: View {
             let recipeSnapshot = store.uiState.recipe
             Task {
                 if let multimodalReq = await photoSend.send(text: capturedText, recipe: recipeSnapshot) {
-                    store.appendPhotoMessage(capturedText)
+                    store.appendPhotoMessage(capturedText, imageData: multimodalReq.image.data)
                     composerText = ""
                     store.sendMultimodalRequest(multimodalReq)
                 }
@@ -779,11 +779,46 @@ private struct ChatBubbleView: View {
     @ViewBuilder
     private var messageContent: some View {
         if isUser {
-            Text(message.text)
-                .font(.sousBody)
-                .foregroundStyle(Color.sousBackground)
+            VStack(alignment: .trailing, spacing: 6) {
+                if let path = message.photoPath {
+                    PhotoThumbnailView(relativePath: path)
+                }
+                if message.text != "[Photo]" || message.photoPath == nil {
+                    Text(message.text)
+                        .font(.sousBody)
+                        .foregroundStyle(Color.sousBackground)
+                }
+            }
         } else {
             MarkdownTextView(text: message.text, textColor: .sousText)
+        }
+    }
+}
+
+// MARK: - Photo Thumbnail
+
+private struct PhotoThumbnailView: View {
+    let relativePath: String
+
+    private var image: UIImage? {
+        let url = PhotoPersistence.absoluteURL(for: relativePath)
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return UIImage(data: data)
+    }
+
+    var body: some View {
+        if let uiImage = image {
+            Image(uiImage: uiImage)
+                .resizable()
+                .scaledToFit()
+                .frame(maxWidth: 200)
+                .clipped()
+        } else {
+            // Missing file placeholder — never crashes
+            Image(systemName: "photo")
+                .font(.system(size: 32))
+                .foregroundStyle(Color.sousBackground.opacity(0.5))
+                .frame(width: 80, height: 60)
         }
     }
 }
