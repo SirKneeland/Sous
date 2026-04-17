@@ -628,70 +628,129 @@ private struct MemoryProposalToast: View {
 
     @State private var isEditing = false
     @State private var editText: String
+    @State private var displayText: String
     @State private var startDate = Date()
     @State private var displayProgress: Double = 1.0
     @State private var timerPaused = false
     @State private var hasSaved = false
+    @State private var isEditShimmering = false
+    @State private var isDisplayShimmering = false
+    @State private var editStreamTask: Task<Void, Never>? = nil
+    @State private var saveStreamTask: Task<Void, Never>? = nil
 
     private let ticker = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
+    private let countdownDuration: TimeInterval = 10.0
 
     init(text: String, onSave: @escaping (String) -> Void, onDismiss: @escaping () -> Void) {
         self.text = text
         self.onSave = onSave
         self.onDismiss = onDismiss
         _editText = State(initialValue: text)
+        _displayText = State(initialValue: text)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if isEditing {
                 VStack(alignment: .leading, spacing: 8) {
-                    TextField("Memory text", text: $editText)
-                        .font(.sousBody)
-                        .foregroundStyle(Color.sousText)
-                        .padding(8)
-                        .overlay(Rectangle().stroke(Color.sousSeparator, lineWidth: 1))
+                    if isEditShimmering {
+                        MemoryShimmerBar()
+                            .frame(height: 36)
+                            .overlay(Rectangle().stroke(Color.sousSeparator, lineWidth: 1))
+                    } else {
+                        TextField("Memory text", text: $editText)
+                            .font(.sousBody)
+                            .foregroundStyle(Color.sousText)
+                            .padding(8)
+                            .overlay(Rectangle().stroke(Color.sousSeparator, lineWidth: 1))
+                            .onSubmit { commitSave() }
+                    }
                     HStack(spacing: 12) {
-                        Button("SAVE") { hasSaved = true; onSave(editText) }
+                        Button("SAVE") { commitSave() }
                             .font(.sousButton)
                             .foregroundStyle(Color.sousTerracotta)
                             .buttonStyle(.plain)
-                        Button("CANCEL") { isEditing = false; editText = text }
-                            .font(.sousButton)
-                            .foregroundStyle(Color.sousMuted)
-                            .buttonStyle(.plain)
+                        Button("CANCEL") {
+                            editStreamTask?.cancel()
+                            editStreamTask = nil
+                            isEditShimmering = false
+                            isEditing = false
+                            editText = text
+                        }
+                        .font(.sousButton)
+                        .foregroundStyle(Color.sousMuted)
+                        .buttonStyle(.plain)
                     }
                 }
                 .padding(12)
             } else {
-                HStack(spacing: 8) {
-                    Text(text)
-                        .font(.sousBody)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("REMEMBERING THIS")
+                        .font(.sousButton)
                         .foregroundStyle(Color.sousText)
-                        .lineLimit(2)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Button("SAVE") { timerPaused = true; hasSaved = true; onSave(text) }
+                        .padding(.horizontal, 12)
+                        .padding(.top, 10)
+                        .padding(.bottom, 6)
+                    HStack(spacing: 8) {
+                        if isDisplayShimmering {
+                            MemoryShimmerBar()
+                                .frame(height: 20)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        } else {
+                            Text(displayText)
+                                .font(.sousBody)
+                                .foregroundStyle(Color.sousText)
+                                .lineLimit(2)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        Button("SAVE") { timerPaused = true; hasSaved = true; onSave(text) }
+                            .font(.sousButton)
+                            .foregroundStyle(Color.sousTerracotta)
+                            .buttonStyle(.plain)
+                        Button("EDIT") {
+                            timerPaused = true
+                            isEditing = true
+                            isEditShimmering = true
+                            editText = ""
+                            editStreamTask?.cancel()
+                            editStreamTask = Task {
+                                if #available(iOS 26, macOS 26, *) {
+                                    var gotFirst = false
+                                    for await partial in MemoryPersonConverter.streamToFirstPerson(text: text) {
+                                        if Task.isCancelled { break }
+                                        if !gotFirst { isEditShimmering = false; gotFirst = true }
+                                        editText = partial
+                                    }
+                                    if !gotFirst && !Task.isCancelled {
+                                        editText = MemoryPersonConverter.naiveToFirstPerson(text)
+                                        isEditShimmering = false
+                                    }
+                                } else {
+                                    try? await Task.sleep(nanoseconds: 80_000_000)
+                                    guard !Task.isCancelled else { return }
+                                    editText = MemoryPersonConverter.naiveToFirstPerson(text)
+                                    isEditShimmering = false
+                                }
+                            }
+                        }
                         .font(.sousButton)
                         .foregroundStyle(Color.sousTerracotta)
                         .buttonStyle(.plain)
-                    Button("EDIT") { timerPaused = true; isEditing = true }
-                        .font(.sousButton)
-                        .foregroundStyle(Color.sousTerracotta)
-                        .buttonStyle(.plain)
-                    Button("SKIP") { onDismiss() }
-                        .font(.sousButton)
-                        .foregroundStyle(Color.sousMuted)
-                        .buttonStyle(.plain)
+                        Button("SKIP") { onDismiss() }
+                            .font(.sousButton)
+                            .foregroundStyle(Color.sousMuted)
+                            .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 10)
+                    GeometryReader { geo in
+                        Rectangle()
+                            .fill(Color.sousTerracotta.opacity(0.4))
+                            .frame(width: geo.size.width * displayProgress, height: 2)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(height: 2)
                 }
-                .padding(12)
-                // Progress bar
-                GeometryReader { geo in
-                    Rectangle()
-                        .fill(Color.sousTerracotta.opacity(0.4))
-                        .frame(width: geo.size.width * displayProgress, height: 2)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .frame(height: 2)
             }
         }
         .background(Color.sousBackground)
@@ -701,10 +760,68 @@ private struct MemoryProposalToast: View {
         .onReceive(ticker) { _ in
             guard !timerPaused && !hasSaved && !isEditing else { return }
             let elapsed = Date().timeIntervalSince(startDate)
-            displayProgress = max(0, 1.0 - elapsed / 10.0)
-            if elapsed >= 10 {
+            displayProgress = max(0, 1.0 - elapsed / countdownDuration)
+            if elapsed >= countdownDuration {
                 hasSaved = true
-                onSave(text)
+                onSave(displayText)
+            }
+        }
+    }
+
+    private func commitSave() {
+        let snapshot = editText
+        isEditing = false
+        isDisplayShimmering = true
+        editStreamTask?.cancel()
+        editStreamTask = nil
+        saveStreamTask?.cancel()
+        saveStreamTask = Task {
+            if #available(iOS 26, macOS 26, *) {
+                var gotFirst = false
+                for await partial in MemoryPersonConverter.streamToSecondPerson(text: snapshot) {
+                    if Task.isCancelled { break }
+                    if !gotFirst { isDisplayShimmering = false; gotFirst = true }
+                    displayText = partial
+                }
+                if !gotFirst {
+                    displayText = MemoryPersonConverter.naiveToSecondPerson(snapshot)
+                    isDisplayShimmering = false
+                }
+            } else {
+                try? await Task.sleep(nanoseconds: 80_000_000)
+                displayText = MemoryPersonConverter.naiveToSecondPerson(snapshot)
+                isDisplayShimmering = false
+            }
+            startDate = Date()
+            displayProgress = 1.0
+            timerPaused = false
+        }
+    }
+}
+
+// MARK: - Memory Shimmer Bar
+
+private struct MemoryShimmerBar: View {
+    @State private var phase: CGFloat = 0
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Color.sousSeparator.opacity(0.5)
+                LinearGradient(
+                    colors: [.clear, Color.sousText.opacity(0.18), .clear],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+                .frame(width: proxy.size.width * 0.55)
+                .offset(x: (proxy.size.width + proxy.size.width * 0.55) * phase - proxy.size.width * 0.55)
+            }
+            .clipped()
+        }
+        .onAppear {
+            phase = 0
+            withAnimation(.linear(duration: 1.1).repeatForever(autoreverses: false)) {
+                phase = 1
             }
         }
     }

@@ -452,6 +452,32 @@
     }
   },
   {
+    "name": "proposed-memory-second-person",
+    "description": "User mentions a standing personal cooking habit. Sous should propose a memory string in second-person format starting with 'You'.",
+    "promptType": "has_canvas",
+    "input": {
+      "recipeState": {
+        "version": 1,
+        "title": "Simple Pasta",
+        "ingredients": [
+          { "id": "i1", "text": "200g spaghetti" },
+          { "id": "i2", "text": "2 cloves garlic" },
+          { "id": "i3", "text": "3 tbsp olive oil" }
+        ],
+        "steps": [
+          { "id": "s1", "text": "Boil salted water.", "status": "todo" },
+          { "id": "s2", "text": "Cook pasta until al dente.", "status": "todo" }
+        ]
+      },
+      "chatHistory": [],
+      "userMessage": "I always cook for four people, can you adjust the servings?"
+    },
+    "expected": {
+      "shouldPatch": true,
+      "notes": "User mentioned a standing habit (cooking for four). Sous must include a proposed_memory field. The value must be a second-person phrase starting with 'You' — e.g. 'You always cook for four people'. It must NOT be third-person (e.g. 'cooks for four') or first-person (e.g. 'I cook for four'). The patchSet should scale ingredient quantities for four servings."
+    }
+  },
+  {
     "name": "assistant-message-no-json",
     "description": "User asks to add a step. Sous must emit the patchSet in the top-level patchSet field and keep assistant_message as plain prose — never embed JSON or a patchSet inside assistant_message.",
     "promptType": "has_canvas",

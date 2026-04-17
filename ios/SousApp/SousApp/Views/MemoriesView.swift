@@ -30,6 +30,10 @@ struct MemoriesView: View {
                             Button {
                                 editingMemory = item
                                 editText = item.text
+                                Task {
+                                    let converted = await MemoryPersonConverter.toFirstPerson(text: item.text)
+                                    editText = converted
+                                }
                             } label: {
                                 Text(item.text)
                                     .font(.sousBody)
@@ -93,12 +97,17 @@ struct MemoriesView: View {
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("SAVE") {
-                            var updated = item
-                            updated.text = editText.trimmingCharacters(in: .whitespacesAndNewlines)
-                            if !updated.text.isEmpty {
-                                store.updateMemory(updated)
-                            }
+                            let snapshot = editText
                             editingMemory = nil
+                            Task {
+                                let converted = await MemoryPersonConverter.toSecondPerson(text: snapshot)
+                                let trimmed = converted.trimmingCharacters(in: .whitespacesAndNewlines)
+                                if !trimmed.isEmpty {
+                                    var updated = item
+                                    updated.text = trimmed
+                                    store.updateMemory(updated)
+                                }
+                            }
                         }
                         .font(.sousButton)
                         .foregroundStyle(Color.sousText)
