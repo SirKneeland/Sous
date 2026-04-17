@@ -5,6 +5,7 @@ struct MemoriesView: View {
     @ObservedObject var store: AppStore
     @State private var editingMemory: MemoryItem? = nil
     @State private var editText: String = ""
+    @State private var pressedMemoryID: UUID? = nil
 
     var body: some View {
         Group {
@@ -27,19 +28,23 @@ struct MemoriesView: View {
                 List {
                     Section {
                         ForEach(store.memories) { item in
-                            Button {
-                                editingMemory = item
-                                editText = item.firstPersonText
-                            } label: {
-                                Text(item.text)
-                                    .font(.sousBody)
-                                    .foregroundStyle(Color.sousText)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(.vertical, 2)
-                            }
-                            .buttonStyle(.plain)
-                            .listRowBackground(Color.sousBackground)
-                            .listRowSeparatorTint(Color.sousSeparator)
+                            Text(item.text)
+                                .font(.sousBody)
+                                .foregroundStyle(Color.sousText)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.vertical, 2)
+                                .contentShape(Rectangle())
+                                .opacity(pressedMemoryID == item.id ? 0.4 : 1.0)
+                                .onTapGesture {
+                                    pressedMemoryID = item.id
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                                        pressedMemoryID = nil
+                                        editingMemory = item
+                                        editText = item.firstPersonText
+                                    }
+                                }
+                                .listRowBackground(Color.sousBackground)
+                                .listRowSeparatorTint(Color.sousSeparator)
                         }
                         .onDelete { indexSet in
                             for idx in indexSet {
@@ -51,6 +56,8 @@ struct MemoriesView: View {
                             .font(.sousCaption)
                             .foregroundStyle(Color.sousMuted)
                             .kerning(0.5)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .listRowBackground(Color.sousBackground)
                     }
                 }
                 .listStyle(.plain)
@@ -114,3 +121,4 @@ struct MemoriesView: View {
         }
     }
 }
+
