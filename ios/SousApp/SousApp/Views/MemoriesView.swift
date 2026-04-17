@@ -29,11 +29,7 @@ struct MemoriesView: View {
                         ForEach(store.memories) { item in
                             Button {
                                 editingMemory = item
-                                editText = item.text
-                                Task {
-                                    let converted = await MemoryPersonConverter.toFirstPerson(text: item.text)
-                                    editText = converted
-                                }
+                                editText = item.firstPersonText
                             } label: {
                                 Text(item.text)
                                     .font(.sousBody)
@@ -105,6 +101,7 @@ struct MemoriesView: View {
                                 if !trimmed.isEmpty {
                                     var updated = item
                                     updated.text = trimmed
+                                    updated.firstPersonText = snapshot
                                     store.updateMemory(updated)
                                 }
                             }

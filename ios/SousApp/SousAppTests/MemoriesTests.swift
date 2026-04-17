@@ -100,7 +100,7 @@ final class MemoriesTests: XCTestCase {
     func test_confirmMemory_addsMemoryAndClearsProposal() async {
         let store = AppStore(testOrchestrator: MockMemoryOrchestrator())
         store.proposeMemory(text: "I avoid garlic")
-        store.confirmMemory(text: "I avoid garlic")
+        await store.confirmMemory(text: "I avoid garlic", firstPersonText: "I avoid garlic")
         XCTAssertNil(store.pendingMemoryProposal, "Proposal must be cleared after confirm")
         XCTAssertEqual(store.memories.first?.text, "I avoid garlic")
     }

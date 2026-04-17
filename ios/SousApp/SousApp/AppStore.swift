@@ -300,11 +300,12 @@ final class AppStore: ObservableObject {
     // MARK: - Memories
 
     /// Adds a new memory and persists it.
-    func addMemory(_ text: String) {
+    func addMemory(_ text: String, firstPersonText: String? = nil) {
         var trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         if trimmed.last == "." { trimmed = String(trimmed.dropLast()) }
-        memories.append(MemoryItem(text: trimmed))
+        let fp = firstPersonText ?? MemoryPersonConverter.naiveToFirstPerson(trimmed)
+        memories.append(MemoryItem(text: trimmed, firstPersonText: fp))
         saveMemories()
     }
 
@@ -330,8 +331,15 @@ final class AppStore: ObservableObject {
     }
 
     /// Saves the proposed memory (with optional edits) and clears the toast.
-    func confirmMemory(text: String) {
-        addMemory(text)
+    /// When firstPersonText is nil, generates it via MemoryPersonConverter before saving.
+    func confirmMemory(text: String, firstPersonText: String? = nil) async {
+        let fp: String
+        if let provided = firstPersonText {
+            fp = provided
+        } else {
+            fp = await MemoryPersonConverter.toFirstPerson(text: text)
+        }
+        addMemory(text, firstPersonText: fp)
         pendingMemoryProposal = nil
         UINotificationFeedbackGenerator().notificationOccurred(.success)
     }

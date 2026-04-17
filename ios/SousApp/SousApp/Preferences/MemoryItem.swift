@@ -6,11 +6,13 @@ import Foundation
 struct MemoryItem: Codable, Equatable, Identifiable, Sendable {
     var id: UUID
     var text: String
+    var firstPersonText: String
     var createdAt: Date
 
-    init(text: String, createdAt: Date = Date()) {
+    init(text: String, firstPersonText: String = "", createdAt: Date = Date()) {
         self.id = UUID()
         self.text = text
+        self.firstPersonText = firstPersonText
         self.createdAt = createdAt
     }
 }

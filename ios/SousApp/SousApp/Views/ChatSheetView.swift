@@ -233,7 +233,7 @@ struct ChatSheetView: View {
                 if let proposal = store.pendingMemoryProposal {
                     MemoryProposalToast(
                         text: proposal,
-                        onSave: { text in store.confirmMemory(text: text) },
+                        onSave: { text, firstPersonText in Task { await store.confirmMemory(text: text, firstPersonText: firstPersonText) } },
                         onDismiss: { store.dismissMemoryProposal() }
                     )
                     .padding(.top, 4)
@@ -623,18 +623,20 @@ private struct StreamingBubbleView: View {
 
 private struct MemoryProposalToast: View {
     let text: String
-    let onSave: (String) -> Void
+    let onSave: (String, String?) -> Void
     let onDismiss: () -> Void
 
     @State private var isEditing = false
     @State private var editText: String
     @State private var displayText: String
+    @State private var firstPersonSnapshot: String? = nil
     @State private var startDate = Date()
     @State private var displayProgress: Double = 1.0
     @State private var timerPaused = false
     @State private var hasSaved = false
     @State private var isEditShimmering = false
     @State private var isDisplayShimmering = false
+    @State private var hasCommittedEdit = false
     @State private var editStreamTask: Task<Void, Never>? = nil
     @State private var saveStreamTask: Task<Void, Never>? = nil
     @State private var prefetchedFirstPerson: String? = nil
@@ -644,7 +646,7 @@ private struct MemoryProposalToast: View {
     private let ticker = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
     private let countdownDuration: TimeInterval = 6.0
 
-    init(text: String, onSave: @escaping (String) -> Void, onDismiss: @escaping () -> Void) {
+    init(text: String, onSave: @escaping (String, String?) -> Void, onDismiss: @escaping () -> Void) {
         self.text = text
         self.onSave = onSave
         self.onDismiss = onDismiss
@@ -681,6 +683,7 @@ private struct MemoryProposalToast: View {
                             editStreamTask = nil
                             isEditShimmering = false
                             isEditing = false
+                            hasCommittedEdit = false
                             editText = text
                         }
                         .font(.sousButton)
@@ -711,8 +714,9 @@ private struct MemoryProposalToast: View {
                             .padding(.horizontal, 12)
                             .padding(.bottom, 10)
                     }
+                    if !hasCommittedEdit {
                     HStack(spacing: 0) {
-                        Button("SAVE") { timerPaused = true; hasSaved = true; onSave(text) }
+                        Button("SAVE") { timerPaused = true; hasSaved = true; onSave(displayText, firstPersonSnapshot) }
                             .font(.sousButton)
                             .foregroundStyle(Color.white)
                             .buttonStyle(.plain)
@@ -761,6 +765,7 @@ private struct MemoryProposalToast: View {
                     }
                     .padding(.horizontal, 12)
                     .padding(.bottom, 10)
+                    } // end if !hasCommittedEdit
                     GeometryReader { geo in
                         Rectangle()
                             .fill(Color.white.opacity(0.35))
@@ -793,7 +798,7 @@ private struct MemoryProposalToast: View {
             displayProgress = max(0, 1.0 - elapsed / countdownDuration)
             if elapsed >= countdownDuration {
                 hasSaved = true
-                onSave(displayText)
+                onSave(displayText, firstPersonSnapshot)
             }
         }
     }
@@ -801,6 +806,8 @@ private struct MemoryProposalToast: View {
     private func commitSave() {
         isFieldFocused = false
         let snapshot = editText
+        firstPersonSnapshot = snapshot
+        hasCommittedEdit = true
         isEditing = false
         isDisplayShimmering = true
         editStreamTask?.cancel()
