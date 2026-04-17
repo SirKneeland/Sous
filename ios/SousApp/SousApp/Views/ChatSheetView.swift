@@ -665,14 +665,15 @@ private struct MemoryProposalToast: View {
                             .font(.sousBody)
                             .foregroundStyle(Color.sousText)
                             .padding(8)
-                            .overlay(Rectangle().stroke(Color.sousSeparator, lineWidth: 1))
+                            .background(Color.sousBackground)
+                            .overlay(Rectangle().stroke(Color.sousText, lineWidth: 1))
                             .focused($isFieldFocused)
                             .onSubmit { commitSave() }
                     }
                     HStack(spacing: 12) {
                         Button("SAVE") { commitSave() }
                             .font(.sousButton)
-                            .foregroundStyle(Color.sousTerracotta)
+                            .foregroundStyle(Color.white)
                             .buttonStyle(.plain)
                         Button("CANCEL") {
                             isFieldFocused = false
@@ -683,7 +684,7 @@ private struct MemoryProposalToast: View {
                             editText = text
                         }
                         .font(.sousButton)
-                        .foregroundStyle(Color.sousMuted)
+                        .foregroundStyle(Color.sousBackground)
                         .buttonStyle(.plain)
                     }
                 }
@@ -692,26 +693,30 @@ private struct MemoryProposalToast: View {
                 VStack(alignment: .leading, spacing: 0) {
                     Text("REMEMBERING THIS")
                         .font(.sousButton)
-                        .foregroundStyle(Color.sousText)
+                        .foregroundStyle(Color.sousBackground)
                         .padding(.horizontal, 12)
                         .padding(.top, 10)
                         .padding(.bottom, 6)
-                    HStack(spacing: 8) {
-                        if isDisplayShimmering {
-                            MemoryShimmerBar()
-                                .frame(height: 20)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        } else {
-                            Text(displayText)
-                                .font(.sousBody)
-                                .foregroundStyle(Color.sousText)
-                                .lineLimit(2)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
+                    if isDisplayShimmering {
+                        MemoryShimmerBar()
+                            .frame(height: 20)
+                            .padding(.horizontal, 12)
+                            .padding(.bottom, 10)
+                    } else {
+                        Text(displayText)
+                            .font(.sousBody)
+                            .foregroundStyle(Color.sousBackground)
+                            .lineLimit(2)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 12)
+                            .padding(.bottom, 10)
+                    }
+                    HStack(spacing: 0) {
                         Button("SAVE") { timerPaused = true; hasSaved = true; onSave(text) }
                             .font(.sousButton)
-                            .foregroundStyle(Color.sousTerracotta)
+                            .foregroundStyle(Color.white)
                             .buttonStyle(.plain)
+                            .frame(maxWidth: .infinity)
                         Button("EDIT") {
                             timerPaused = true
                             isEditing = true
@@ -745,27 +750,30 @@ private struct MemoryProposalToast: View {
                             }
                         }
                         .font(.sousButton)
-                        .foregroundStyle(Color.sousTerracotta)
+                        .foregroundStyle(Color.white)
                         .buttonStyle(.plain)
+                        .frame(maxWidth: .infinity)
                         Button("SKIP") { onDismiss() }
                             .font(.sousButton)
-                            .foregroundStyle(Color.sousMuted)
+                            .foregroundStyle(Color.sousBackground)
                             .buttonStyle(.plain)
+                            .frame(maxWidth: .infinity)
                     }
                     .padding(.horizontal, 12)
                     .padding(.bottom, 10)
                     GeometryReader { geo in
                         Rectangle()
-                            .fill(Color.sousTerracotta.opacity(0.4))
+                            .fill(Color.white.opacity(0.35))
                             .frame(width: geo.size.width * displayProgress, height: 2)
                             .frame(maxWidth: .infinity, alignment: .leading)
+                            .animation(.linear(duration: 0.1), value: displayProgress)
                     }
                     .frame(height: 2)
                 }
             }
         }
-        .background(Color.sousBackground)
-        .overlay(Rectangle().stroke(Color.sousText, lineWidth: 1))
+        .background(Color.sousTerracotta)
+        .overlay(Rectangle().stroke(Color.sousTerracotta, lineWidth: 1))
         .padding(.horizontal, 16)
         .simultaneousGesture(TapGesture().onEnded { timerPaused = true })
         .onAppear {
