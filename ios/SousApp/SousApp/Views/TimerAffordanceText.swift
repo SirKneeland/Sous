@@ -61,6 +61,7 @@ struct TimerAffordanceText: View {
             Text(step.text)
                 .font(.sousBody)
                 .fontWeight(isCurrent ? .bold : nil)
+                .animation(.easeInOut(duration: 0.2), value: isCurrent)
                 .foregroundStyle(isDone ? Color.sousMuted : Color.sousText)
                 .strikethrough(isDone, color: Color.sousMuted)
                 .multilineTextAlignment(.leading)
