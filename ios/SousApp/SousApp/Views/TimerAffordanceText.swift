@@ -12,6 +12,7 @@ struct TimerAffordanceText: View {
     let step: Step
     let stepIndex: Int
     let isHighlighted: Bool
+    var isCurrent: Bool = false
     var timerManager: StepTimerManager
     var onClearHighlight: (() -> Void)? = nil
 
@@ -49,6 +50,7 @@ struct TimerAffordanceText: View {
                 timerRange: p.range,
                 isTimerActive: hasActiveTimer,
                 isStarting: isStarting,
+                isCurrent: isCurrent,
                 onTimerTap: {
                     guard !hasActiveTimer else { return }
                     handleTimerTap()
@@ -58,6 +60,7 @@ struct TimerAffordanceText: View {
         } else {
             Text(step.text)
                 .font(.sousBody)
+                .fontWeight(isCurrent ? .bold : nil)
                 .foregroundStyle(isDone ? Color.sousMuted : Color.sousText)
                 .strikethrough(isDone, color: Color.sousMuted)
                 .multilineTextAlignment(.leading)
@@ -106,11 +109,14 @@ private struct TimerStepTextView: UIViewRepresentable {
     let timerRange: Range<String.Index>
     let isTimerActive: Bool
     let isStarting: Bool
+    var isCurrent: Bool = false
     let onTimerTap: () -> Void
 
     // MARK: Shared style constants
 
-    private static let bodyFont = UIFont.monospacedSystemFont(ofSize: 15, weight: .regular)
+    private var bodyFont: UIFont {
+        UIFont.monospacedSystemFont(ofSize: 15, weight: isCurrent ? .bold : .regular)
+    }
 
     private static var textUIColor: UIColor {
         UIColor { t in
@@ -175,7 +181,7 @@ private struct TimerStepTextView: UIViewRepresentable {
         let middle = String(text[timerRange])
         let after  = String(text[timerRange.upperBound..<text.endIndex])
 
-        let font = Self.bodyFont
+        let font = bodyFont
         let baseAttrs:   [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: Self.textUIColor]
         let accentAttrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: Self.accentUIColor]
 

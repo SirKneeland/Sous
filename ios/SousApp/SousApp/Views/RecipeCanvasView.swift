@@ -396,6 +396,7 @@ struct RecipeCanvasView: View {
                             header: step.text,
                             items: items,
                             isDone: step.effectiveStatus == .done,
+                            isCurrent: step.id == currentStepId,
                             onChildTap: { subStepId in onMarkSubStepDone(step.id, subStepId) }
                         )
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -440,6 +441,7 @@ struct RecipeCanvasView: View {
                                         step: step,
                                         stepIndex: index,
                                         isHighlighted: isHighlighted,
+                                        isCurrent: step.id == currentStepId,
                                         timerManager: tm,
                                         onClearHighlight: {
                                             withAnimation(.easeInOut(duration: 0.3)) {
@@ -450,6 +452,7 @@ struct RecipeCanvasView: View {
                                 } else {
                                     Text(step.text)
                                         .font(.sousBody)
+                                        .fontWeight(step.id == currentStepId ? .bold : nil)
                                         .foregroundStyle(isDone ? Color.sousMuted : Color.sousText)
                                         .strikethrough(isDone, color: Color.sousMuted)
                                         .multilineTextAlignment(.leading)
@@ -677,6 +680,18 @@ struct RecipeCanvasView: View {
         }
     }
 
+    /// The ID of the step that should receive bold treatment — the earliest unchecked step.
+    /// MEP takes priority: if any MEP entry is undone, the first undone MEP entry is current.
+    /// Once all MEP is done (or absent), the first undone procedure step is current.
+    private var currentStepId: UUID? {
+        if let mepEntries = recipe.miseEnPlace, !mepEntries.isEmpty {
+            if !mepEntries.allSatisfy({ $0.isDone }) {
+                return mepEntries.first(where: { !$0.isDone })?.id
+            }
+        }
+        return recipe.steps.first(where: { $0.effectiveStatus == .todo })?.id
+    }
+
     /// Marks a step done, triggering the two-phase drain animation when the
     /// completed section is collapsed.
     private func handleMarkStepDone(_ stepId: UUID) {
@@ -775,6 +790,7 @@ struct RecipeCanvasView: View {
                         .padding(.top, 2)
                     Text(instruction)
                         .font(.sousBody)
+                        .fontWeight(row.id == currentStepId ? .bold : nil)
                         .foregroundStyle(isDone ? Color.sousMuted : Color.sousText)
                         .strikethrough(isDone, color: Color.sousMuted)
                         .multilineTextAlignment(.leading)
@@ -797,6 +813,7 @@ struct RecipeCanvasView: View {
                         .padding(.top, 2)
                     Text(vesselName)
                         .font(.sousBody)
+                        .fontWeight(row.id == currentStepId ? .bold : nil)
                         .foregroundStyle(isDone ? Color.sousMuted : Color.sousText)
                         .strikethrough(isDone, color: Color.sousMuted)
                         .multilineTextAlignment(.leading)
@@ -914,6 +931,7 @@ private struct NestedStepGroupView: View {
     let header: String
     let items: [NestedStepItem]
     let isDone: Bool
+    var isCurrent: Bool = false
     let onChildTap: (UUID) -> Void
 
     var body: some View {
@@ -924,6 +942,7 @@ private struct NestedStepGroupView: View {
                     .allowsHitTesting(false)
                 Text(header.uppercased())
                     .font(.sousSectionHeader)
+                    .fontWeight(isCurrent ? .bold : nil)
                     .kerning(1.0)
                     .foregroundStyle(isDone ? Color.sousMuted : Color.sousText)
                 Spacer()
