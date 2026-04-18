@@ -160,7 +160,9 @@ private struct TimerStepTextView: UIViewRepresentable {
     func updateUIView(_ tv: UITextView, context: Context) {
         let (attrStr, timerRange) = buildAttributedString()
         if tv.attributedText != attrStr {
-            tv.attributedText = attrStr
+            UIView.transition(with: tv, duration: 0.2, options: .transitionCrossDissolve, animations: {
+                tv.attributedText = attrStr
+            }, completion: nil)
         }
         context.coordinator.timerNSRange = timerRange
         context.coordinator.onTimerTap = onTimerTap
