@@ -58,7 +58,7 @@ struct RecentRecipesView: View {
                             .listRowSeparatorTint(Color.sousSeparator)
                             .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                             .padding(.vertical, 14)
-                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            .contextMenu {
                                 Button(role: .destructive) {
                                     if snapshot.recipe.id == store.uiState.recipe.id {
                                         showDeleteActiveAlert = true

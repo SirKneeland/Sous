@@ -18,6 +18,9 @@ struct ContentView: View {
     @State private var navBarVisible: Bool = false
     /// True while the user is editing the recipe title inline.
     @State private var isTitleEditing: Bool = false
+    @State private var isCanvasEnabled: Bool = true
+    /// Driven by HistoryDrawer each animation frame — offsets the canvas rightward as drawer opens.
+    @State private var canvasOffset: CGFloat = 0
 
     private var hasDoneBanner: Bool { !timerManager.doneQueue.isEmpty }
 
@@ -96,6 +99,9 @@ struct ContentView: View {
                     navBarVisible: $navBarVisible,
                     bottomZoneHeight: bottomZoneHeight
                 )
+                .disabled(!isCanvasEnabled)
+                .ignoresSafeArea(edges: .bottom)
+                .offset(x: canvasOffset)
                 // Reserve space for the collapsible nav bar so list content
                 // is never hidden behind it when revealed.
                 // 44pt keeps the thrash-free gap wider than the inset shift
@@ -128,8 +134,11 @@ struct ContentView: View {
                         scrollToStepId = stepId
                         highlightedStepId = stepId
                     },
-                    onHeightChange: { bottomZoneHeight = $0 }
+                    onHeightChange: { bottomZoneHeight = $0 },
+                    isEnabled: isCanvasEnabled
                 )
+                .offset(x: canvasOffset)
+                .disabled(!isCanvasEnabled)
             }
         }
         .onAppear {
@@ -155,8 +164,8 @@ struct ContentView: View {
         .sheet(isPresented: $showSettings) {
             SettingsView(store: store)
         }
-        .sheet(isPresented: $store.showRecentRecipes) {
-            RecentRecipesView(store: store, onDismiss: { store.showRecentRecipes = false })
+        .overlay {
+            HistoryDrawer(store: store, isCanvasEnabled: $isCanvasEnabled, canvasOffset: $canvasOffset)
         }
         .sheet(isPresented: $store.isShowingImportSheet) {
             RecipeImportSheet(store: store, onCancel: {

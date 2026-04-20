@@ -26,6 +26,7 @@ struct BottomZoneView: View {
     var onOpenChat: () -> Void
     var onTimerBannerTap: (UUID) -> Void
     var onHeightChange: (CGFloat) -> Void
+    var isEnabled: Bool = true
 
     @State private var dragOffset: CGFloat = 0
 
@@ -81,7 +82,7 @@ struct BottomZoneView: View {
         // the chat sheet opens), so no explicit isActive toggle is needed here.
         .background {
             ThumbDropOverlay(
-                isActive: true,
+                isActive: isEnabled,
                 onOffsetChanged: { dragOffset = $0 },
                 onCommit: {
                     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
