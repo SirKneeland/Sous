@@ -53,9 +53,7 @@ struct ChatSheetView: View {
         .onAppear {
             if !isFullscreen {
                 scrollOnKeyboardShow = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                    isComposerFocused = true
-                }
+                isComposerFocused = true
             } else if store.quotedRowContext != nil {
                 isComposerFocused = true
             }
