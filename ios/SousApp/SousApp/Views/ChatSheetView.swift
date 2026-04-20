@@ -22,6 +22,9 @@ struct ChatSheetView: View {
     @State private var sling2Fired = false  // 60 pt → .medium
     @State private var sling3Fired = false  // 90 pt → .rigid
     @FocusState private var isComposerFocused: Bool
+    /// One-shot gate: set on sheet open, consumed by keyboardWillShowNotification to snap
+    /// to bottom as the keyboard begins rising rather than after it lands.
+    @State private var scrollOnKeyboardShow: Bool = false
 
     var body: some View {
         Group {
@@ -48,7 +51,12 @@ struct ChatSheetView: View {
 
 #endif
         .onAppear {
-            if store.quotedRowContext != nil {
+            if !isFullscreen {
+                scrollOnKeyboardShow = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    isComposerFocused = true
+                }
+            } else if store.quotedRowContext != nil {
                 isComposerFocused = true
             }
         }
@@ -73,11 +81,6 @@ struct ChatSheetView: View {
 
     private var blankStateView: some View {
         VStack(spacing: 0) {
-            // Nav bar is rendered as a fixed overlay in ContentView (no canvasOffset applied).
-            // Reserve the same 44pt the bar occupies so content sits below it.
-            Color.clear.frame(height: 44)
-                .background(Color.sousTerracotta.ignoresSafeArea(edges: .top))
-
             Spacer()
 
             VStack(spacing: 10) {
@@ -133,7 +136,33 @@ struct ChatSheetView: View {
             attachmentStrip
             composerBar
         }
-        .background(Color.sousBackground.ignoresSafeArea())
+        .background(Color.sousSurface.ignoresSafeArea())
+        .overlay(alignment: .top) {
+            ZStack(alignment: .top) {
+                Color.clear
+                    .frame(height: 80)
+                    .background(.ultraThinMaterial)
+                    .mask(
+                        LinearGradient(
+                            colors: [.black, .black.opacity(0.5), .clear],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                LinearGradient(
+                    stops: [
+                        .init(color: Color.sousSurface, location: 0),
+                        .init(color: Color.sousSurface.opacity(0.9), location: 0.35),
+                        .init(color: Color.sousSurface.opacity(0), location: 1),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 80)
+            }
+            .allowsHitTesting(false)
+            .ignoresSafeArea(edges: .top)
+        }
     }
 
     // MARK: - Main Chat View
@@ -156,7 +185,7 @@ struct ChatSheetView: View {
                 .opacity(inputBarDragOffset == 0 ? 1 : 0)
             composerBar
         }
-        .background(isFullscreen ? Color.sousBackground : Color.sousSurface)
+        .background(Color.sousSurface)
         .animation(.easeOut(duration: 0.25), value: store.canGenerateRecipe)
     }
 
@@ -220,6 +249,11 @@ struct ChatSheetView: View {
                 .padding(.vertical, 12)
             }
             .onAppear {
+                proxy.scrollTo("bottom", anchor: .bottom)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+                guard scrollOnKeyboardShow else { return }
+                scrollOnKeyboardShow = false
                 proxy.scrollTo("bottom", anchor: .bottom)
             }
             .onChange(of: store.chatTranscript.count) { _ in

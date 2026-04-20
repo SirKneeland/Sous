@@ -10,11 +10,9 @@ struct ContentView: View {
     @State private var scrollToStepId: UUID? = nil
     /// stepId whose step row should be highlighted in terracotta. Cleared on any interaction.
     @State private var highlightedStepId: UUID? = nil
-    @State private var gearFrame: CGRect = .zero
     /// Measured height of BottomZoneView. Applied as .safeAreaInset to RecipeCanvasView
     /// so scroll content is never hidden behind the bar.
     @State private var bottomZoneHeight: CGFloat = 0
-    /// Whether the collapsible top nav bar (New / History / Settings) is currently revealed.
     @State private var navBarVisible: Bool = false
     /// True while the user is editing the recipe title inline.
     @State private var isTitleEditing: Bool = false
@@ -103,14 +101,6 @@ struct ContentView: View {
                 .disabled(!isCanvasEnabled)
                 .ignoresSafeArea(edges: .bottom)
                 .offset(x: canvasOffset)
-                // Reserve space for the collapsible nav bar so list content
-                // is never hidden behind it when revealed.
-                // 44pt keeps the thrash-free gap wider than the inset shift
-                // (collapse at -60 → after inset removed position jumps to -16, which
-                //  stays below the reveal threshold of -10).
-                .safeAreaInset(edge: .top, spacing: 0) {
-                    Color.clear.frame(height: navBarVisible && isRecipeCanvasActive ? 44 : 0)
-                }
                 // Reserve space equal to the bottom zone height so the last scroll item
                 // is never hidden behind the bar.
                 .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -150,7 +140,6 @@ struct ContentView: View {
             timerManager.isRecipeCanvasActive = active
         }
         .onChange(of: store.hasCanvas) { _, hasCanvas in
-            // Show nav bar when the canvas first appears (user is at the top).
             if hasCanvas { navBarVisible = true }
         }
         .sheet(isPresented: Binding(
@@ -166,61 +155,34 @@ struct ContentView: View {
             SettingsView(store: store)
         }
         .overlay {
-            HistoryDrawer(store: store, isCanvasEnabled: $isCanvasEnabled, canvasOffset: $canvasOffset)
+            HistoryDrawer(
+                store: store,
+                isCanvasEnabled: $isCanvasEnabled,
+                canvasOffset: $canvasOffset,
+                onNewRecipe: { store.requestNewSession(); timerManager.clearAll() },
+                onSettings: { showSettings = true }
+            )
+        }
+        // Hamburger button — floats above all content including the sidebar.
+        .overlay(alignment: .topLeading) {
+            Button {
+                store.showRecentRecipes.toggle()
+            } label: {
+                Image(systemName: "line.3.horizontal")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(Color.sousTerracotta)
+            }
+            .buttonStyle(.plain)
+            .padding(.leading, 16)
+            .padding(.top, 16)
         }
         .sheet(isPresented: $store.isShowingImportSheet) {
             RecipeImportSheet(store: store, onCancel: {
                 store.importError = nil
                 store.isShowingImportSheet = false
             })
-        }
-        .onPreferenceChange(GearButtonFrameKey.self) { gearFrame = $0 }
-        .overlay {
-            // Only show when nav bar is visible so the callout arrow points at the
-            // actual on-screen gear button.
-            if !store.hasAPIKey && gearFrame != .zero && navBarVisible && isRecipeCanvasActive {
-                APIKeyCallout(gearFrame: gearFrame)
-                    .allowsHitTesting(false)
-            }
-        }
-        // Collapsible top nav bar: burgundy bar below the status bar with New / History / Settings.
-        // The bar's background also fills the status bar area via ignoresSafeArea.
-        .overlay(alignment: .top) {
-            if isRecipeCanvasActive {
-                CollapsibleNavBar(
-                    isVisible: navBarVisible,
-                    onNew: { store.requestNewSession() },
-                    onHistory: { store.showRecentRecipes = true },
-                    onSettings: { showSettings = true }
-                )
-                .animation(.easeInOut(duration: 0.2), value: navBarVisible)
-            }
-        }
-        // Fixed nav bar for the exploration phase (no canvas yet). Rendered outside the
-        // canvasOffset view so it stays in place while chat content slides with the drawer.
-        .overlay(alignment: .top) {
-            if !store.hasCanvas {
-                CollapsibleNavBar(
-                    isVisible: true,
-                    onNew: { store.requestNewSession(); timerManager.clearAll() },
-                    onHistory: { store.showRecentRecipes = true },
-                    onSettings: { showSettings = true }
-                )
-            }
-        }
-        // Transparent tap zone covering the top of the screen to trigger nav reveal.
-        // Only active when nav is collapsed; removed when nav is visible so buttons receive taps.
-        .overlay(alignment: .top) {
-            if isRecipeCanvasActive && !navBarVisible {
-                Color.clear
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 60)
-                    .ignoresSafeArea(edges: .top)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        withAnimation(.easeInOut(duration: 0.25)) { navBarVisible = true }
-                    }
-            }
         }
         .overlay(alignment: .bottom) {
             if let session = timerManager.doneQueue.first {
@@ -232,60 +194,6 @@ struct ContentView: View {
                 .animation(.spring(response: 0.35, dampingFraction: 0.85), value: timerManager.doneQueue.count)
             }
         }
-    }
-}
-
-// MARK: - Collapsible Nav Bar
-
-/// Burgundy bar that slides down from below the status bar.
-///
-/// When `isVisible` is false, only the status bar area has a burgundy background
-/// (via `.background(...ignoresSafeArea(.top))`). When true, the 52pt button row
-/// slides in below the status bar containing New, History, and Settings icons.
-struct CollapsibleNavBar: View {
-    var isVisible: Bool
-    var onNew: () -> Void
-    var onHistory: () -> Void
-    var onSettings: () -> Void
-
-    var body: some View {
-        VStack(spacing: 0) {
-            if isVisible {
-                HStack(spacing: 0) {
-                    Spacer()
-                    navButton("plus", action: onNew)
-                    Spacer()
-                    navButton("books.vertical.fill", action: onHistory)
-                    Spacer()
-                    navButton("gearshape", action: onSettings)
-                        .background(GeometryReader { geo in
-                            Color.clear.preference(
-                                key: GearButtonFrameKey.self,
-                                value: geo.frame(in: .named("contentRoot"))
-                            )
-                        })
-                    Spacer()
-                }
-                .frame(height: 44)
-                .transition(.move(edge: .top).combined(with: .opacity))
-            }
-        }
-        .frame(maxWidth: .infinity)
-        // The background extends behind the status bar via ignoresSafeArea.
-        // This keeps the status bar burgundy even when the button row is collapsed.
-        .background(Color.sousTerracotta.ignoresSafeArea(edges: .top))
-        .animation(.easeInOut(duration: 0.25), value: isVisible)
-    }
-
-    @ViewBuilder
-    private func navButton(_ systemName: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 16, weight: .regular))
-                .foregroundStyle(.white)
-                .frame(width: 44, height: 44)
-        }
-        .buttonStyle(.plain)
     }
 }
 

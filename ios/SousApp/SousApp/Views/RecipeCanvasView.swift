@@ -112,8 +112,13 @@ struct RecipeCanvasView: View {
             List {
 
                 // MARK: Header
-                HStack(alignment: .top, spacing: 8) {
-                    VStack(alignment: .leading, spacing: 4) {
+                // The row itself is full-width (listRowInsets zero) so the separator spans
+                // the full canvas width matching all other rows.
+                // titleInset pads only the title+revision content to clear the 44pt hamburger
+                // button (16pt safe-area offset + 44pt button + 16pt margin = 76pt).
+                let titleInset: CGFloat = 76
+                VStack(spacing: 0) {
+                    VStack(alignment: .center, spacing: 4) {
                         if isEditingTitle {
                             TextField("", text: $titleDraft, axis: .vertical)
                                 .font(.sousTitle)
@@ -123,6 +128,7 @@ struct RecipeCanvasView: View {
                                 .submitLabel(.done)
                                 .lineLimit(nil)
                                 .fixedSize(horizontal: false, vertical: true)
+                                .multilineTextAlignment(.center)
                                 .focused($isTitleFocused)
                                 .onChange(of: titleDraft) { _, newValue in
                                     // axis: .vertical swallows the return key as a newline;
@@ -142,6 +148,7 @@ struct RecipeCanvasView: View {
                             Text(recipe.title.uppercased())
                                 .font(.sousTitle)
                                 .foregroundStyle(Color.sousText)
+                                .multilineTextAlignment(.center)
                                 .fixedSize(horizontal: false, vertical: true)
                                 .onTapGesture {
                                     titleDraft = recipe.title
@@ -154,16 +161,17 @@ struct RecipeCanvasView: View {
                             .font(.sousCaption)
                             .foregroundStyle(Color.sousMuted)
                     }
-                    Spacer()
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, titleInset)
+                    .padding(.top, 20)
+                    .padding(.bottom, 16)
+                    Divider()
+                        .background(Color.sousSeparator)
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 20)
-                .padding(.bottom, 16)
                 .frame(maxWidth: .infinity)
                 .listRowInsets(EdgeInsets())
                 .listRowBackground(Color.clear)
-                .listRowSeparator(.visible, edges: .bottom)
-                .listRowSeparatorTint(Color.sousSeparator)
+                .listRowSeparator(.hidden)
 
                 // MARK: Ingredients section header (collapsible)
                 Button {
@@ -640,6 +648,34 @@ struct RecipeCanvasView: View {
                 .presentationDragIndicator(.hidden)
             }
         } // end ScrollViewReader
+        .overlay(alignment: .top) {
+            ZStack(alignment: .top) {
+                // Blur layer — blurs scroll content passing through, masked to fade bottom
+                Color.clear
+                    .frame(height: 80)
+                    .background(.ultraThinMaterial)
+                    .mask(
+                        LinearGradient(
+                            colors: [.black, .black.opacity(0.5), .clear],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                // Solid fade — opaque at top, transitions to clear so blur layer takes over
+                LinearGradient(
+                    stops: [
+                        .init(color: Color.sousBackground, location: 0),
+                        .init(color: Color.sousBackground.opacity(0.9), location: 0.35),
+                        .init(color: Color.sousBackground.opacity(0), location: 1),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 80)
+            }
+            .allowsHitTesting(false)
+            .ignoresSafeArea(edges: .top)
+        }
         .alert("Start over?", isPresented: $showingResetConfirmation) {
             Button("Reset", role: .destructive) {
                 resetButtonPressed = false

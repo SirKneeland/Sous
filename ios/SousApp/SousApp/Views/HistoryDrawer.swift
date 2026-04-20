@@ -22,6 +22,8 @@ struct HistoryDrawer: View {
     @ObservedObject var store: AppStore
     @Binding var isCanvasEnabled: Bool
     @Binding var canvasOffset: CGFloat
+    var onNewRecipe: () -> Void = {}
+    var onSettings: () -> Void = {}
 
     @State private var progress: CGFloat = 0
     @State private var gestureActive = false
@@ -44,48 +46,103 @@ struct HistoryDrawer: View {
                         .padding(.leading, dw * progress)
                         .transition(.identity)
 
-                    RecentRecipesView(store: store, onDismiss: { snap(open: false) })
-                        .frame(width: dw)
-                        .overlay(alignment: .trailing) {
-                            LinearGradient(
-                                stops: [
-                                    .init(color: .black.opacity(0.2), location: 0.0),
-                                    .init(color: .black.opacity(0.08), location: 0.4),
-                                    .init(color: .black.opacity(0.02), location: 0.7),
-                                    .init(color: .clear, location: 1.0)
-                                ],
-                                startPoint: .trailing,
-                                endPoint: .leading
-                            )
-                            .frame(width: 32)
-                            .frame(maxHeight: .infinity)
-                            .ignoresSafeArea(edges: .bottom)
-                            .allowsHitTesting(false)
-                            .opacity(Double(progress))
-                        }
-                        .offset(x: dw * (progress - 1))
-                        .transition(.identity)
-                        .background(
-                            DrawerDismissInstaller(
-                                isActive: progress > 0.001,
-                                onChanged: { tx in
-                                    guard tx < 0 else { return }
-                                    gestureActive = true
-                                    let p = min(1, max(0, 1.0 + tx / dw))
-                                    // Direct (no animation) — mirrors the live finger position.
-                                    progress = p
-                                    canvasOffset = p * dw
-                                },
-                                onEnded: { tx, vx in
-                                    gestureActive = false
-                                    if tx < -60 || vx < -300 {
-                                        snap(open: false)
-                                    } else {
-                                        snap(open: true)
-                                    }
+                    VStack(spacing: 0) {
+                        // MARK: Header
+                        ZStack(alignment: .center) {
+                            Text("SOUS")
+                                .font(.sousLogotype)
+                                .foregroundStyle(Color.sousText)
+                                .frame(maxWidth: .infinity)
+                            HStack(spacing: 0) {
+                                Spacer()
+                                Button {
+                                    onSettings()
+                                    snap(open: false)
+                                } label: {
+                                    Image(systemName: "gearshape.fill")
+                                        .font(.system(size: 16, weight: .medium))
+                                        .foregroundStyle(.white)
+                                        .frame(width: 44, height: 44)
+                                        .background(Color(red: 26/255, green: 26/255, blue: 26/255))
                                 }
-                            )
+                                .buttonStyle(.plain)
+                                .padding(.trailing, 16)
+                            }
+                        }
+                        .padding(.top, 16)
+                        .padding(.bottom, 16)
+                        .background(Color.sousBackground)
+
+                        SousRule()
+
+                        // MARK: Body
+                        RecentRecipesView(store: store, onDismiss: { snap(open: false) })
+
+                        // MARK: Footer
+                        SousRule()
+                        Button {
+                            snap(open: false) { onNewRecipe() }
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "plus.square.fill")
+                                    .font(.system(size: 16, weight: .regular))
+                                    .foregroundStyle(.white)
+                                Text("NEW RECIPE")
+                                    .font(.sousButton)
+                                    .foregroundStyle(.white)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 52)
+                            .background(Color.sousTerracotta)
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 12)
+                        .background(Color.sousBackground.ignoresSafeArea(edges: .bottom))
+                    }
+                    .frame(width: dw)
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .background(Color.sousBackground.ignoresSafeArea(edges: .top))
+                    .overlay(alignment: .trailing) {
+                        LinearGradient(
+                            stops: [
+                                .init(color: .black.opacity(0.2), location: 0.0),
+                                .init(color: .black.opacity(0.08), location: 0.4),
+                                .init(color: .black.opacity(0.02), location: 0.7),
+                                .init(color: .clear, location: 1.0)
+                            ],
+                            startPoint: .trailing,
+                            endPoint: .leading
                         )
+                        .frame(width: 32)
+                        .frame(maxHeight: .infinity)
+                        .ignoresSafeArea(edges: [.top, .bottom])
+                        .allowsHitTesting(false)
+                        .opacity(Double(progress))
+                    }
+                    .offset(x: dw * (progress - 1))
+                    .transition(.identity)
+                    .background(
+                        DrawerDismissInstaller(
+                            isActive: progress > 0.001,
+                            onChanged: { tx in
+                                guard tx < 0 else { return }
+                                gestureActive = true
+                                let p = min(1, max(0, 1.0 + tx / dw))
+                                // Direct (no animation) — mirrors the live finger position.
+                                progress = p
+                                canvasOffset = p * dw
+                            },
+                            onEnded: { tx, vx in
+                                gestureActive = false
+                                if tx < -60 || vx < -300 {
+                                    snap(open: false)
+                                } else {
+                                    snap(open: true)
+                                }
+                            }
+                        )
+                    )
                 }
 
                 // 20pt left-edge hit zone. Always present and above the canvas.
@@ -131,7 +188,7 @@ struct HistoryDrawer: View {
         }
     }
 
-    private func snap(open: Bool) {
+    private func snap(open: Bool, completion: (() -> Void)? = nil) {
         if open { isCanvasEnabled = false }
         withAnimation(
             .spring(response: 0.35, dampingFraction: 0.85),
@@ -146,6 +203,7 @@ struct HistoryDrawer: View {
                 canvasOffset = 0
             }
             if store.showRecentRecipes != open { store.showRecentRecipes = open }
+            completion?()
         }
     }
 }
