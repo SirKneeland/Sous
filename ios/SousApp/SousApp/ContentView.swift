@@ -55,6 +55,7 @@ struct ContentView: View {
                     onOpenRecents: { store.showRecentRecipes = true },
                     onOpenImport: { store.isShowingImportSheet = true }
                 )
+                .offset(x: canvasOffset)
             } else {
                 RecipeCanvasView(
                     recipe: store.uiState.recipe,
@@ -193,6 +194,18 @@ struct ContentView: View {
                     onSettings: { showSettings = true }
                 )
                 .animation(.easeInOut(duration: 0.2), value: navBarVisible)
+            }
+        }
+        // Fixed nav bar for the exploration phase (no canvas yet). Rendered outside the
+        // canvasOffset view so it stays in place while chat content slides with the drawer.
+        .overlay(alignment: .top) {
+            if !store.hasCanvas {
+                CollapsibleNavBar(
+                    isVisible: true,
+                    onNew: { store.requestNewSession(); timerManager.clearAll() },
+                    onHistory: { store.showRecentRecipes = true },
+                    onSettings: { showSettings = true }
+                )
             }
         }
         // Transparent tap zone covering the top of the screen to trigger nav reveal.

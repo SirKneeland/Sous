@@ -73,12 +73,10 @@ struct ChatSheetView: View {
 
     private var blankStateView: some View {
         VStack(spacing: 0) {
-            CollapsibleNavBar(
-                isVisible: true,
-                onNew: { onStartNew() },
-                onHistory: { onOpenRecents() },
-                onSettings: { onOpenSettings() }
-            )
+            // Nav bar is rendered as a fixed overlay in ContentView (no canvasOffset applied).
+            // Reserve the same 44pt the bar occupies so content sits below it.
+            Color.clear.frame(height: 44)
+                .background(Color.sousTerracotta.ignoresSafeArea(edges: .top))
 
             Spacer()
 
@@ -142,8 +140,15 @@ struct ChatSheetView: View {
 
     private var mainChatView: some View {
         VStack(spacing: 0) {
-            chatHeader
-            SousRule()
+            if isFullscreen {
+                // Nav bar is rendered as a fixed overlay in ContentView (no canvasOffset applied).
+                // Reserve the same 44pt the bar occupies so content sits below it.
+                Color.clear.frame(height: 44)
+                    .background(Color.sousTerracotta.ignoresSafeArea(edges: .top))
+            } else {
+                chatHeader
+                SousRule()
+            }
             transcript
                 .overlay(alignment: .bottom) { generatePill }
             attachmentStrip
