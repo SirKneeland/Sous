@@ -138,6 +138,12 @@ final class AppStore: ObservableObject {
     /// clearing a newer task's reference when an old (cancelled) task finishes.
     private var llmGeneration = 0
 
+    /// Cache of AI-generated summaries for pre-canvas sessions.
+    /// Key: recipe UUID. Warmed from disk on every `loadRecentSessions()` call.
+    /// Mutated on the main actor; not published — RecentRecipesView drives its own
+    /// shimmer/display state and consults this cache on every sidebar open.
+    var sessionSummaryCache: [UUID: SessionSummaryCacheEntry] = [:]
+
     private var hasPendingPatch: Bool {
         switch uiState {
         case .patchProposed, .patchReview: return true
@@ -425,9 +431,48 @@ final class AppStore: ObservableObject {
     // MARK: - Recent Recipes
 
     /// Returns all saved recipe sessions, most recent first (current recipe is always first slot).
+    /// Also warms `sessionSummaryCache` from each pre-canvas session's persisted cachedSummary,
+    /// so the sidebar can display stored summaries immediately without re-running the model.
     func loadRecentSessions() -> [SessionSnapshot] {
         guard isPersistenceEnabled else { return [] }
-        return Array(SessionPersistence.listAll(in: sessionsDirectory).prefix(20))
+        let sessions = Array(SessionPersistence.listAll(in: sessionsDirectory).prefix(20))
+        for snapshot in sessions where !snapshot.hasCanvas {
+            if let entry = snapshot.cachedSummary {
+                sessionSummaryCache[snapshot.recipe.id] = entry
+            }
+        }
+        return sessions
+    }
+
+    /// Persists an AI-generated summary for a pre-canvas session.
+    /// Updates the in-memory cache and writes to the session file on disk so the
+    /// summary survives app restarts without re-running the model.
+    func updateSessionSummary(recipeId: UUID, messageCount: Int, summary: String) {
+        let entry = SessionSummaryCacheEntry(messageCount: messageCount, summary: summary)
+        sessionSummaryCache[recipeId] = entry
+        guard isPersistenceEnabled else { return }
+        let url = SessionPersistence.fileURL(for: recipeId, in: sessionsDirectory)
+        if recipeId == uiState.recipe.id {
+            // Active session: use the normal save path so makeSnapshot includes the entry.
+            saveSession()
+        } else {
+            // Non-active session: load, patch cachedSummary only, save.
+            guard let existing = SessionPersistence.load(from: url) else { return }
+            let updated = SessionSnapshot(
+                schemaVersion: existing.schemaVersion,
+                hasCanvas: existing.hasCanvas,
+                recipe: existing.recipe,
+                pendingPatchSet: existing.pendingPatchSet,
+                chatMessages: existing.chatMessages,
+                nextLLMContext: existing.nextLLMContext,
+                savedAt: existing.savedAt,
+                ingredientsExpanded: existing.ingredientsExpanded,
+                stepsCompletedExpanded: existing.stepsCompletedExpanded,
+                miseEnPlaceExpanded: existing.miseEnPlaceExpanded,
+                cachedSummary: entry
+            )
+            try? SessionPersistence.save(updated, to: url)
+        }
     }
 
     /// Deletes the on-disk session for `snapshot`.
@@ -1232,7 +1277,8 @@ final class AppStore: ObservableObject {
             savedAt: Date(),
             ingredientsExpanded: overrideIngredients ?? ingredientsExpanded,
             stepsCompletedExpanded: overrideStepsCompleted ?? stepsCompletedExpanded,
-            miseEnPlaceExpanded: overrideMiseEnPlace ?? miseEnPlaceExpanded
+            miseEnPlaceExpanded: overrideMiseEnPlace ?? miseEnPlaceExpanded,
+            cachedSummary: sessionSummaryCache[uiState.recipe.id]
         )
     }
 

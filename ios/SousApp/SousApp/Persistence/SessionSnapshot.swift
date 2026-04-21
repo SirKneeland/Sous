@@ -1,6 +1,15 @@
 import Foundation
 import SousCore
 
+// MARK: - SessionSummaryCacheEntry
+
+/// A persisted AI-generated summary for a pre-canvas session.
+/// Keyed to the message count at generation time so the view can detect when re-generation is needed.
+struct SessionSummaryCacheEntry: Codable, Sendable {
+    let messageCount: Int
+    let summary: String
+}
+
 /// The full state saved to disk after key user interactions.
 ///
 /// - `schemaVersion` is checked on load so future schema changes can be
@@ -14,7 +23,7 @@ import SousCore
 ///   persist the canvas collapsed-section state across relaunch and recipe
 ///   switches (v3 added the first two; v4 added miseEnPlaceExpanded).
 struct SessionSnapshot: Codable, Sendable {
-    static let currentSchemaVersion = 4
+    static let currentSchemaVersion = 5
 
     let schemaVersion: Int
     /// Whether a recipe canvas exists in the session (false = blank/exploration state).
@@ -31,8 +40,11 @@ struct SessionSnapshot: Codable, Sendable {
     let stepsCompletedExpanded: Bool
     /// Whether the mise en place section is expanded. Defaults to false (collapsed).
     let miseEnPlaceExpanded: Bool
+    /// Persisted AI-generated summary for pre-canvas sessions.
+    /// Nil for canvas sessions and for pre-canvas sessions where no summary has been generated yet.
+    let cachedSummary: SessionSummaryCacheEntry?
 
-    /// Memberwise initializer with new-recipe defaults for the v3/v4 fields.
+    /// Memberwise initializer with new-recipe defaults for the v3/v4/v5 fields.
     init(
         schemaVersion: Int,
         hasCanvas: Bool,
@@ -43,7 +55,8 @@ struct SessionSnapshot: Codable, Sendable {
         savedAt: Date,
         ingredientsExpanded: Bool = true,
         stepsCompletedExpanded: Bool = false,
-        miseEnPlaceExpanded: Bool = false
+        miseEnPlaceExpanded: Bool = false,
+        cachedSummary: SessionSummaryCacheEntry? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.hasCanvas = hasCanvas
@@ -55,6 +68,7 @@ struct SessionSnapshot: Codable, Sendable {
         self.ingredientsExpanded = ingredientsExpanded
         self.stepsCompletedExpanded = stepsCompletedExpanded
         self.miseEnPlaceExpanded = miseEnPlaceExpanded
+        self.cachedSummary = cachedSummary
     }
 
     /// Custom decoder that migrates v2 sessions to v3 by supplying new-recipe
@@ -82,5 +96,7 @@ struct SessionSnapshot: Codable, Sendable {
         stepsCompletedExpanded = try container.decodeIfPresent(Bool.self, forKey: .stepsCompletedExpanded) ?? false
         // v4 field — absent in v3 JSON; default to collapsed.
         miseEnPlaceExpanded = try container.decodeIfPresent(Bool.self, forKey: .miseEnPlaceExpanded) ?? false
+        // v5 field — absent in v4 and older JSON; default to nil.
+        cachedSummary = try container.decodeIfPresent(SessionSummaryCacheEntry.self, forKey: .cachedSummary)
     }
 }
