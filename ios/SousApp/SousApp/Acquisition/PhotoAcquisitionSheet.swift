@@ -75,6 +75,7 @@ struct PhotoAcquisitionSheet: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .background(Color.black.ignoresSafeArea())
         .task { await resolveAndPresent() }
     }
 

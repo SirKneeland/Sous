@@ -6,10 +6,15 @@ import UIKit
 struct ChatSheetView: View {
     @ObservedObject var store: AppStore
     var isFullscreen: Bool = false
+    /// True when the overlay is visible (always true for the fullscreen blank-state chat).
+    /// Used to trigger focus and keyboard in the same frame the overlay animates in.
+    var isPresented: Bool = true
     var onStartNew: () -> Void = {}
     var onOpenSettings: () -> Void = {}
     var onOpenRecents: () -> Void = {}
     var onOpenImport: () -> Void = {}
+    /// Called with true when the camera sheet opens, false when it closes.
+    var onCameraPresented: (Bool) -> Void = { _ in }
     @StateObject private var photoSend = PhotoSendCoordinator()
     @State private var composerText = ""
     @State private var composerHeight: CGFloat = 36
@@ -40,7 +45,7 @@ struct ChatSheetView: View {
         // The input bar's own DragGesture remains unchanged and coexists with this.
         .background {
             ThumbDropOverlay(
-                isActive: !isFullscreen,
+                isActive: !isFullscreen && isPresented,
                 onOffsetChanged: { inputBarDragOffset = $0 },
                 onCommit: thumbDropCommit,
                 onCancel: thumbDropCancel
@@ -51,17 +56,33 @@ struct ChatSheetView: View {
 
 #endif
         .onAppear {
-            if !isFullscreen {
+            // Fullscreen blank-state: focus only if a quoted context arrived before appear.
+            // Overlay (non-fullscreen): focus is handled by onChange(of: isPresented) below,
+            // since the view is always in the hierarchy and onAppear won't re-fire on open.
+            if isFullscreen && store.quotedRowContext != nil {
+                isComposerFocused = true
+            }
+        }
+        .onChange(of: isPresented) { _, newValue in
+            if newValue && !isFullscreen {
                 scrollOnKeyboardShow = true
                 isComposerFocused = true
-            } else if store.quotedRowContext != nil {
-                isComposerFocused = true
+                inputBarDragOffset = 0
+                sheetBounceOffset = 0
+            } else if !newValue && !isFullscreen {
+                UIApplication.shared.sendAction(
+                    #selector(UIResponder.resignFirstResponder),
+                    to: nil, from: nil, for: nil
+                )
             }
         }
         .onChange(of: store.quotedRowContext) { newValue in
             if newValue != nil {
                 isComposerFocused = true
             }
+        }
+        .onChange(of: showPhotoSheet) { _, newValue in
+            onCameraPresented(newValue)
         }
         .sheet(isPresented: $showPhotoSheet) {
             PhotoAcquisitionSheet(
@@ -183,7 +204,7 @@ struct ChatSheetView: View {
                 .opacity(inputBarDragOffset == 0 ? 1 : 0)
             composerBar
         }
-        .background(Color.sousSurface)
+        .background((showPhotoSheet ? Color(red: 117/255, green: 116/255, blue: 113/255) : Color.sousSurface).ignoresSafeArea(.keyboard))
         .animation(.easeOut(duration: 0.25), value: store.canGenerateRecipe)
     }
 
@@ -558,6 +579,7 @@ struct ChatSheetView: View {
     private func thumbDropCancel() {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
             inputBarDragOffset = 0
+            sheetBounceOffset = 0
         }
     }
 

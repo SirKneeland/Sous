@@ -19,8 +19,17 @@ struct ContentView: View {
     @State private var isCanvasEnabled: Bool = true
     /// Driven by HistoryDrawer each animation frame — offsets the canvas rightward as drawer opens.
     @State private var canvasOffset: CGFloat = 0
+    /// Drives the chat overlay vertical offset. Set explicitly per-direction so open and
+    /// close can use different animations (spring bounce on open, straight easeIn on close).
+    @State private var chatOverlayOffset: CGFloat = UIScreen.main.bounds.height
+    @State private var isCameraPresented: Bool = false
 
     private var hasDoneBanner: Bool { !timerManager.doneQueue.isEmpty }
+
+    /// True when the chat overlay should be visible above the recipe canvas.
+    private var isChatOpen: Bool {
+        store.hasCanvas && store.uiState.isSheetPresented && !store.uiState.isPatchReview
+    }
 
     /// True when the recipe canvas is the active screen (not covered by a sheet or patch review).
     private var isRecipeCanvasActive: Bool {
@@ -107,10 +116,34 @@ struct ContentView: View {
                     Color.clear.frame(height: shouldShowBottomZone ? bottomZoneHeight : 0)
                 }
 
-                if store.uiState.isSheetPresented && !store.uiState.isPatchReview {
-                    Color.black.opacity(0.4).ignoresSafeArea()
-                        .transition(.opacity)
-                }
+                // Scrim dims the canvas while chat is open. Hidden when camera is presented
+                // so it doesn't darken the overlay visible behind the camera sheet corners.
+                Color.black.opacity(isChatOpen && !isCameraPresented ? 0.4 : 0)
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+                    .animation(.easeOut(duration: 0.25), value: isChatOpen)
+                    .animation(.easeOut(duration: 0.2), value: isCameraPresented)
+
+                // Chat overlay — always in the ZStack so the TextEditor is permanently in
+                // the view hierarchy. This means @FocusState fires instantly on open,
+                // and the keyboard rises in the same frame the overlay starts animating.
+                ChatSheetView(store: store, isPresented: isChatOpen, onCameraPresented: { isCameraPresented = $0 })
+                    .ignoresSafeArea(.container, edges: .bottom)
+                    .offset(y: chatOverlayOffset)
+                    .opacity(isChatOpen ? 1 : 0)
+                    .allowsHitTesting(isChatOpen)
+                    .animation(.easeOut(duration: 0.25), value: isChatOpen)
+                    .onChange(of: isChatOpen) { _, newValue in
+                        if newValue {
+                            withAnimation(.spring(response: 0.4, dampingFraction: 0.88)) {
+                                chatOverlayOffset = 0
+                            }
+                        } else {
+                            withAnimation(.easeIn(duration: 0.28)) {
+                                chatOverlayOffset = UIScreen.main.bounds.height
+                            }
+                        }
+                    }
             }
         }
         .coordinateSpace(name: "contentRoot")
@@ -142,15 +175,6 @@ struct ContentView: View {
         .onChange(of: store.hasCanvas) { _, hasCanvas in
             if hasCanvas { navBarVisible = true }
         }
-        .sheet(isPresented: Binding(
-            get: { store.hasCanvas && store.uiState.isSheetPresented && !store.uiState.isPatchReview },
-            set: { isPresented in
-                if !isPresented { store.send(.closeChat) }
-            }
-        )) {
-            ChatSheetView(store: store)
-                .interactiveDismissDisabled(true)
-        }
         .sheet(isPresented: $showSettings) {
             SettingsView(store: store)
         }
@@ -163,20 +187,22 @@ struct ContentView: View {
                 onSettings: { showSettings = true }
             )
         }
-        // Hamburger button — floats above all content including the sidebar.
+        // Hamburger button — floats above the canvas and sidebar, but below the chat overlay.
         .overlay(alignment: .topLeading) {
-            Button {
-                store.showRecentRecipes.toggle()
-            } label: {
-                Image(systemName: "line.3.horizontal")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(.white)
-                    .frame(width: 44, height: 44)
-                    .background(Color.sousTerracotta)
+            if !isChatOpen {
+                Button {
+                    store.showRecentRecipes.toggle()
+                } label: {
+                    Image(systemName: "line.3.horizontal")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(.white)
+                        .frame(width: 44, height: 44)
+                        .background(Color.sousTerracotta)
+                }
+                .buttonStyle(.plain)
+                .padding(.leading, 16)
+                .padding(.top, 16)
             }
-            .buttonStyle(.plain)
-            .padding(.leading, 16)
-            .padding(.top, 16)
         }
         .sheet(isPresented: $store.isShowingImportSheet) {
             RecipeImportSheet(store: store, onCancel: {

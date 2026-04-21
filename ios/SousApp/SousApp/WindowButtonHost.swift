@@ -1,6 +1,35 @@
 import SwiftUI
 import UIKit
 
+// MARK: - Keyboard Prewarm
+
+/// A zero-footprint UITextField kept in the view hierarchy while the recipe canvas is visible.
+/// Toggling `shouldPrewarm` to true calls becomeFirstResponder() immediately. The sheet is
+/// opened in the same runloop frame so both animations kick off simultaneously. The chat
+/// input's @FocusState steals first responder on sheet appear — no explicit resign needed.
+struct KeyboardPrewarmField: UIViewRepresentable {
+    @Binding var shouldPrewarm: Bool
+
+    func makeUIView(context: Context) -> UITextField {
+        let field = UITextField()
+        field.tintColor = .clear
+        field.textColor = .clear
+        field.backgroundColor = .clear
+        field.autocorrectionType = .no
+        field.autocapitalizationType = .none
+        field.spellCheckingType = .no
+        field.inputAssistantItem.leadingBarButtonGroups = []
+        field.inputAssistantItem.trailingBarButtonGroups = []
+        return field
+    }
+
+    func updateUIView(_ uiView: UITextField, context: Context) {
+        guard shouldPrewarm else { return }
+        uiView.becomeFirstResponder()
+        shouldPrewarm = false
+    }
+}
+
 // MARK: - BottomZoneView
 
 /// The persistent bottom bar rendered as .overlay(alignment: .bottom) in ContentView.
@@ -24,6 +53,7 @@ import UIKit
 struct BottomZoneView: View {
     var timerManager: StepTimerManager
     var onOpenChat: () -> Void
+    var onPrewarmKeyboard: () -> Void = {}
     var onTimerBannerTap: (UUID) -> Void
     var onHeightChange: (CGFloat) -> Void
     var isEnabled: Bool = true
@@ -38,6 +68,7 @@ struct BottomZoneView: View {
             }
             SousRule()
             Button {
+                onPrewarmKeyboard()
                 onOpenChat()
             } label: {
                 HStack(spacing: 8) {
