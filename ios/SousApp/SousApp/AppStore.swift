@@ -66,6 +66,11 @@ final class AppStore: ObservableObject {
     /// are isolated from the real session file and from each other.
     private let isPersistenceEnabled: Bool
 
+    /// True once the current session has earned a history entry — either the user has sent a
+    /// message or a recipe canvas has been created.  False for freshly-created blank sessions
+    /// so that tapping "New Recipe" and immediately leaving doesn't litter the history store.
+    private var isSessionPersistable: Bool = false
+
     /// Override in tests to point AppStore at a temp directory.
     /// Nil means use SessionPersistence.sessionsDirectory (Documents).
     private let sessionsDirectory: URL?
@@ -198,6 +203,7 @@ final class AppStore: ObservableObject {
 
             if let snapshot {
                 // Restore saved session
+                isSessionPersistable = true
                 hasCanvas = snapshot.hasCanvas
                 chatTranscript = snapshot.chatMessages
                 nextLLMContext = snapshot.nextLLMContext
@@ -362,6 +368,7 @@ final class AppStore: ObservableObject {
         cancelLiveLLM()
         hasCanvas = false
         canGenerateRecipe = false
+        isSessionPersistable = false
         uiState = .chatOpen(
             recipe: Recipe(id: UUID(), version: 1, title: "New Recipe"),
             draftUserText: "",
@@ -453,6 +460,7 @@ final class AppStore: ObservableObject {
     func resumeSession(_ snapshot: SessionSnapshot) {
         cancelLiveLLM()
         canGenerateRecipe = false
+        isSessionPersistable = true
         hasCanvas = snapshot.hasCanvas
         chatTranscript = snapshot.chatMessages
         nextLLMContext = snapshot.nextLLMContext
@@ -1060,6 +1068,7 @@ final class AppStore: ObservableObject {
             // Apply directly — no patch review for import.
             uiState = .recipeOnly(recipe: extracted)
             hasCanvas = true
+            isSessionPersistable = true
             chatTranscript = [ChatMessage(role: .assistant, text: assistantMessage)]
             nextLLMContext = nil
             llmDebugStatus = "succeeded"
@@ -1091,6 +1100,7 @@ final class AppStore: ObservableObject {
         // Persist after every user or assistant message so the transcript
         // survives a crash between the user sending and the AI replying.
         if message.role == .user || message.role == .assistant {
+            if message.role == .user { isSessionPersistable = true }
             saveSession()
         }
     }
@@ -1125,6 +1135,7 @@ final class AppStore: ObservableObject {
         // When the first recipe is accepted from blank state, reveal the canvas.
         if case .acceptPatch = event, !hasCanvas, case .recipeOnly = uiState {
             hasCanvas = true
+            isSessionPersistable = true
         }
         // Record patch decision only after the transition succeeds.
         switch event {
@@ -1178,6 +1189,7 @@ final class AppStore: ObservableObject {
         miseEnPlaceExpanded overrideMiseEnPlace: Bool? = nil
     ) {
         guard isPersistenceEnabled else { return }
+        guard isSessionPersistable else { return }
         let url = SessionPersistence.fileURL(for: uiState.recipe.id, in: sessionsDirectory)
         try? SessionPersistence.save(
             makeSnapshot(

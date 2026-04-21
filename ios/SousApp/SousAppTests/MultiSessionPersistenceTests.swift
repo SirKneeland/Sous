@@ -177,6 +177,49 @@ final class MultiSessionPersistenceTests: XCTestCase {
         )
     }
 
+    func test_newSession_doesNotWriteBlankEntryToHistory() async throws {
+        let original = makeSnapshot(title: "Old Bread")
+        try save(original)
+        let store = AppStore(sessionsDirectory: testDir)
+        store.startNewSession()
+        let blankRecipeId = store.uiState.recipe.id
+        // History must still contain only the previous session — no blank entry for the new one.
+        let all = SessionPersistence.listAll(in: testDir)
+        XCTAssertFalse(
+            all.contains { $0.recipe.id == blankRecipeId },
+            "A blank new session must not be written to history before the user interacts"
+        )
+        XCTAssertEqual(all.count, 1,
+                       "History must still have exactly one entry after tapping New Recipe without interacting")
+    }
+
+    func test_newSession_persistsAfterFirstUserMessage() async throws {
+        let original = makeSnapshot(title: "Old Bread")
+        try save(original)
+        let store = AppStore(sessionsDirectory: testDir)
+        store.startNewSession()
+        let blankRecipeId = store.uiState.recipe.id
+        // Simulate the user sending a message (appendPhotoMessage appends a .user bubble).
+        store.appendPhotoMessage("Make it spicier")
+        // Now the session must be on disk.
+        let all = SessionPersistence.listAll(in: testDir)
+        XCTAssertTrue(
+            all.contains { $0.recipe.id == blankRecipeId },
+            "Session must be saved once the user sends a message"
+        )
+    }
+
+    func test_firstLaunch_doesNotWriteBlankEntry() async throws {
+        // testDir is empty — simulates first launch with no history.
+        let store = AppStore(sessionsDirectory: testDir)
+        // No user interaction — history must remain empty.
+        XCTAssertTrue(
+            SessionPersistence.listAll(in: testDir).isEmpty,
+            "First launch blank session must not be written to history before user interaction"
+        )
+        _ = store.uiState // silence unused warning
+    }
+
     func test_appStore_resumeSession_restoresRecipeAndTranscript() async throws {
         let snapshot = SessionSnapshot(
             schemaVersion: SessionSnapshot.currentSchemaVersion,
