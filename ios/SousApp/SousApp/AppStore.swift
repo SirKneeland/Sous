@@ -603,6 +603,18 @@ final class AppStore: ObservableObject {
         }
     }
 
+    /// Returns a safe display string for the assistant's conversational message.
+    /// If the model returns JSON in assistant_message (e.g. a bare "{" when it confused
+    /// which field to put the patchSet in), substitute a context-appropriate fallback so
+    /// the PatchReview "Sous says..." banner always shows natural language.
+    private func sanitizedAssistantMessage(_ message: String, hasCanvas: Bool) -> String {
+        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed.first != "{", trimmed.first != "[" else {
+            return hasCanvas ? "Here are the proposed changes." : "Your recipe is ready to review."
+        }
+        return message
+    }
+
     private func buildLLMUserPrefs() -> LLMUserPrefs {
         LLMUserPrefs(
             hardAvoids: userPreferences.hardAvoids,
@@ -614,7 +626,7 @@ final class AppStore: ObservableObject {
         )
     }
 
-    private func sendWithLLM(_ userText: String, referencedItem: ReferencedItem? = nil, generation: Int) async {
+    private func sendWithLLM(_ userText: String, referencedItem: ReferencedItem? = nil, dropConversationHistoryTail: Bool = true, generation: Int) async {
         // Clear llmTask when this generation's call ends (natural or cancelled).
         // The generation guard prevents an old cancelled task from clearing a newer task's ref.
         defer {
@@ -639,7 +651,7 @@ final class AppStore: ObservableObject {
             recipeSnapshotForPrompt: recipe,
             userPrefs: buildLLMUserPrefs(),
             nextLLMContext: nextLLMContext,
-            conversationHistory: buildConversationHistory(),
+            conversationHistory: buildConversationHistory(dropLastEntry: dropConversationHistoryTail),
             referencedItem: referencedItem
         )
 #if DEBUG
@@ -689,7 +701,11 @@ final class AppStore: ObservableObject {
             }
             nextLLMContext = nil
             send(.patchReceived(patchSet))
-            append(ChatMessage(role: .assistant, text: assistantMessage))
+            // Guard against the model embedding JSON in assistant_message (e.g. returning
+            // "{" when it starts to write the patchSet into the wrong field). Only a
+            // natural-language string should ever appear in the PatchReview "Sous says..." banner.
+            let safeMessage = sanitizedAssistantMessage(assistantMessage, hasCanvas: hasCanvas)
+            append(ChatMessage(role: .assistant, text: safeMessage))
             llmDebugStatus = "succeeded"
             if let memory = proposedMemory { proposeMemory(text: memory) }
 
@@ -724,7 +740,7 @@ final class AppStore: ObservableObject {
         if useLiveLLM {
             llmGeneration += 1
             let gen = llmGeneration
-            llmTask = Task { await self.sendWithLLM("Generate the recipe.", generation: gen) }
+            llmTask = Task { await self.sendWithLLM("Generate the recipe.", dropConversationHistoryTail: false, generation: gen) }
         }
     }
 
@@ -1152,12 +1168,17 @@ final class AppStore: ObservableObject {
 
     /// Builds the prior-turn history to include in the next LLM request.
     ///
-    /// Drops the last transcript entry (the current user message, which was just appended
-    /// before the async send), filters out system messages, and caps at 20 entries
-    /// (10 full turns) to control token cost on long sessions.
-    private func buildConversationHistory() -> [LLMMessage] {
-        chatTranscript
-            .dropLast()
+    /// When `dropLastEntry` is true (the default), the last transcript entry is removed
+    /// because it is the user message that was just appended before the async send and
+    /// is already carried in LLMRequest.userMessage — including it again would duplicate it.
+    /// Pass `false` for silent sends (e.g. "Generate the recipe.") that append no user
+    /// bubble to the transcript; in those cases the tail entry is an assistant message
+    /// and must be preserved so the model has full context.
+    ///
+    /// Filters out system messages and caps at 20 entries (10 full turns).
+    private func buildConversationHistory(dropLastEntry: Bool = true) -> [LLMMessage] {
+        let base = dropLastEntry ? Array(chatTranscript.dropLast()) : chatTranscript
+        return base
             .filter { $0.role == .user || $0.role == .assistant }
             .suffix(20)
             .map { msg in

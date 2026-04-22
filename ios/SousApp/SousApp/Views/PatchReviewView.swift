@@ -15,7 +15,7 @@ struct PatchReviewView: View {
 
                     // MARK: Header
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(recipe.title.uppercased())
+                        Text(displayTitle.uppercased())
                             .font(.sousTitle)
                             .foregroundStyle(Color.sousText)
                             .fixedSize(horizontal: false, vertical: true)
@@ -264,6 +264,15 @@ struct PatchReviewView: View {
         case .unchanged:
             EmptyView()
         }
+    }
+
+    // MARK: - Title
+
+    private var displayTitle: String {
+        for patch in patchSet.patches {
+            if case .setTitle(let title) = patch { return title }
+        }
+        return recipe.title
     }
 
     // MARK: - Diff Builders

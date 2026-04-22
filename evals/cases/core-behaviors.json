@@ -478,6 +478,25 @@
     }
   },
   {
+    "name": "generate-recipe-assistant-message-is-prose",
+    "description": "User triggers recipe generation after a full exploration conversation. Sous must emit a valid patchSet AND keep assistant_message as plain conversational prose — never a JSON fragment like '{' or an embedded patchSet.",
+    "promptType": "no_canvas",
+    "input": {
+      "recipeState": null,
+      "chatHistory": [
+        { "role": "user", "content": "I want to make a classic herb roast chicken for Sunday dinner." },
+        { "role": "assistant", "content": "Great choice! A classic herb roast chicken is perfect for Sunday. Do you have a preferred roasting time or any dietary restrictions I should know about?" },
+        { "role": "user", "content": "About 1.5 hours total, no restrictions." },
+        { "role": "assistant", "content": "Perfect — I have everything I need. I'll make you a Classic Herb Roast Chicken: whole chicken roasted with fresh herbs, garlic, and lemon at high heat for crispy skin and juicy meat in about 1.5 hours." }
+      ],
+      "userMessage": "Generate the recipe."
+    },
+    "expected": {
+      "shouldPatch": true,
+      "notes": "Sous must return a patchSet with set_title, add_ingredient, and add_step patches for a classic herb roast chicken. Critically, assistant_message must be plain conversational prose — it must NOT contain any JSON, a bare '{', or any structured data. Embedding the patchSet or any JSON object (even partially) inside assistant_message is always wrong. The patchSet belongs exclusively in the top-level patchSet field."
+    }
+  },
+  {
     "name": "assistant-message-no-json",
     "description": "User asks to add a step. Sous must emit the patchSet in the top-level patchSet field and keep assistant_message as plain prose — never embed JSON or a patchSet inside assistant_message.",
     "promptType": "has_canvas",
