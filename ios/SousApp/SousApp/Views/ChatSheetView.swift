@@ -188,12 +188,7 @@ struct ChatSheetView: View {
 
     private var mainChatView: some View {
         VStack(spacing: 0) {
-            if isFullscreen {
-                // Nav bar is rendered as a fixed overlay in ContentView (no canvasOffset applied).
-                // Reserve the same 44pt the bar occupies so content sits below it.
-                Color.clear.frame(height: 44)
-                    .background(Color.sousTerracotta.ignoresSafeArea(edges: .top))
-            } else {
+            if !isFullscreen {
                 chatHeader
                 SousRule()
             }
@@ -204,7 +199,7 @@ struct ChatSheetView: View {
                 .opacity(inputBarDragOffset == 0 ? 1 : 0)
             composerBar
         }
-        .background((showPhotoSheet ? Color(red: 117/255, green: 116/255, blue: 113/255) : Color.sousSurface).ignoresSafeArea(.keyboard))
+        .background((showPhotoSheet ? Color(red: 117/255, green: 116/255, blue: 113/255) : Color.sousSurface).ignoresSafeArea(isFullscreen ? .all : .keyboard))
         .animation(.easeOut(duration: 0.25), value: store.canGenerateRecipe)
     }
 
@@ -265,7 +260,8 @@ struct ChatSheetView: View {
                     Color.clear.frame(height: 1).id("bottom")
                 }
                 .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .padding(.top, isFullscreen ? 72 : 12)
+                .padding(.bottom, 12)
             }
             .onAppear {
                 proxy.scrollTo("bottom", anchor: .bottom)

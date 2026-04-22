@@ -34,9 +34,22 @@ enum SessionSummarizer {
         let session = LanguageModelSession()
         let prompt = """
             Read this cooking session and write a single short phrase (under 60 characters) \
-            describing what the user seems to be cooking or exploring. Write it like a recipe \
-            title — not a sentence, not a question. No quotes. No trailing punctuation. \
-            Examples: "Weeknight pasta, tomato and anchovy", "Something spicy with leftover chicken".
+            capturing what the USER is cooking or exploring. Title-style phrasing only — \
+            not a sentence, not a question. No quotes. No trailing punctuation.
+
+            Rules:
+            - User messages are the primary signal. Base the title on what the user said.
+            - Assistant messages are supporting context only. The assistant's suggestions \
+            have not been chosen by the user — do not treat them as facts about the session.
+            - Never infer specific ingredients, techniques, or dishes the user did not mention.
+            - If the user's messages are vague or exploratory, reflect that vagueness. \
+            A broad title is better than a specific one the user did not commit to.
+            - Only use specific dish or ingredient details if the user themselves stated them.
+
+            Examples:
+            - User said "I've got 1lb of chicken thighs, any ideas?" → "Chicken thighs, figuring it out"
+            - User said "let's do a stir fry with what I have" → "Stir fry with what's on hand"
+            - User said "make me something spicy with leftover chicken" → "Something spicy with leftover chicken"
 
             Session:
             \(chatText)
