@@ -356,6 +356,19 @@ final class AppStore: ObservableObject {
         UINotificationFeedbackGenerator().notificationOccurred(.success)
     }
 
+    /// Saves the proposed memory without dismissing the toast. The toast remains visible
+    /// so the countdown can complete before `dismissMemoryProposal` is called.
+    func saveMemoryOnly(text: String, firstPersonText: String? = nil) async {
+        let fp: String
+        if let provided = firstPersonText {
+            fp = provided
+        } else {
+            fp = await MemoryPersonConverter.toFirstPerson(text: text)
+        }
+        addMemory(text, firstPersonText: fp)
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+    }
+
     /// Discards the pending memory proposal without saving.
     func dismissMemoryProposal() {
         pendingMemoryProposal = nil

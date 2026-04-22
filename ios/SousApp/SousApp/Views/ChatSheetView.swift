@@ -15,6 +15,7 @@ struct ChatSheetView: View {
     var onOpenImport: () -> Void = {}
     /// Called with true when the camera sheet opens, false when it closes.
     var onCameraPresented: (Bool) -> Void = { _ in }
+    var onNavigateToMemories: () -> Void = {}
     @StateObject private var photoSend = PhotoSendCoordinator()
     @State private var composerText = ""
     @State private var composerHeight: CGFloat = 36
@@ -182,6 +183,20 @@ struct ChatSheetView: View {
             .allowsHitTesting(false)
             .ignoresSafeArea(edges: .top)
         }
+        .overlay(alignment: .top) {
+            if let proposal = store.pendingMemoryProposal {
+                MemoryProposalToast(
+                    text: proposal,
+                    onSave: { text, firstPersonText in Task { await store.saveMemoryOnly(text: text, firstPersonText: firstPersonText) } },
+                    onComplete: { store.dismissMemoryProposal() },
+                    onDismiss: { store.dismissMemoryProposal() },
+                    onNavigateToMemories: { onNavigateToMemories() }
+                )
+                .padding(.top, 4)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.easeInOut(duration: 0.25), value: store.pendingMemoryProposal != nil)
     }
 
     // MARK: - Main Chat View
@@ -201,6 +216,20 @@ struct ChatSheetView: View {
         }
         .background((showPhotoSheet ? Color(red: 117/255, green: 116/255, blue: 113/255) : Color.sousSurface).ignoresSafeArea(isFullscreen ? .all : .keyboard))
         .animation(.easeOut(duration: 0.25), value: store.canGenerateRecipe)
+        .overlay(alignment: .top) {
+            if let proposal = store.pendingMemoryProposal {
+                MemoryProposalToast(
+                    text: proposal,
+                    onSave: { text, firstPersonText in Task { await store.saveMemoryOnly(text: text, firstPersonText: firstPersonText) } },
+                    onComplete: { store.dismissMemoryProposal() },
+                    onDismiss: { store.dismissMemoryProposal() },
+                    onNavigateToMemories: { onNavigateToMemories() }
+                )
+                .padding(.top, 4)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.easeInOut(duration: 0.25), value: store.pendingMemoryProposal != nil)
     }
 
     // MARK: - Header
@@ -283,18 +312,6 @@ struct ChatSheetView: View {
             .onChange(of: store.canGenerateRecipe) { newValue in
                 if newValue { withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo("bottom", anchor: .bottom) } }
             }
-            .overlay(alignment: .top) {
-                if let proposal = store.pendingMemoryProposal {
-                    MemoryProposalToast(
-                        text: proposal,
-                        onSave: { text, firstPersonText in Task { await store.confirmMemory(text: text, firstPersonText: firstPersonText) } },
-                        onDismiss: { store.dismissMemoryProposal() }
-                    )
-                    .padding(.top, 4)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                }
-            }
-            .animation(.easeInOut(duration: 0.25), value: store.pendingMemoryProposal != nil)
         }
     }
 
@@ -679,7 +696,9 @@ private struct StreamingBubbleView: View {
 private struct MemoryProposalToast: View {
     let text: String
     let onSave: (String, String?) -> Void
+    let onComplete: () -> Void
     let onDismiss: () -> Void
+    let onNavigateToMemories: () -> Void
 
     @State private var isEditing = false
     @State private var editText: String
@@ -688,10 +707,10 @@ private struct MemoryProposalToast: View {
     @State private var startDate = Date()
     @State private var displayProgress: Double = 1.0
     @State private var timerPaused = false
-    @State private var hasSaved = false
     @State private var isEditShimmering = false
     @State private var isDisplayShimmering = false
     @State private var hasCommittedEdit = false
+    @State private var hasCompleted = false
     @State private var editStreamTask: Task<Void, Never>? = nil
     @State private var saveStreamTask: Task<Void, Never>? = nil
     @State private var prefetchedFirstPerson: String? = nil
@@ -701,10 +720,12 @@ private struct MemoryProposalToast: View {
     private let ticker = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
     private let countdownDuration: TimeInterval = 6.0
 
-    init(text: String, onSave: @escaping (String, String?) -> Void, onDismiss: @escaping () -> Void) {
+    init(text: String, onSave: @escaping (String, String?) -> Void, onComplete: @escaping () -> Void, onDismiss: @escaping () -> Void, onNavigateToMemories: @escaping () -> Void) {
         self.text = text
         self.onSave = onSave
+        self.onComplete = onComplete
         self.onDismiss = onDismiss
+        self.onNavigateToMemories = onNavigateToMemories
         _editText = State(initialValue: text)
         _displayText = State(initialValue: text)
     }
@@ -771,13 +792,12 @@ private struct MemoryProposalToast: View {
                     }
                     if !hasCommittedEdit {
                     HStack(spacing: 0) {
-                        Button("SAVE") { timerPaused = true; hasSaved = true; onSave(displayText, firstPersonSnapshot) }
+                        Button("SAVE") { hasCompleted = true; onSave(displayText, firstPersonSnapshot); onComplete() }
                             .font(.sousButton)
                             .foregroundStyle(Color.white)
                             .buttonStyle(.plain)
                             .frame(maxWidth: .infinity)
                         Button("EDIT") {
-                            timerPaused = true
                             isEditing = true
                             isFieldFocused = true
                             if let cached = prefetchedFirstPerson {
@@ -812,7 +832,7 @@ private struct MemoryProposalToast: View {
                         .foregroundStyle(Color.white)
                         .buttonStyle(.plain)
                         .frame(maxWidth: .infinity)
-                        Button("SKIP") { onDismiss() }
+                        Button("SKIP") { hasCompleted = true; onDismiss() }
                             .font(.sousButton)
                             .foregroundStyle(Color.sousBackground)
                             .buttonStyle(.plain)
@@ -835,7 +855,12 @@ private struct MemoryProposalToast: View {
         .background(Color.sousTerracotta)
         .overlay(Rectangle().stroke(Color.sousTerracotta, lineWidth: 1))
         .padding(.horizontal, 16)
-        .simultaneousGesture(TapGesture().onEnded { timerPaused = true })
+        .onTapGesture { onNavigateToMemories() }
+        .gesture(DragGesture(minimumDistance: 20).onEnded { _ in
+            hasCompleted = true
+            if !hasCommittedEdit { onSave(displayText, firstPersonSnapshot) }
+            onComplete()
+        })
         .onAppear {
             prefetchTask = Task {
                 let result = await MemoryPersonConverter.toFirstPerson(text: text)
@@ -848,12 +873,13 @@ private struct MemoryProposalToast: View {
             prefetchTask = nil
         }
         .onReceive(ticker) { _ in
-            guard !timerPaused && !hasSaved && !isEditing else { return }
+            guard !hasCompleted && !timerPaused && !isEditing else { return }
             let elapsed = Date().timeIntervalSince(startDate)
             displayProgress = max(0, 1.0 - elapsed / countdownDuration)
             if elapsed >= countdownDuration {
-                hasSaved = true
-                onSave(displayText, firstPersonSnapshot)
+                hasCompleted = true
+                if !hasCommittedEdit { onSave(displayText, firstPersonSnapshot) }
+                onComplete()
             }
         }
     }
@@ -889,6 +915,7 @@ private struct MemoryProposalToast: View {
             startDate = Date()
             displayProgress = 1.0
             timerPaused = false
+            onSave(displayText, firstPersonSnapshot)
         }
     }
 }

@@ -521,5 +521,24 @@
       "shouldPatch": true,
       "notes": "Sous must return a patchSet with an add_step patch for tossing pasta with garlic oil. The assistant_message must be plain conversational prose only — it must not contain any JSON, patchSet structure, or structured data. Embedding the patchSet or any JSON object inside assistant_message is always wrong. The patchSet belongs exclusively in the top-level patchSet field of the response object."
     }
+  },
+  {
+    "name": "exploration-proposed-memory-second-person",
+    "description": "User is in exploration mode (no canvas) and mentions a personal preference. Sous must emit proposed_memory as a second-person string starting with 'You'.",
+    "promptType": "no_canvas",
+    "input": {
+      "recipeState": {
+        "version": 1,
+        "title": "",
+        "ingredients": [],
+        "steps": []
+      },
+      "chatHistory": [],
+      "userMessage": "I'm thinking something with chicken. By the way, I hate mushrooms."
+    },
+    "expected": {
+      "shouldPatch": false,
+      "notes": "Sous must not emit a patchSet (still exploring). It must include proposed_memory in the JSON response. The proposed_memory value must be a second-person phrase starting with 'You' — e.g. 'You hate mushrooms' or 'You avoid mushrooms'. Third-person phrasing ('hates mushrooms', 'avoids mushrooms') or subject-less phrases are wrong."
+    }
   }
 ]

@@ -5,6 +5,7 @@ import UIKit
 struct ContentView: View {
     @StateObject private var store = AppStore()
     @State private var showSettings = false
+    @State private var navigateToMemoriesInSettings = false
     @State private var timerManager = StepTimerManager()
     /// stepId to scroll to in the recipe canvas. Set by timer banner taps.
     @State private var scrollToStepId: UUID? = nil
@@ -60,7 +61,8 @@ struct ContentView: View {
                     onStartNew: { store.requestNewSession(); timerManager.clearAll() },
                     onOpenSettings: { showSettings = true },
                     onOpenRecents: { store.showRecentRecipes = true },
-                    onOpenImport: { store.isShowingImportSheet = true }
+                    onOpenImport: { store.isShowingImportSheet = true },
+                    onNavigateToMemories: { showSettings = true; navigateToMemoriesInSettings = true }
                 )
                 .offset(x: canvasOffset)
             } else {
@@ -127,7 +129,7 @@ struct ContentView: View {
                 // Chat overlay — always in the ZStack so the TextEditor is permanently in
                 // the view hierarchy. This means @FocusState fires instantly on open,
                 // and the keyboard rises in the same frame the overlay starts animating.
-                ChatSheetView(store: store, isPresented: isChatOpen, onCameraPresented: { isCameraPresented = $0 })
+                ChatSheetView(store: store, isPresented: isChatOpen, onOpenSettings: { showSettings = true }, onCameraPresented: { isCameraPresented = $0 }, onNavigateToMemories: { showSettings = true; navigateToMemoriesInSettings = true })
                     .ignoresSafeArea(.container, edges: .bottom)
                     .offset(y: chatOverlayOffset)
                     .opacity(isChatOpen ? 1 : 0)
@@ -176,7 +178,7 @@ struct ContentView: View {
             if hasCanvas { navBarVisible = true }
         }
         .sheet(isPresented: $showSettings) {
-            SettingsView(store: store)
+            SettingsView(store: store, navigateToMemories: $navigateToMemoriesInSettings)
         }
         .overlay {
             HistoryDrawer(

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject var store: AppStore
+    @Binding var navigateToMemories: Bool
 
     @State private var keyInput = ""
     @State private var keyIsPresent: Bool = false
@@ -13,6 +14,9 @@ struct SettingsView: View {
     var body: some View {
         NavigationView {
             Form {
+                NavigationLink(destination: MemoriesView(store: store), isActive: $navigateToMemories) {
+                    EmptyView()
+                }
                 // MARK: Your Kitchen
                 Section {
                     NavigationLink {

@@ -814,10 +814,13 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             5. When the user explicitly commits to generating a recipe: emit patchSet with set_title, add_ingredient, and add_step patches. Use baseRecipeId and baseRecipeVersion from RECIPE CONTEXT. The canvas is blank — there are NO existing ingredients or steps. ALL add_ingredient patches MUST use "after_id": null. ALL add_step patches MUST use "after_step_id": null. Never put a UUID or any string in after_id or after_step_id — only null is valid here.
             6. When still exploring (no explicit commit): emit patchSet: null.
             7. Equipment preferences in RECIPE CONTEXT are additive — assume standard home kitchen basics are always available. If no equipment is listed, assume a fully equipped standard home kitchen. Never restrict suggestions to only what's listed.
-            8. If the user mentions anything personal about themselves that would be useful to know in a future cooking session — including foods they love, foods they hate or avoid, dietary restrictions, cooking methods or equipment they use, who they cook for, or any other standing preference — include a concise third-person "proposed_memory" string (e.g. "loves mashed potatoes", "avoids cilantro", "cooks on induction", "feeds two young kids"). Write it as a short third-person phrase with no subject — not "I" or "User". Omit if it's a one-time request for this recipe ("add more salt to this"), a question, or already in the user's saved memories. When in doubt, propose it.
+            8. If the user mentions anything personal about themselves that would be useful to know in a future cooking session — including foods they love, foods they hate or avoid, dietary restrictions, cooking methods or equipment they use, who they cook for, or any other standing preference — include a concise second-person "proposed_memory" string (e.g. "You love mashed potatoes", "You avoid cilantro", "You cook on induction", "You cook for two young kids"). Write it as a short second-person phrase starting with "You" — not "I", not third-person, no subject-less phrases. Omit if it's a one-time request for this recipe ("add more salt to this"), a question, or already in the user's saved memories. When in doubt, propose it.
 
             Output shape — exploring, not yet ready:
             {"assistant_message":"...","patchSet":null}
+
+            Output shape — exploring, not yet ready, with a personal preference noted:
+            {"assistant_message":"...","patchSet":null,"proposed_memory":"You love mashed potatoes"}
 
             Output shape — exploring, ready to generate (model has enough info; user has not yet committed):
             {"assistant_message":"...","patchSet":null,"suggest_generate":true}
