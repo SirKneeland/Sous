@@ -313,6 +313,34 @@ struct ChatSheetView: View {
                 if newValue { withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo("bottom", anchor: .bottom) } }
             }
         }
+        .overlay(alignment: .top) {
+            if !store.hasCanvas {
+                ZStack(alignment: .top) {
+                    Color.clear
+                        .frame(height: 80)
+                        .background(.ultraThinMaterial)
+                        .mask(
+                            LinearGradient(
+                                colors: [.black, .black.opacity(0.5), .clear],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                    LinearGradient(
+                        stops: [
+                            .init(color: Color.sousBackground, location: 0),
+                            .init(color: Color.sousBackground.opacity(0.9), location: 0.35),
+                            .init(color: Color.sousBackground.opacity(0), location: 1),
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 80)
+                }
+                .allowsHitTesting(false)
+                .ignoresSafeArea(edges: isFullscreen ? .top : [])
+            }
+        }
     }
 
     // MARK: - Attachment Strip
