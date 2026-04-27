@@ -82,10 +82,10 @@ private actor DynamicImportOrchestrator: LLMOrchestrator {
             baseRecipeVersion: request.recipeVersion,
             patches: [
                 .setTitle("Spaghetti Carbonara"),
-                .addIngredient(text: "200g spaghetti", afterId: nil),
-                .addIngredient(text: "100g guanciale", afterId: nil),
-                .addStep(text: "Boil pasta until al dente", afterStepId: nil, preassignedId: nil),
-                .addStep(text: "Fry guanciale until crispy", afterStepId: nil, preassignedId: nil),
+                .addIngredient(groupId: nil, afterId: nil, text: "200g spaghetti"),
+                .addIngredient(groupId: nil, afterId: nil, text: "100g guanciale"),
+                .addStep(parentId: nil, afterId: nil, text: "Boil pasta until al dente", preassignedId: nil),
+                .addStep(parentId: nil, afterId: nil, text: "Fry guanciale until crispy", preassignedId: nil),
             ]
         )
         return .valid(
@@ -141,7 +141,7 @@ private extension AppStoreTests {
         PatchSet(
             baseRecipeId: AppStore.recipeId,
             baseRecipeVersion: 1,
-            patches: [.addNote(text: "test note")]
+            patches: [.addNoteSection(afterId: nil, header: nil, items: ["test note"])]
         )
     }
 
@@ -242,7 +242,7 @@ final class AppStoreTests: XCTestCase {
         let stalePatchSet = PatchSet(
             baseRecipeId: AppStore.recipeId,
             baseRecipeVersion: 99,          // store recipe is at version 1
-            patches: [.addNote(text: "stale")]
+            patches: [.addNoteSection(afterId: nil, header: nil, items: ["stale"])]
         )
         let mock = SyncOrchestrator(result: validResult(patchSet: stalePatchSet))
         let store = AppStore(testOrchestrator: mock)
@@ -263,7 +263,7 @@ final class AppStoreTests: XCTestCase {
         let stalePatchSet = PatchSet(
             baseRecipeId: wrongId,          // does not match store's recipeId
             baseRecipeVersion: 1,
-            patches: [.addNote(text: "wrong recipe")]
+            patches: [.addNoteSection(afterId: nil, header: nil, items: ["wrong recipe"])]
         )
         let mock = SyncOrchestrator(result: validResult(patchSet: stalePatchSet))
         let store = AppStore(testOrchestrator: mock)
@@ -304,10 +304,8 @@ final class AppStoreTests: XCTestCase {
         let updated = store.uiState.recipe
         XCTAssertEqual(updated.version, original.version + 1,
                        "Recipe version must increment exactly once on Accept")
-        XCTAssertTrue(updated.notes.contains("test note"),
+        XCTAssertTrue(updated.notes?.flatMap { $0.items }.contains("test note") == true,
                       "Patch note must be present after Accept")
-        XCTAssertTrue(updated.notes.contains("Original family recipe"),
-                      "Original note must be preserved after Accept")
     }
 
     // MARK: (f) Reject → no recipe mutation ever
@@ -336,7 +334,7 @@ final class AppStoreTests: XCTestCase {
         let stalePatchSet = PatchSet(
             baseRecipeId: AppStore.recipeId,
             baseRecipeVersion: 99,
-            patches: [.addNote(text: "stale")]
+            patches: [.addNoteSection(afterId: nil, header: nil, items: ["stale"])]
         )
         let mock = SyncOrchestrator(result: validResult(patchSet: stalePatchSet))
         let store = AppStore(testOrchestrator: mock)
@@ -358,7 +356,7 @@ final class AppStoreTests: XCTestCase {
         let mismatchedPatchSet = PatchSet(
             baseRecipeId: wrongId,
             baseRecipeVersion: 1,
-            patches: [.addNote(text: "wrong recipe")]
+            patches: [.addNoteSection(afterId: nil, header: nil, items: ["wrong recipe"])]
         )
         let mock = SyncOrchestrator(result: validResult(patchSet: mismatchedPatchSet))
         let store = AppStore(testOrchestrator: mock)
@@ -528,7 +526,7 @@ final class AppStoreTests: XCTestCase {
         let updated = store.uiState.recipe
         XCTAssertEqual(updated.version, original.version + 1,
                        "Recipe version must increment exactly once on Accept")
-        XCTAssertTrue(updated.notes.contains("test note"),
+        XCTAssertTrue(updated.notes?.flatMap { $0.items }.contains("test note") == true,
                       "Fallback patch note must be present after Accept")
     }
 
@@ -615,7 +613,7 @@ final class AppStoreTests: XCTestCase {
         let updated = store.uiState.recipe
         XCTAssertEqual(updated.version, original.version + 1,
                        "Recipe version must increment after Accept")
-        XCTAssertTrue(updated.notes.contains("test note"),
+        XCTAssertTrue(updated.notes?.flatMap { $0.items }.contains("test note") == true,
                       "Patch note must be applied after Accept")
     }
 
@@ -698,7 +696,7 @@ final class AppStoreTests: XCTestCase {
         let ps = PatchSet(
             baseRecipeId: blankRecipe.id,
             baseRecipeVersion: blankRecipe.version,
-            patches: [.setTitle("Pasta Carbonara"), .addNote(text: "created")]
+            patches: [.setTitle("Pasta Carbonara"), .addNoteSection(afterId: nil, header: nil, items: ["created"])]
         )
         store.send(.patchReceived(ps))
         store.send(.validatePatch)

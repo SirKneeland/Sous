@@ -290,11 +290,11 @@ struct PatchReviewView: View {
     }
 
     private var ingredientRows: [DiffRow] {
-        var rows: [DiffRow] = recipe.ingredients.map { .unchanged(id: $0.id, text: $0.text) }
+        var rows: [DiffRow] = recipe.ingredients.flatMap { $0.items }.map { .unchanged(id: $0.id, text: $0.text) }
 
         for patch in patchSet.patches {
             switch patch {
-            case .addIngredient(let text, let afterId):
+            case .addIngredient(_, let afterId, let text):
                 let newRow = DiffRow.added(id: UUID(), text: text)
                 if let afterId, let idx = rows.firstIndex(where: { $0.id == afterId }) {
                     rows.insert(newRow, at: idx + 1)
@@ -324,7 +324,7 @@ struct PatchReviewView: View {
 
         for patch in patchSet.patches {
             switch patch {
-            case .addStep(let text, let afterStepId, _):
+            case .addStep(_, let afterStepId, let text, _):
                 let newRow = DiffRow.added(id: UUID(), text: text)
                 if let afterStepId, let idx = rows.firstIndex(where: { $0.id == afterStepId }) {
                     rows.insert(newRow, at: idx + 1)
@@ -363,45 +363,6 @@ struct PatchReviewView: View {
             }
         }
 
-        // Collect sub-step diff rows grouped by parent step ID.
-        var subStepDiffs: [UUID: [DiffRow]] = [:]
-        for patch in patchSet.patches {
-            switch patch {
-            case .addSubStep(let parentStepId, let text, _):
-                subStepDiffs[parentStepId, default: []].append(
-                    .addedSubStep(id: UUID(), parentId: parentStepId, text: text)
-                )
-            case .removeSubStep(let parentStepId, let subStepId):
-                if let parent = recipe.steps.first(where: { $0.id == parentStepId }),
-                   let sub = parent.subSteps?.first(where: { $0.id == subStepId }) {
-                    subStepDiffs[parentStepId, default: []].append(
-                        .removedSubStep(id: subStepId, parentId: parentStepId, text: sub.text)
-                    )
-                }
-            case .updateSubStep(let parentStepId, let subStepId, let newText):
-                if let parent = recipe.steps.first(where: { $0.id == parentStepId }),
-                   let sub = parent.subSteps?.first(where: { $0.id == subStepId }) {
-                    subStepDiffs[parentStepId, default: []].append(
-                        .updatedSubStep(id: subStepId, parentId: parentStepId, oldText: sub.text, newText: newText)
-                    )
-                }
-            default:
-                break
-            }
-        }
-
-        // Inject sub-step diff rows immediately after their parent step row.
-        if !subStepDiffs.isEmpty {
-            var expanded: [DiffRow] = []
-            for row in rows {
-                expanded.append(row)
-                if let subs = subStepDiffs[row.id] {
-                    expanded.append(contentsOf: subs)
-                }
-            }
-            return expanded
-        }
-
         return rows
     }
 
@@ -432,6 +393,10 @@ struct PatchReviewView: View {
             return "Parent step is already done: \(id.uuidString)"
         case .hardAvoidViolation(let ingredient):
             return "Contains a hard-avoid ingredient: \(ingredient)"
+        case .invalidIngredientGroupId(let id):
+            return "Invalid ingredient group ID: \(id.uuidString)"
+        case .invalidNoteSectionId(let id):
+            return "Invalid note section ID: \(id.uuidString)"
         }
     }
 }

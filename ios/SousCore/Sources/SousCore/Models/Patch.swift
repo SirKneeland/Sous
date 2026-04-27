@@ -1,25 +1,25 @@
 import Foundation
 
 public enum Patch: Equatable, Sendable {
-    case addIngredient(text: String, afterId: UUID?)
+    // Title
+    case setTitle(String)
+
+    // Ingredients
+    case addIngredient(groupId: UUID?, afterId: UUID?, text: String)
     case updateIngredient(id: UUID, text: String)
     case removeIngredient(id: UUID)
-    /// `preassignedId` lets the orchestrator specify the UUID that PatchApplier will
-    /// assign to the new step, enabling sibling `addSubStep` patches in the same
-    /// patchSet to reference it via `parentStepId`. When nil, PatchApplier generates
-    /// a fresh UUID as before.
-    case addStep(text: String, afterStepId: UUID?, preassignedId: UUID?)
+    case addIngredientGroup(afterGroupId: UUID?, header: String?)
+    case updateIngredientGroup(id: UUID, header: String?)
+    case removeIngredientGroup(id: UUID)
+
+    // Steps — flat ID-based operations, tree-searched at any depth
+    case addStep(parentId: UUID?, afterId: UUID?, text: String, preassignedId: UUID?)
     case updateStep(id: UUID, text: String)
     case removeStep(id: UUID)
-    case addNote(text: String)
-    /// Sets the recipe title. Used when creating a recipe from scratch (blank state).
-    case setTitle(String)
-    /// Appends or inserts a new sub-step under an existing parent step.
-    case addSubStep(parentStepId: UUID, text: String, afterSubStepId: UUID?)
-    /// Updates the text of an existing sub-step.
-    case updateSubStep(parentStepId: UUID, subStepId: UUID, text: String)
-    /// Removes an existing sub-step from its parent.
-    case removeSubStep(parentStepId: UUID, subStepId: UUID)
-    /// Marks a sub-step as done.
-    case completeSubStep(parentStepId: UUID, subStepId: UUID)
+    case setStepNotes(stepId: UUID, notes: [String])
+
+    // Recipe-level note sections
+    case addNoteSection(afterId: UUID?, header: String?, items: [String])
+    case updateNoteSection(id: UUID, header: String?, items: [String])
+    case removeNoteSection(id: UUID)
 }

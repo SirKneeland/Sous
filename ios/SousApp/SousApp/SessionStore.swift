@@ -23,16 +23,18 @@ final class SessionStore: ObservableObject {
             version: 1,
             title: "Simple Bread",
             ingredients: [
-                Ingredient(id: Self.ingredientFlourId, text: "2 cups flour"),
-                Ingredient(id: Self.ingredientSaltId,  text: "1 tsp salt"),
-                Ingredient(id: Self.ingredientWaterId, text: "3/4 cup water"),
+                IngredientGroup(items: [
+                    Ingredient(id: Self.ingredientFlourId, text: "2 cups flour"),
+                    Ingredient(id: Self.ingredientSaltId,  text: "1 tsp salt"),
+                    Ingredient(id: Self.ingredientWaterId, text: "3/4 cup water"),
+                ]),
             ],
             steps: [
                 Step(id: Self.stepMixId,  text: "Mix dry ingredients", status: .todo),
                 Step(id: Self.stepBakeId, text: "Bake at 375°F for 30 min", status: .todo),
                 Step(id: Self.stepDoneId, text: "Let cool on rack", status: .done),
             ],
-            notes: ["Original family recipe"]
+            notes: [NoteSection(items: ["Original family recipe"])]
         )
         pendingPatchSet = nil
         validationResult = nil
@@ -43,7 +45,7 @@ final class SessionStore: ObservableObject {
         pendingPatchSet = PatchSet(
             baseRecipeId: recipe.id,
             baseRecipeVersion: recipe.version,
-            patches: [.addNote(text: "From UI")]
+            patches: [.addNoteSection(afterId: nil, header: nil, items: ["From UI"])]
         )
         validationResult = nil
     }

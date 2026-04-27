@@ -224,9 +224,6 @@ struct PatchSetDecoder: Sendable {
             case "remove_step":
                 guard let id = obj["id"] as? String else { return .schemaInvalid(.patchOpMissingField) }
                 patches.append(.removeStep(id: id))
-            case "add_note":
-                guard let text = obj["text"] as? String else { return .schemaInvalid(.patchOpMissingField) }
-                patches.append(.addNote(text: text))
             case "set_title":
                 guard let title = obj["title"] as? String else { return .schemaInvalid(.patchOpMissingField) }
                 patches.append(.setTitle(title: title))
@@ -240,9 +237,6 @@ struct PatchSetDecoder: Sendable {
             case "remove_substep":
                 guard let id = obj["id"] as? String else { return .schemaInvalid(.patchOpMissingField) }
                 patches.append(.removeSubstep(id: id))
-            case "complete_substep":
-                guard let id = obj["id"] as? String else { return .schemaInvalid(.patchOpMissingField) }
-                patches.append(.completeSubstep(id: id))
             default:
                 return .schemaInvalid(.patchOpUnknownType)
             }

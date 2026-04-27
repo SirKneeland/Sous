@@ -11,6 +11,8 @@ public struct Step: Equatable, Sendable {
     /// Optional ordered sub-steps. When present and non-empty, done state is
     /// derived from children: the parent is `.done` iff all sub-steps are done.
     public var subSteps: [Step]?
+    /// Step-attached notes, not checkable.
+    public var notes: [String]?
 
     // Backing storage for leaf-step status. For parent steps (those with
     // subSteps), this value is unused at read time — effectiveStatus is derived.
@@ -39,11 +41,12 @@ public struct Step: Equatable, Sendable {
         }
     }
 
-    public init(id: UUID = UUID(), text: String, status: StepStatus = .todo, subSteps: [Step]? = nil) {
+    public init(id: UUID = UUID(), text: String, status: StepStatus = .todo, subSteps: [Step]? = nil, notes: [String]? = nil) {
         self.id = id
         self.text = text
         self._status = status
         self.subSteps = subSteps
+        self.notes = notes
     }
 }
 
@@ -56,7 +59,7 @@ public struct Step: Equatable, Sendable {
 
 extension Step: Codable {
     private enum CodingKeys: String, CodingKey {
-        case id, text, status, subSteps
+        case id, text, status, subSteps, notes
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -65,6 +68,7 @@ extension Step: Codable {
         try c.encode(text, forKey: .text)
         try c.encode(_status, forKey: .status)
         try c.encodeIfPresent(subSteps, forKey: .subSteps)
+        try c.encodeIfPresent(notes, forKey: .notes)
     }
 
     public init(from decoder: Decoder) throws {
@@ -72,7 +76,8 @@ extension Step: Codable {
         let id       = try c.decode(UUID.self,         forKey: .id)
         let text     = try c.decode(String.self,       forKey: .text)
         let status   = try c.decode(StepStatus.self,   forKey: .status)
-        let subSteps = try c.decodeIfPresent([Step].self, forKey: .subSteps)
-        self.init(id: id, text: text, status: status, subSteps: subSteps)
+        let subSteps = try c.decodeIfPresent([Step].self,   forKey: .subSteps)
+        let notes    = try c.decodeIfPresent([String].self, forKey: .notes)
+        self.init(id: id, text: text, status: status, subSteps: subSteps, notes: notes)
     }
 }

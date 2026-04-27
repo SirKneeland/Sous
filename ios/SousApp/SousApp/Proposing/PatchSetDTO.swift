@@ -73,19 +73,19 @@ enum PatchDTO: Decodable {
     func toDomain() -> Patch {
         switch self {
         case .addIngredient(let text, let afterId):
-            return .addIngredient(text: text, afterId: afterId)
+            return .addIngredient(groupId: nil, afterId: afterId, text: text)
         case .updateIngredient(let id, let text):
             return .updateIngredient(id: id, text: text)
         case .removeIngredient(let id):
             return .removeIngredient(id: id)
         case .addStep(let text, let afterStepId):
-            return .addStep(text: text, afterStepId: afterStepId, preassignedId: nil)
+            return .addStep(parentId: nil, afterId: afterStepId, text: text, preassignedId: nil)
         case .updateStep(let id, let text):
             return .updateStep(id: id, text: text)
         case .removeStep(let id):
             return .removeStep(id: id)
         case .addNote(let text):
-            return .addNote(text: text)
+            return .addNoteSection(afterId: nil, header: nil, items: [text])
         }
     }
 }

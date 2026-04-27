@@ -8,15 +8,15 @@ final class PatchCodableTests: XCTestCase {
         return try JSONDecoder().decode(T.self, from: data)
     }
 
-    // MARK: - Patch cases
+    // MARK: - Ingredient patches
 
-    func test_addIngredient_withAfterId() throws {
-        let patch = Patch.addIngredient(text: "1 tsp yeast", afterId: SeedRecipes.ingredientFlourId)
+    func test_addIngredient_withGroupAndAfterId() throws {
+        let patch = Patch.addIngredient(groupId: SeedRecipes.ingredientGroupId, afterId: SeedRecipes.ingredientFlourId, text: "1 tsp yeast")
         XCTAssertEqual(try roundTrip(patch), patch)
     }
 
-    func test_addIngredient_withoutAfterId() throws {
-        let patch = Patch.addIngredient(text: "1 tsp yeast", afterId: nil)
+    func test_addIngredient_nilGroupAndAfterId() throws {
+        let patch = Patch.addIngredient(groupId: nil, afterId: nil, text: "1 tsp yeast")
         XCTAssertEqual(try roundTrip(patch), patch)
     }
 
@@ -30,22 +30,49 @@ final class PatchCodableTests: XCTestCase {
         XCTAssertEqual(try roundTrip(patch), patch)
     }
 
+    func test_addIngredientGroup_withHeader() throws {
+        let patch = Patch.addIngredientGroup(afterGroupId: SeedRecipes.ingredientGroupId, header: "Spices")
+        XCTAssertEqual(try roundTrip(patch), patch)
+    }
+
+    func test_addIngredientGroup_nilOptionals() throws {
+        let patch = Patch.addIngredientGroup(afterGroupId: nil, header: nil)
+        XCTAssertEqual(try roundTrip(patch), patch)
+    }
+
+    func test_updateIngredientGroup() throws {
+        let patch = Patch.updateIngredientGroup(id: SeedRecipes.ingredientGroupId, header: "Dry Ingredients")
+        XCTAssertEqual(try roundTrip(patch), patch)
+    }
+
+    func test_removeIngredientGroup() throws {
+        let patch = Patch.removeIngredientGroup(id: SeedRecipes.ingredientGroupId)
+        XCTAssertEqual(try roundTrip(patch), patch)
+    }
+
+    // MARK: - Step patches
+
     func test_addStep_withAfterStepId() throws {
-        let patch = Patch.addStep(text: "Knead for 5 min", afterStepId: SeedRecipes.stepMixId, preassignedId: nil)
+        let patch = Patch.addStep(parentId: nil, afterId: SeedRecipes.stepMixId, text: "Knead for 5 min", preassignedId: nil)
         XCTAssertEqual(try roundTrip(patch), patch)
     }
 
     func test_addStep_withoutAfterStepId() throws {
-        let patch = Patch.addStep(text: "Knead for 5 min", afterStepId: nil, preassignedId: nil)
+        let patch = Patch.addStep(parentId: nil, afterId: nil, text: "Knead for 5 min", preassignedId: nil)
+        XCTAssertEqual(try roundTrip(patch), patch)
+    }
+
+    func test_addStep_withParentId() throws {
+        let patch = Patch.addStep(parentId: SeedRecipes.stepMixId, afterId: nil, text: "Sift flour", preassignedId: nil)
         XCTAssertEqual(try roundTrip(patch), patch)
     }
 
     func test_addStep_withPreassignedId_roundTrips() throws {
         let preId = UUID()
-        let patch = Patch.addStep(text: "Parboil potatoes:", afterStepId: nil, preassignedId: preId)
+        let patch = Patch.addStep(parentId: nil, afterId: nil, text: "Parboil potatoes:", preassignedId: preId)
         let decoded = try roundTrip(patch)
         XCTAssertEqual(decoded, patch)
-        if case .addStep(_, _, let decodedPreId) = decoded {
+        if case .addStep(_, _, _, let decodedPreId) = decoded {
             XCTAssertEqual(decodedPreId, preId)
         } else {
             XCTFail("Expected addStep")
@@ -62,14 +89,55 @@ final class PatchCodableTests: XCTestCase {
         XCTAssertEqual(try roundTrip(patch), patch)
     }
 
-    func test_addNote() throws {
-        let patch = Patch.addNote(text: "Family recipe — original 1942 version")
+    func test_setStepNotes() throws {
+        let patch = Patch.setStepNotes(stepId: SeedRecipes.stepMixId, notes: ["Use cold water", "Don't overmix"])
         XCTAssertEqual(try roundTrip(patch), patch)
     }
+
+    // MARK: - Note section patches
+
+    func test_addNoteSection() throws {
+        let patch = Patch.addNoteSection(afterId: nil, header: "Tips", items: ["Store in airtight container"])
+        XCTAssertEqual(try roundTrip(patch), patch)
+    }
+
+    func test_updateNoteSection() throws {
+        let sectionId = UUID()
+        let patch = Patch.updateNoteSection(id: sectionId, header: "Storage", items: ["Freeze up to 3 months"])
+        XCTAssertEqual(try roundTrip(patch), patch)
+    }
+
+    func test_removeNoteSection() throws {
+        let patch = Patch.removeNoteSection(id: UUID())
+        XCTAssertEqual(try roundTrip(patch), patch)
+    }
+
+    // MARK: - setTitle
+
+    func test_setTitle() throws {
+        let patch = Patch.setTitle("Spaghetti Carbonara")
+        XCTAssertEqual(try roundTrip(patch), patch)
+    }
+
+    // MARK: - Unknown type
 
     func test_unknownPatchType_throwsDecodingError() throws {
         let json = #"{"type":"explodeRecipe"}"#.data(using: .utf8)!
         XCTAssertThrowsError(try JSONDecoder().decode(Patch.self, from: json))
+    }
+
+    // MARK: - Backward compat: decode legacy addNote as addNoteSection
+
+    func test_legacyAddNote_decodesAsAddNoteSection() throws {
+        let json = #"{"type":"addNote","text":"Great with wine"}"#.data(using: .utf8)!
+        let patch = try JSONDecoder().decode(Patch.self, from: json)
+        if case .addNoteSection(let afterId, let header, let items) = patch {
+            XCTAssertNil(afterId)
+            XCTAssertNil(header)
+            XCTAssertEqual(items, ["Great with wine"])
+        } else {
+            XCTFail("Expected addNoteSection from legacy addNote")
+        }
     }
 
     // MARK: - PatchSetStatus
@@ -100,12 +168,12 @@ final class PatchCodableTests: XCTestCase {
             baseRecipeId: recipe.id,
             baseRecipeVersion: recipe.version,
             patches: [
-                .addIngredient(text: "1 tsp yeast", afterId: nil),
+                .addIngredient(groupId: nil, afterId: nil, text: "1 tsp yeast"),
                 .updateIngredient(id: SeedRecipes.ingredientSaltId, text: "2 tsp salt"),
                 .removeIngredient(id: SeedRecipes.ingredientWaterId),
-                .addStep(text: "Knead for 5 min", afterStepId: SeedRecipes.stepMixId, preassignedId: nil),
+                .addStep(parentId: nil, afterId: SeedRecipes.stepMixId, text: "Knead for 5 min", preassignedId: nil),
                 .updateStep(id: SeedRecipes.stepBakeId, text: "Bake at 350°F for 25 min"),
-                .addNote(text: "Round-trip test"),
+                .addNoteSection(afterId: nil, header: nil, items: ["Round-trip test"]),
             ],
             summary: "Test patch set",
             baseRecipeSnapshot: recipe
@@ -118,7 +186,7 @@ final class PatchCodableTests: XCTestCase {
         let patchSet = PatchSet(
             baseRecipeId: recipe.id,
             baseRecipeVersion: recipe.version,
-            patches: [.addNote(text: "Minimal patch")],
+            patches: [.setTitle("Minimal patch")],
             summary: nil,
             baseRecipeSnapshot: nil
         )
@@ -126,55 +194,5 @@ final class PatchCodableTests: XCTestCase {
         XCTAssertEqual(decoded, patchSet)
         XCTAssertNil(decoded.summary)
         XCTAssertNil(decoded.baseRecipeSnapshot)
-    }
-
-    func test_setTitle() throws {
-        let patch = Patch.setTitle("Spaghetti Carbonara")
-        XCTAssertEqual(try roundTrip(patch), patch)
-    }
-
-    // MARK: - Sub-step operations
-
-    func test_addSubStep_withAfterSubStepId() throws {
-        let patch = Patch.addSubStep(
-            parentStepId: SeedRecipes.stepMixId,
-            text: "Sift flour",
-            afterSubStepId: SeedRecipes.subStepAId
-        )
-        XCTAssertEqual(try roundTrip(patch), patch)
-    }
-
-    func test_addSubStep_withoutAfterSubStepId() throws {
-        let patch = Patch.addSubStep(
-            parentStepId: SeedRecipes.stepMixId,
-            text: "Sift flour",
-            afterSubStepId: nil
-        )
-        XCTAssertEqual(try roundTrip(patch), patch)
-    }
-
-    func test_updateSubStep() throws {
-        let patch = Patch.updateSubStep(
-            parentStepId: SeedRecipes.stepMixId,
-            subStepId: SeedRecipes.subStepAId,
-            text: "Measure 2 cups flour"
-        )
-        XCTAssertEqual(try roundTrip(patch), patch)
-    }
-
-    func test_removeSubStep() throws {
-        let patch = Patch.removeSubStep(
-            parentStepId: SeedRecipes.stepMixId,
-            subStepId: SeedRecipes.subStepBId
-        )
-        XCTAssertEqual(try roundTrip(patch), patch)
-    }
-
-    func test_completeSubStep() throws {
-        let patch = Patch.completeSubStep(
-            parentStepId: SeedRecipes.stepMixId,
-            subStepId: SeedRecipes.subStepAId
-        )
-        XCTAssertEqual(try roundTrip(patch), patch)
     }
 }

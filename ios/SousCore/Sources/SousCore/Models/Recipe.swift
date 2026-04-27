@@ -4,9 +4,9 @@ public struct Recipe: Equatable, Sendable {
     public let id: UUID
     public var version: Int
     public var title: String
-    public var ingredients: [Ingredient]
+    public var ingredients: [IngredientGroup]
     public var steps: [Step]
-    public var notes: [String]
+    public var notes: [NoteSection]?
     /// Prep entries extracted by the mise en place feature. Nil until the user triggers it.
     /// Rendered between INGREDIENTS and PROCEDURE. Does not affect "all steps done" logic.
     public var miseEnPlace: [MiseEnPlaceEntry]?
@@ -15,9 +15,9 @@ public struct Recipe: Equatable, Sendable {
         id: UUID = UUID(),
         version: Int = 1,
         title: String,
-        ingredients: [Ingredient] = [],
+        ingredients: [IngredientGroup] = [],
         steps: [Step] = [],
-        notes: [String] = [],
+        notes: [NoteSection]? = nil,
         miseEnPlace: [MiseEnPlaceEntry]? = nil
     ) {
         self.id = id

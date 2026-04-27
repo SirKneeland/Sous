@@ -11,7 +11,6 @@ struct RecipeCanvasView: View {
     let recipe: Recipe
     var onMarkStepDone: (UUID) -> Void = { _ in }
     var onMarkStepUndone: (UUID) -> Void = { _ in }
-    var onMarkSubStepDone: (UUID, UUID) -> Void = { _, _ in }
     var onMarkMiseEnPlaceDone: (UUID) -> Void = { _ in }
     var onTriggerMiseEnPlace: () -> Void = {}
     var onOpenSettings: () -> Void = {}
@@ -54,7 +53,6 @@ struct RecipeCanvasView: View {
         recipe: Recipe,
         onMarkStepDone: @escaping (UUID) -> Void = { _ in },
         onMarkStepUndone: @escaping (UUID) -> Void = { _ in },
-        onMarkSubStepDone: @escaping (UUID, UUID) -> Void = { _, _ in },
         onMarkMiseEnPlaceDone: @escaping (UUID) -> Void = { _ in },
         onMarkMiseEnPlaceUndone: @escaping (UUID) -> Void = { _ in },
         onTriggerMiseEnPlace: @escaping () -> Void = {},
@@ -80,7 +78,6 @@ struct RecipeCanvasView: View {
         self.recipe = recipe
         self.onMarkStepDone = onMarkStepDone
         self.onMarkStepUndone = onMarkStepUndone
-        self.onMarkSubStepDone = onMarkSubStepDone
         self.onMarkMiseEnPlaceDone = onMarkMiseEnPlaceDone
         self.onMarkMiseEnPlaceUndone = onMarkMiseEnPlaceUndone
         self.onTriggerMiseEnPlace = onTriggerMiseEnPlace
@@ -102,6 +99,29 @@ struct RecipeCanvasView: View {
         self._miseEnPlaceExpanded = miseEnPlaceExpanded
         self._navBarVisible = navBarVisible
         self.bottomZoneHeight = bottomZoneHeight
+    }
+
+    private var flatIngredients: [Ingredient] {
+        recipe.ingredients.flatMap { $0.items }
+    }
+
+    @ViewBuilder
+    private var ingredientRows: some View {
+        ForEach(flatIngredients, id: \.id) { ingredient in
+            IngredientRow(
+                ingredient: ingredient,
+                isChecked: checkedIngredients.contains(ingredient.id),
+                onToggle: {
+                    if checkedIngredients.contains(ingredient.id) {
+                        checkedIngredients.remove(ingredient.id)
+                    } else {
+                        checkedIngredients.insert(ingredient.id)
+                    }
+                },
+                onCheckSwipe: { checkedIngredients.insert(ingredient.id) },
+                onAskSous: { onAskSousAbout("ingredient", ingredient.text) }
+            )
+        }
     }
 
     var body: some View {
@@ -203,55 +223,7 @@ struct RecipeCanvasView: View {
 
                 // MARK: Ingredient rows
                 if ingredientsExpanded {
-                    ForEach(recipe.ingredients, id: \.id) { ingredient in
-                        let isChecked = checkedIngredients.contains(ingredient.id)
-                        HStack(alignment: .top, spacing: 12) {
-                            SousCheckbox(isChecked: isChecked)
-                                .padding(.top, 2)
-                            Text(ingredient.text)
-                                .font(.sousBody)
-                                .foregroundStyle(Color.sousText)
-                                .multilineTextAlignment(.leading)
-                            Spacer()
-                        }
-                        .padding(.vertical, 10)
-                        .padding(.horizontal, 20)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            if isChecked { checkedIngredients.remove(ingredient.id) }
-                            else { checkedIngredients.insert(ingredient.id) }
-                        }
-                        .simultaneousGesture(
-                            LongPressGesture(minimumDuration: 0.5)
-                                .onEnded { _ in
-                                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                                    onAskSousAbout("ingredient", ingredient.text)
-                                }
-                        )
-                        .listRowInsets(EdgeInsets())
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.visible, edges: .bottom)
-                        .listRowSeparatorTint(Color.sousSeparator)
-                        .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                            if !isChecked {
-                                Button {
-                                    checkedIngredients.insert(ingredient.id)
-                                } label: {
-                                    Label("Done", systemImage: "checkmark")
-                                }
-                                .tint(Color.sousGreen)
-                            }
-                        }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                            Button {
-                                onAskSousAbout("ingredient", ingredient.text)
-                            } label: {
-                                Label("Ask Sous", systemImage: "bubble.left")
-                            }
-                            .tint(Color.sousTerracotta)
-                        }
-                    }
+                    ingredientRows
                 }
 
                 // MARK: Mise en place section (once populated)
@@ -405,7 +377,7 @@ struct RecipeCanvasView: View {
                             items: items,
                             isDone: step.effectiveStatus == .done,
                             isCurrent: step.id == currentStepId,
-                            onChildTap: { subStepId in onMarkSubStepDone(step.id, subStepId) }
+                            onChildTap: { subStepId in onMarkStepDone(subStepId) }
                         )
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .id(step.id)
@@ -526,7 +498,7 @@ struct RecipeCanvasView: View {
                 }
 
                 // MARK: Notes
-                if !recipe.notes.isEmpty {
+                if let sections = recipe.notes, !sections.isEmpty {
                     SousSectionLabel(title: "Notes")
                         .padding(.horizontal, 20)
                         .padding(.top, 24)
@@ -536,16 +508,18 @@ struct RecipeCanvasView: View {
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
 
-                    ForEach(recipe.notes, id: \.self) { note in
-                        Text("— \(note)")
-                            .font(.sousBody)
-                            .foregroundStyle(Color.sousText)
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 4)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .listRowInsets(EdgeInsets())
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
+                    ForEach(sections) { section in
+                        ForEach(section.items, id: \.self) { item in
+                            Text("— \(item)")
+                                .font(.sousBody)
+                                .foregroundStyle(Color.sousText)
+                                .padding(.horizontal, 20)
+                                .padding(.vertical, 4)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .listRowInsets(EdgeInsets())
+                                .listRowBackground(Color.clear)
+                                .listRowSeparator(.hidden)
+                        }
                     }
                 }
 
@@ -1027,6 +1001,58 @@ private struct NestedStepChildRow: View {
             .padding(.vertical, 10)
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Ingredient row
+
+private struct IngredientRow: View {
+    let ingredient: Ingredient
+    let isChecked: Bool
+    let onToggle: () -> Void
+    let onCheckSwipe: () -> Void
+    let onAskSous: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            SousCheckbox(isChecked: isChecked)
+                .padding(.top, 2)
+            Text(ingredient.text)
+                .font(.sousBody)
+                .foregroundStyle(Color.sousText)
+                .multilineTextAlignment(.leading)
+            Spacer()
+        }
+        .padding(.vertical, 10)
+        .padding(.horizontal, 20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .onTapGesture { onToggle() }
+        .simultaneousGesture(
+            LongPressGesture(minimumDuration: 0.5)
+                .onEnded { _ in
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    onAskSous()
+                }
+        )
+        .listRowInsets(EdgeInsets())
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.visible, edges: .bottom)
+        .listRowSeparatorTint(Color.sousSeparator)
+        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+            if !isChecked {
+                Button { onCheckSwipe() } label: {
+                    Label("Done", systemImage: "checkmark")
+                }
+                .tint(Color.sousGreen)
+            }
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button { onAskSous() } label: {
+                Label("Ask Sous", systemImage: "bubble.left")
+            }
+            .tint(Color.sousTerracotta)
+        }
     }
 }
 

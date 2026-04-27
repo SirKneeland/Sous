@@ -108,6 +108,7 @@ struct LLMPatchProposer {
 
     private func systemPrompt(recipe: Recipe) -> String {
         let ingredientList = recipe.ingredients
+            .flatMap { $0.items }
             .map { "  \($0.id.uuidString): \($0.text)" }
             .joined(separator: "\n")
         let stepList = recipe.steps
@@ -153,6 +154,7 @@ struct LLMPatchProposer {
     private func buildRepairContext(recipe: Recipe, errors: [PatchValidationError]) -> String {
         let codes = errors.map { $0.code.rawValue }.joined(separator: ", ")
         let ingredientSnapshot = recipe.ingredients
+            .flatMap { $0.items }
             .map { "\($0.id.uuidString)=\($0.text)" }
             .joined(separator: ", ")
         let stepSnapshot = recipe.steps

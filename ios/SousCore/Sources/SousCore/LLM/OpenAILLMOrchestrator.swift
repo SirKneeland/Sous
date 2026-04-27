@@ -840,6 +840,7 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
     private func recipeContextMessage(for request: LLMRequest) -> String {
         let r = request.recipeSnapshotForPrompt
         let ingredients = r.ingredients
+            .flatMap { $0.items }
             .map { #"{"id":"\#($0.id.uuidString)","text":"\#($0.text)"}"# }
             .joined(separator: ",")
         let steps = r.steps
@@ -904,22 +905,20 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
         }
         switch dto {
         case .addIngredient(let text, let afterIdStr):
-            return .addIngredient(text: text, afterId: try afterIdStr.map { try uuid($0) })
+            return .addIngredient(groupId: nil, afterId: try afterIdStr.map { try uuid($0) }, text: text)
         case .updateIngredient(let idStr, let text):
             return .updateIngredient(id: try uuid(idStr), text: text)
         case .removeIngredient(let idStr):
             return .removeIngredient(id: try uuid(idStr))
         case .addStep(let text, let afterStepIdStr, let clientId):
             // Use the pre-generated UUID when a client_id was supplied, so sibling
-            // addSubStep patches can reference this step via parentStepId.
+            // addSubstep patches can reference this step via parentId.
             let preassignedId = clientId.flatMap { clientIdMap[$0] }
-            return .addStep(text: text, afterStepId: try afterStepIdStr.map { try uuid($0) }, preassignedId: preassignedId)
+            return .addStep(parentId: nil, afterId: try afterStepIdStr.map { try uuid($0) }, text: text, preassignedId: preassignedId)
         case .updateStep(let idStr, let text):
             return .updateStep(id: try uuid(idStr), text: text)
         case .removeStep(let idStr):
             return .removeStep(id: try uuid(idStr))
-        case .addNote(let text):
-            return .addNote(text: text)
         case .setTitle(let title):
             return .setTitle(title)
         case .addSubstep(let text, let parentClientId, let afterSubstepIdStr):
@@ -927,16 +926,13 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             // referenced an unknown client_id, fall back to a flat addStep so the
             // import still succeeds rather than failing the whole patchSet.
             guard let parentUUID = clientIdMap[parentClientId] else {
-                return .addStep(text: text, afterStepId: nil, preassignedId: nil)
+                return .addStep(parentId: nil, afterId: nil, text: text, preassignedId: nil)
             }
-            return .addSubStep(parentStepId: parentUUID, text: text,
-                               afterSubStepId: try afterSubstepIdStr.map { try uuid($0) })
+            return .addStep(parentId: parentUUID, afterId: try afterSubstepIdStr.map { try uuid($0) }, text: text, preassignedId: nil)
         case .updateSubstep(let idStr, let text):
             return .updateStep(id: try uuid(idStr), text: text)
         case .removeSubstep(let idStr):
             return .removeStep(id: try uuid(idStr))
-        case .completeSubstep:
-            throw ConversionError.unsupportedOperation
         }
     }
 

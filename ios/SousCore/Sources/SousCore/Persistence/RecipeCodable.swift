@@ -50,7 +50,7 @@ extension Recipe: Codable {
         try c.encode(title, forKey: .title)
         try c.encode(ingredients, forKey: .ingredients)
         try c.encode(steps, forKey: .steps)
-        try c.encode(notes, forKey: .notes)
+        try c.encodeIfPresent(notes, forKey: .notes)
         try c.encodeIfPresent(miseEnPlace, forKey: .miseEnPlace)
     }
 
@@ -59,9 +59,9 @@ extension Recipe: Codable {
         self.id          = try c.decode(UUID.self,         forKey: .id)
         self.version     = try c.decode(Int.self,          forKey: .version)
         self.title       = try c.decode(String.self,       forKey: .title)
-        self.ingredients = try c.decode([Ingredient].self, forKey: .ingredients)
-        self.steps       = try c.decode([Step].self,       forKey: .steps)
-        self.notes       = try c.decode([String].self,     forKey: .notes)
+        self.ingredients = try c.decode([IngredientGroup].self, forKey: .ingredients)
+        self.steps       = try c.decode([Step].self,            forKey: .steps)
+        self.notes       = try c.decodeIfPresent([NoteSection].self, forKey: .notes)
 
         // Prefer the new [MiseEnPlaceEntry] format. If the key holds data in the
         // old [Step] format (sessions saved before this change), convert each old

@@ -80,6 +80,4 @@ public enum UIEvent {
     /// User cancels a mid-drain animation by tapping the step's checkbox, reverting it to todo.
     /// Only valid during the drain-phase window before the step has fully collapsed.
     case markStepUndone(stepId: UUID)
-    /// User taps a todo sub-step to mark it done. One-way; done sub-steps are immutable.
-    case markSubStepDone(parentStepId: UUID, subStepId: UUID)
 }

@@ -162,10 +162,11 @@ final class AppStore: ObservableObject {
         return nil
     }
 
-    static let recipeId          = UUID(uuidString: "00000000-0000-0000-FFFF-000000000001")!
-    static let ingredientFlourId = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
-    static let ingredientSaltId  = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
-    static let ingredientWaterId = UUID(uuidString: "00000000-0000-0000-0000-000000000003")!
+    static let recipeId            = UUID(uuidString: "00000000-0000-0000-FFFF-000000000001")!
+    static let ingredientGroupId   = UUID(uuidString: "00000000-0000-0000-0000-000000000010")!
+    static let ingredientFlourId   = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+    static let ingredientSaltId    = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
+    static let ingredientWaterId   = UUID(uuidString: "00000000-0000-0000-0000-000000000003")!
     static let stepMixId         = UUID(uuidString: "00000000-0000-0000-0001-000000000001")!
     static let stepBakeId        = UUID(uuidString: "00000000-0000-0000-0001-000000000002")!
     static let stepDoneId        = UUID(uuidString: "00000000-0000-0000-0001-000000000003")!
@@ -251,16 +252,17 @@ final class AppStore: ObservableObject {
                 version: 1,
                 title: "Simple Bread",
                 ingredients: [
-                    Ingredient(id: Self.ingredientFlourId, text: "2 cups flour"),
-                    Ingredient(id: Self.ingredientSaltId,  text: "1 tsp salt"),
-                    Ingredient(id: Self.ingredientWaterId, text: "3/4 cup water"),
+                    IngredientGroup(id: Self.ingredientGroupId, header: nil, items: [
+                        Ingredient(id: Self.ingredientFlourId, text: "2 cups flour"),
+                        Ingredient(id: Self.ingredientSaltId,  text: "1 tsp salt"),
+                        Ingredient(id: Self.ingredientWaterId, text: "3/4 cup water"),
+                    ]),
                 ],
                 steps: [
                     Step(id: Self.stepMixId,  text: "Mix dry ingredients",       status: .todo),
                     Step(id: Self.stepBakeId, text: "Bake at 375°F for 30 min",  status: .todo),
                     Step(id: Self.stepDoneId, text: "Let cool on rack",           status: .done),
-                ],
-                notes: ["Original family recipe"]
+                ]
             )
             uiState = .recipeOnly(recipe: recipe)
             chatTranscript = [
@@ -1248,7 +1250,7 @@ final class AppStore: ObservableObject {
         }
         // Persist after events that change recipe state, pending patch, or nextLLMContext.
         switch event {
-        case .patchReceived, .acceptPatch, .rejectPatch, .markStepDone, .markStepUndone, .markSubStepDone:
+        case .patchReceived, .acceptPatch, .rejectPatch, .markStepDone, .markStepUndone:
             saveSession()
         default:
             break
@@ -1324,14 +1326,14 @@ final class AppStore: ObservableObject {
             baseRecipeId: recipe.id,
             baseRecipeVersion: recipe.version,
             patches: [
-                .addIngredient(text: "1 tsp yeast", afterId: Self.ingredientFlourId),
+                .addIngredient(groupId: Self.ingredientGroupId, afterId: Self.ingredientFlourId, text: "1 tsp yeast"),
                 .updateIngredient(id: Self.ingredientSaltId, text: "2 tsp salt"),
                 .removeIngredient(id: Self.ingredientWaterId),
 
-                .addStep(text: "Knead dough for 5 minutes", afterStepId: Self.stepMixId, preassignedId: nil),
+                .addStep(parentId: nil, afterId: Self.stepMixId, text: "Knead dough for 5 minutes", preassignedId: nil),
                 .updateStep(id: Self.stepBakeId, text: "Bake at 350°F for 30 min"),
 
-                .addNote(text: "From UI"),
+                .addNoteSection(afterId: nil, header: nil, items: ["From UI"]),
             ]
         )
         send(.patchReceived(patchSet))

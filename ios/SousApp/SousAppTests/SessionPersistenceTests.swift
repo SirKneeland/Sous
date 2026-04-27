@@ -29,15 +29,17 @@ final class SessionPersistenceTests: XCTestCase {
             version: 3,
             title: "Persisted Pasta",
             ingredients: [
-                Ingredient(id: UUID(), text: "200g pasta"),
-                Ingredient(id: UUID(), text: "2 tbsp olive oil"),
+                IngredientGroup(items: [
+                    Ingredient(id: UUID(), text: "200g pasta"),
+                    Ingredient(id: UUID(), text: "2 tbsp olive oil"),
+                ]),
             ],
             steps: [
                 Step(id: UUID(), text: "Boil water",   status: .done),
                 Step(id: UUID(), text: "Cook pasta",   status: .todo),
                 Step(id: UUID(), text: "Drain and serve", status: .todo),
             ],
-            notes: ["Add salt to the water"]
+            notes: [NoteSection(items: ["Add salt to the water"])]
         )
     }
 
@@ -46,7 +48,7 @@ final class SessionPersistenceTests: XCTestCase {
         let patch: PatchSet? = withPatch ? PatchSet(
             baseRecipeId: recipe.id,
             baseRecipeVersion: recipe.version,
-            patches: [.addNote(text: "Pending suggestion")]
+            patches: [.addNoteSection(afterId: nil, header: nil, items: ["Pending suggestion"])]
         ) : nil
         return SessionSnapshot(
             schemaVersion: SessionSnapshot.currentSchemaVersion,
@@ -243,7 +245,7 @@ final class SessionPersistenceTests: XCTestCase {
         let patchSet = PatchSet(
             baseRecipeId: AppStore.recipeId,
             baseRecipeVersion: 1,
-            patches: [.addNote(text: "persistence test")]
+            patches: [.addNoteSection(afterId: nil, header: nil, items: ["persistence test"])]
         )
         store.send(.patchReceived(patchSet))
         store.send(.validatePatch)

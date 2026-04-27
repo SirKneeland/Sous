@@ -153,7 +153,7 @@ struct DebugDiagnosticExporter {
         if recipe.ingredients.isEmpty {
             lines.append("- (none)")
         } else {
-            for ing in recipe.ingredients { lines.append("- \(ing.text)") }
+            for group in recipe.ingredients { for ing in group.items { lines.append("- \(ing.text)") } }
         }
         lines.append("")
         lines.append("**Steps:**")

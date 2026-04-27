@@ -42,7 +42,7 @@ struct PatchSetDecoderTests {
         patchSetId: String = "ps-1",
         baseRecipeId: String = "r-1",
         baseRecipeVersion: Int = 1,
-        patches: String = #"[{"type":"add_note","text":"Extra seasoning"}]"#
+        patches: String = #"[{"type":"set_title","title":"Extra seasoning"}]"#
     ) -> String {
         """
         {
@@ -64,7 +64,7 @@ struct PatchSetDecoderTests {
                 "patchSetId": "ps-1",
                 "baseRecipeId": "r-1",
                 "baseRecipeVersion": 3,
-                "patches": [{"type": "add_note", "text": "Extra seasoning"}],
+                "patches": [{"type": "set_title", "title": "Extra seasoning"}],
                 "unknownPatchSetKey": "ignored"
             },
             "topLevelExtra": 42
@@ -92,7 +92,7 @@ struct PatchSetDecoderTests {
     @Test func jsonWithTrailingCommentary() {
         // Raw string: valid JSON object immediately followed by prose (not valid JSON overall)
         let raw =
-            #"{"assistant_message":"Done","patchSet":{"patchSetId":"p1","baseRecipeId":"r1","baseRecipeVersion":1,"patches":[{"type":"add_note","text":"hi"}]}}"# +
+            #"{"assistant_message":"Done","patchSet":{"patchSetId":"p1","baseRecipeId":"r1","baseRecipeVersion":1,"patches":[{"type":"set_title","title":"hi"}]}}"# +
             "\nNote: I simplified the recipe as requested."
 
         let result = decoder.decode(raw)
@@ -119,7 +119,7 @@ struct PatchSetDecoderTests {
             "patchSet": {
                 "patchSetId": "p1",
                 "baseRecipeVersion": 2,
-                "patches": [{"type": "add_note", "text": "hi"}]
+                "patches": [{"type": "set_title", "title": "hi"}]
             }
         }
         """
@@ -135,7 +135,7 @@ struct PatchSetDecoderTests {
             "patchSet": {
                 "patchSetId": "p1",
                 "baseRecipeId": "r1",
-                "patches": [{"type": "add_note", "text": "hi"}]
+                "patches": [{"type": "set_title", "title": "hi"}]
             }
         }
         """
@@ -201,7 +201,7 @@ struct PatchSetDecoderTests {
             "patchSet": {
                 "baseRecipeId": "r1",
                 "baseRecipeVersion": 1,
-                "patches": [{"type": "add_note", "text": "hi"}]
+                "patches": [{"type": "set_title", "title": "hi"}]
             }
         }
         """
@@ -449,18 +449,12 @@ struct PatchSetDecoderTests {
         #expect(id == subId)
     }
 
-    @Test("complete_substep decodes id")
-    func completeSubstep_decodesId() {
+    @Test("complete_substep is now an unknown type and returns patchOpUnknownType")
+    func completeSubstep_isUnknownType() {
         let subId = "AAAABBBB-0000-0000-0000-000000000077"
         let json = """
         {"assistant_message":"ok","patchSet":{"patchSetId":"ps-1","baseRecipeId":"r-1","baseRecipeVersion":1,"patches":[{"type":"complete_substep","id":"\(subId)"}]}}
         """
-        let result = decoder.decode(json)
-        guard let dto = expectSuccess(result, extractionUsed: false) else { return }
-        guard case .completeSubstep(let id) = dto.patchSet?.patches[0] else {
-            Issue.record("Expected completeSubstep at index 0")
-            return
-        }
-        #expect(id == subId)
+        expectFailure(decoder.decode(json), .schemaInvalid(.patchOpUnknownType))
     }
 }

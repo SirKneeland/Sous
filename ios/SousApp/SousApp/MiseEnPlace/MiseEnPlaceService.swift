@@ -115,8 +115,8 @@ struct MiseEnPlaceService: MiseEnPlaceServiceProtocol {
         var lines: [String] = ["Recipe: \(recipe.title)", ""]
         if !recipe.ingredients.isEmpty {
             lines.append("Ingredients:")
-            for ingredient in recipe.ingredients {
-                lines.append("- \(ingredient.text)")
+            for group in recipe.ingredients {
+                for ingredient in group.items { lines.append("- \(ingredient.text)") }
             }
             lines.append("")
         }

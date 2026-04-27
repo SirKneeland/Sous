@@ -26,15 +26,17 @@ private extension UIStateMachineTests {
             version: 1,
             title: "Simple Bread",
             ingredients: [
-                Ingredient(id: flourId, text: "2 cups flour"),
-                Ingredient(id: saltId,  text: "1 tsp salt"),
+                IngredientGroup(items: [
+                    Ingredient(id: flourId, text: "2 cups flour"),
+                    Ingredient(id: saltId,  text: "1 tsp salt"),
+                ]),
             ],
             steps: [
                 Step(id: stepMixId,  text: "Mix dry ingredients", status: .todo),
                 Step(id: stepBakeId, text: "Bake at 375°F", status: .todo),
                 Step(id: stepDoneId, text: "Let cool on rack",   status: .done),
             ],
-            notes: []
+            notes: nil
         )
     }
 
@@ -44,7 +46,7 @@ private extension UIStateMachineTests {
             patchSetId: patchSetId,
             baseRecipeId: recipeId,
             baseRecipeVersion: 1,
-            patches: [.addNote(text: "Knead for 10 minutes")]
+            patches: [.addNoteSection(afterId: nil, header: nil, items: ["Knead for 10 minutes"])]
         )
     }
 
@@ -67,9 +69,9 @@ private extension UIStateMachineTests {
             id: recipeId,
             version: 1,
             title: "Simple Bread",
-            ingredients: [Ingredient(id: flourId, text: "2 cups flour")],
+            ingredients: [IngredientGroup(items: [Ingredient(id: flourId, text: "2 cups flour")])],
             steps: [parentStep],
-            notes: []
+            notes: nil
         )
     }
 }
@@ -172,7 +174,7 @@ final class UIStateMachineTests: XCTestCase {
         }
         XCTAssertEqual(updated.version, recipe.version + 1)
         XCTAssertEqual(updated.id, recipe.id)
-        XCTAssertTrue(updated.notes.contains("Knead for 10 minutes"))
+        XCTAssertTrue(updated.notes?.flatMap { $0.items }.contains("Knead for 10 minutes") == true)
     }
 
     // MARK: patchReview(invalid) + acceptPatch → stays in patchReview
@@ -318,7 +320,7 @@ final class UIStateMachineTests: XCTestCase {
 
     func test_markSubStepDone_todoSubStep_marksItDone() {
         let state = UIState.recipeOnly(recipe: Self.recipeWithSubSteps())
-        let next = UIStateMachine.reduce(state, .markSubStepDone(parentStepId: Self.parentSubStepId, subStepId: Self.subStep1Id))
+        let next = UIStateMachine.reduce(state, .markStepDone(stepId: Self.subStep1Id))
         let parent = next.recipe.steps.first { $0.id == Self.parentSubStepId }
         let sub = parent?.subSteps?.first { $0.id == Self.subStep1Id }
         XCTAssertEqual(sub?.effectiveStatus, .done, "Tapped sub-step must be marked done")
@@ -326,7 +328,7 @@ final class UIStateMachineTests: XCTestCase {
 
     func test_markSubStepDone_incrementsRecipeVersion() {
         let state = UIState.recipeOnly(recipe: Self.recipeWithSubSteps())
-        let next = UIStateMachine.reduce(state, .markSubStepDone(parentStepId: Self.parentSubStepId, subStepId: Self.subStep1Id))
+        let next = UIStateMachine.reduce(state, .markStepDone(stepId: Self.subStep1Id))
         XCTAssertEqual(next.recipe.version, 2, "Version must increment when a sub-step is marked done")
     }
 
@@ -339,34 +341,34 @@ final class UIStateMachineTests: XCTestCase {
         recipe = Recipe(id: Self.recipeId, version: 1, title: "Simple Bread",
                         ingredients: recipe.ingredients, steps: [parent], notes: [])
         let state = UIState.recipeOnly(recipe: recipe)
-        let next = UIStateMachine.reduce(state, .markSubStepDone(parentStepId: Self.parentSubStepId, subStepId: Self.subStep1Id))
+        let next = UIStateMachine.reduce(state, .markStepDone(stepId: Self.subStep1Id))
         XCTAssertEqual(next.recipe.version, 1, "Marking an already-done sub-step must be a no-op")
     }
 
     func test_markSubStepDone_allSubStepsDone_parentIsDone() {
         let state = UIState.recipeOnly(recipe: Self.recipeWithSubSteps())
         var current = state
-        current = UIStateMachine.reduce(current, .markSubStepDone(parentStepId: Self.parentSubStepId, subStepId: Self.subStep1Id))
-        current = UIStateMachine.reduce(current, .markSubStepDone(parentStepId: Self.parentSubStepId, subStepId: Self.subStep2Id))
+        current = UIStateMachine.reduce(current, .markStepDone(stepId: Self.subStep1Id))
+        current = UIStateMachine.reduce(current, .markStepDone(stepId: Self.subStep2Id))
         let parent = current.recipe.steps.first { $0.id == Self.parentSubStepId }
         XCTAssertEqual(parent?.effectiveStatus, .done, "Parent must be done when all sub-steps are done")
     }
 
     func test_markSubStepDone_unknownParentId_isNoOp() {
         let state = UIState.recipeOnly(recipe: Self.recipeWithSubSteps())
-        let next = UIStateMachine.reduce(state, .markSubStepDone(parentStepId: UUID(), subStepId: Self.subStep1Id))
-        XCTAssertEqual(next.recipe.version, 1, "Unknown parentStepId must be a no-op")
+        let next = UIStateMachine.reduce(state, .markStepDone(stepId: UUID()))
+        XCTAssertEqual(next.recipe.version, 1, "Unknown stepId must be a no-op")
     }
 
     func test_markSubStepDone_unknownSubStepId_isNoOp() {
         let state = UIState.recipeOnly(recipe: Self.recipeWithSubSteps())
-        let next = UIStateMachine.reduce(state, .markSubStepDone(parentStepId: Self.parentSubStepId, subStepId: UUID()))
-        XCTAssertEqual(next.recipe.version, 1, "Unknown subStepId must be a no-op")
+        let next = UIStateMachine.reduce(state, .markStepDone(stepId: UUID()))
+        XCTAssertEqual(next.recipe.version, 1, "Unknown stepId must be a no-op")
     }
 
     func test_markSubStepDone_otherSubStepUnchanged() {
         let state = UIState.recipeOnly(recipe: Self.recipeWithSubSteps())
-        let next = UIStateMachine.reduce(state, .markSubStepDone(parentStepId: Self.parentSubStepId, subStepId: Self.subStep1Id))
+        let next = UIStateMachine.reduce(state, .markStepDone(stepId: Self.subStep1Id))
         let parent = next.recipe.steps.first { $0.id == Self.parentSubStepId }
         let untouched = parent?.subSteps?.first { $0.id == Self.subStep2Id }
         XCTAssertEqual(untouched?.effectiveStatus, .todo, "Untouched sub-step must remain todo")

@@ -9,11 +9,11 @@ struct PatchValidatorTests {
 
     @Test("Rejects patchSet with wrong baseRecipeVersion")
     func versionMismatch() {
-        let recipe = SeedRecipes.sample() // version 1
+        let recipe = SeedRecipes.sample()
         let patchSet = PatchSet(
             baseRecipeId: recipe.id,
             baseRecipeVersion: 99,
-            patches: [.addNote(text: "hello")]
+            patches: [.setTitle("hello")]
         )
         let result = PatchValidator.validate(patchSet: patchSet, recipe: recipe)
         #expect(result == .invalid([.versionMismatch(expected: 1, got: 99)]))
@@ -25,7 +25,7 @@ struct PatchValidatorTests {
         let patchSet = PatchSet(
             baseRecipeId: recipe.id,
             baseRecipeVersion: 1,
-            patches: [.addNote(text: "hello")]
+            patches: [.setTitle("hello")]
         )
         #expect(PatchValidator.validate(patchSet: patchSet, recipe: recipe) == .valid)
     }
@@ -58,28 +58,69 @@ struct PatchValidatorTests {
         #expect(result == .invalid([.invalidIngredientId(badId)]))
     }
 
-    @Test("Rejects addIngredient with unknown afterId")
+    @Test("Rejects addIngredient with unknown afterId in specified group")
     func invalidIngredientIdOnAddAfter() {
         let recipe = SeedRecipes.sample()
         let badId = UUID()
         let patchSet = PatchSet(
             baseRecipeId: recipe.id,
             baseRecipeVersion: 1,
-            patches: [.addIngredient(text: "yeast", afterId: badId)]
+            patches: [.addIngredient(groupId: SeedRecipes.ingredientGroupId, afterId: badId, text: "yeast")]
         )
         let result = PatchValidator.validate(patchSet: patchSet, recipe: recipe)
         #expect(result == .invalid([.invalidIngredientId(badId)]))
     }
 
-    @Test("Accepts addIngredient with nil afterId (append)")
+    @Test("Accepts addIngredient with nil groupId and nil afterId (append to first group)")
     func addIngredientNoAfterId() {
         let recipe = SeedRecipes.sample()
         let patchSet = PatchSet(
             baseRecipeId: recipe.id,
             baseRecipeVersion: 1,
-            patches: [.addIngredient(text: "yeast", afterId: nil)]
+            patches: [.addIngredient(groupId: nil, afterId: nil, text: "yeast")]
         )
         #expect(PatchValidator.validate(patchSet: patchSet, recipe: recipe) == .valid)
+    }
+
+    // MARK: - Invalid ingredient group ID
+
+    @Test("Rejects addIngredient with unknown groupId")
+    func invalidIngredientGroupIdOnAdd() {
+        let recipe = SeedRecipes.sample()
+        let badId = UUID()
+        let patchSet = PatchSet(
+            baseRecipeId: recipe.id,
+            baseRecipeVersion: 1,
+            patches: [.addIngredient(groupId: badId, afterId: nil, text: "yeast")]
+        )
+        let result = PatchValidator.validate(patchSet: patchSet, recipe: recipe)
+        #expect(result == .invalid([.invalidIngredientGroupId(badId)]))
+    }
+
+    @Test("Rejects updateIngredientGroup with unknown ID")
+    func invalidIngredientGroupIdOnUpdate() {
+        let recipe = SeedRecipes.sample()
+        let badId = UUID()
+        let patchSet = PatchSet(
+            baseRecipeId: recipe.id,
+            baseRecipeVersion: 1,
+            patches: [.updateIngredientGroup(id: badId, header: "Spices")]
+        )
+        let result = PatchValidator.validate(patchSet: patchSet, recipe: recipe)
+        #expect(result == .invalid([.invalidIngredientGroupId(badId)]))
+    }
+
+    @Test("Rejects removeIngredientGroup with unknown ID")
+    func invalidIngredientGroupIdOnRemove() {
+        let recipe = SeedRecipes.sample()
+        let badId = UUID()
+        let patchSet = PatchSet(
+            baseRecipeId: recipe.id,
+            baseRecipeVersion: 1,
+            patches: [.removeIngredientGroup(id: badId)]
+        )
+        let result = PatchValidator.validate(patchSet: patchSet, recipe: recipe)
+        #expect(result == .invalid([.invalidIngredientGroupId(badId)]))
     }
 
     // MARK: - Invalid step ID
@@ -97,14 +138,27 @@ struct PatchValidatorTests {
         #expect(result == .invalid([.invalidStepId(badId)]))
     }
 
-    @Test("Rejects addStep with unknown afterStepId")
+    @Test("Rejects addStep with unknown afterId at top level")
     func invalidStepIdOnAddAfter() {
         let recipe = SeedRecipes.sample()
         let badId = UUID()
         let patchSet = PatchSet(
             baseRecipeId: recipe.id,
             baseRecipeVersion: 1,
-            patches: [.addStep(text: "new step", afterStepId: badId, preassignedId: nil)]
+            patches: [.addStep(parentId: nil, afterId: badId, text: "new step", preassignedId: nil)]
+        )
+        let result = PatchValidator.validate(patchSet: patchSet, recipe: recipe)
+        #expect(result == .invalid([.invalidStepId(badId)]))
+    }
+
+    @Test("Rejects addStep with unknown parentId")
+    func invalidStepIdOnAddWithParent() {
+        let recipe = SeedRecipes.sample()
+        let badId = UUID()
+        let patchSet = PatchSet(
+            baseRecipeId: recipe.id,
+            baseRecipeVersion: 1,
+            patches: [.addStep(parentId: badId, afterId: nil, text: "sub step", preassignedId: nil)]
         )
         let result = PatchValidator.validate(patchSet: patchSet, recipe: recipe)
         #expect(result == .invalid([.invalidStepId(badId)]))
@@ -135,6 +189,83 @@ struct PatchValidatorTests {
         #expect(PatchValidator.validate(patchSet: patchSet, recipe: recipe) == .valid)
     }
 
+    // MARK: - setStepNotes
+
+    @Test("Accepts setStepNotes on a todo step")
+    func setStepNotesValid() {
+        let recipe = SeedRecipes.sample()
+        let patchSet = PatchSet(
+            baseRecipeId: recipe.id,
+            baseRecipeVersion: 1,
+            patches: [.setStepNotes(stepId: SeedRecipes.stepMixId, notes: ["Use a fork"])]
+        )
+        #expect(PatchValidator.validate(patchSet: patchSet, recipe: recipe) == .valid)
+    }
+
+    @Test("Rejects setStepNotes on a done step")
+    func setStepNotesDoneImmutable() {
+        let recipe = SeedRecipes.sample()
+        let patchSet = PatchSet(
+            baseRecipeId: recipe.id,
+            baseRecipeVersion: 1,
+            patches: [.setStepNotes(stepId: SeedRecipes.stepDoneId, notes: ["note"])]
+        )
+        let result = PatchValidator.validate(patchSet: patchSet, recipe: recipe)
+        #expect(result == .invalid([.stepDoneImmutable(SeedRecipes.stepDoneId)]))
+    }
+
+    @Test("Rejects setStepNotes with unknown step ID")
+    func setStepNotesInvalidStepId() {
+        let recipe = SeedRecipes.sample()
+        let badId = UUID()
+        let patchSet = PatchSet(
+            baseRecipeId: recipe.id,
+            baseRecipeVersion: 1,
+            patches: [.setStepNotes(stepId: badId, notes: [])]
+        )
+        let result = PatchValidator.validate(patchSet: patchSet, recipe: recipe)
+        #expect(result == .invalid([.invalidStepId(badId)]))
+    }
+
+    // MARK: - Note section operations
+
+    @Test("Accepts addNoteSection always")
+    func addNoteSectionAlwaysValid() {
+        let recipe = SeedRecipes.sample()
+        let patchSet = PatchSet(
+            baseRecipeId: recipe.id,
+            baseRecipeVersion: 1,
+            patches: [.addNoteSection(afterId: nil, header: "Tips", items: ["Item 1"])]
+        )
+        #expect(PatchValidator.validate(patchSet: patchSet, recipe: recipe) == .valid)
+    }
+
+    @Test("Rejects updateNoteSection with unknown ID")
+    func invalidNoteSectionIdOnUpdate() {
+        let recipe = SeedRecipes.sample()
+        let badId = UUID()
+        let patchSet = PatchSet(
+            baseRecipeId: recipe.id,
+            baseRecipeVersion: 1,
+            patches: [.updateNoteSection(id: badId, header: nil, items: [])]
+        )
+        let result = PatchValidator.validate(patchSet: patchSet, recipe: recipe)
+        #expect(result == .invalid([.invalidNoteSectionId(badId)]))
+    }
+
+    @Test("Rejects removeNoteSection with unknown ID")
+    func invalidNoteSectionIdOnRemove() {
+        let recipe = SeedRecipes.sample()
+        let badId = UUID()
+        let patchSet = PatchSet(
+            baseRecipeId: recipe.id,
+            baseRecipeVersion: 1,
+            patches: [.removeNoteSection(id: badId)]
+        )
+        let result = PatchValidator.validate(patchSet: patchSet, recipe: recipe)
+        #expect(result == .invalid([.invalidNoteSectionId(badId)]))
+    }
+
     // MARK: - Multiple errors
 
     @Test("Collects multiple errors in one pass")
@@ -143,10 +274,10 @@ struct PatchValidatorTests {
         let badIngredientId = UUID()
         let patchSet = PatchSet(
             baseRecipeId: recipe.id,
-            baseRecipeVersion: 99,          // version mismatch
+            baseRecipeVersion: 99,
             patches: [
-                .updateIngredient(id: badIngredientId, text: "x"),  // invalid ingredient
-                .updateStep(id: SeedRecipes.stepDoneId, text: "x"), // done step
+                .updateIngredient(id: badIngredientId, text: "x"),
+                .updateStep(id: SeedRecipes.stepDoneId, text: "x"),
             ]
         )
         let result = PatchValidator.validate(patchSet: patchSet, recipe: recipe)
@@ -229,179 +360,28 @@ struct PatchValidatorTests {
         #expect(result != .valid)
     }
 
-    // MARK: - Sub-step operations
+    // MARK: - Recursive tree search for steps
 
-    @Test("Accepts addSubStep with valid parent and nil afterSubStepId")
-    func addSubStepValidParent() {
+    @Test("Finds step at any depth for updateStep")
+    func updateStepRecursiveSearch() {
         let recipe = SeedRecipes.sampleWithSubSteps()
         let patchSet = PatchSet(
             baseRecipeId: recipe.id,
             baseRecipeVersion: 1,
-            patches: [.addSubStep(parentStepId: SeedRecipes.stepMixId, text: "Sift flour", afterSubStepId: nil)]
+            patches: [.updateStep(id: SeedRecipes.subStepAId, text: "Measure 2 cups")]
         )
         #expect(PatchValidator.validate(patchSet: patchSet, recipe: recipe) == .valid)
     }
 
-    @Test("Accepts addSubStep with valid afterSubStepId")
-    func addSubStepValidAfterSubStepId() {
+    @Test("Finds step at any depth for removeStep")
+    func removeStepRecursiveSearch() {
         let recipe = SeedRecipes.sampleWithSubSteps()
         let patchSet = PatchSet(
             baseRecipeId: recipe.id,
             baseRecipeVersion: 1,
-            patches: [.addSubStep(parentStepId: SeedRecipes.stepMixId, text: "Sift flour", afterSubStepId: SeedRecipes.subStepAId)]
+            patches: [.removeStep(id: SeedRecipes.subStepBId)]
         )
         #expect(PatchValidator.validate(patchSet: patchSet, recipe: recipe) == .valid)
-    }
-
-    @Test("Rejects addSubStep with unknown parent step ID")
-    func addSubStepInvalidParent() {
-        let recipe = SeedRecipes.sampleWithSubSteps()
-        let badId = UUID()
-        let patchSet = PatchSet(
-            baseRecipeId: recipe.id,
-            baseRecipeVersion: 1,
-            patches: [.addSubStep(parentStepId: badId, text: "Sift flour", afterSubStepId: nil)]
-        )
-        let result = PatchValidator.validate(patchSet: patchSet, recipe: recipe)
-        #expect(result == .invalid([.invalidStepId(badId)]))
-    }
-
-    @Test("Rejects addSubStep with unknown afterSubStepId")
-    func addSubStepInvalidAfterSubStepId() {
-        let recipe = SeedRecipes.sampleWithSubSteps()
-        let badSubId = UUID()
-        let patchSet = PatchSet(
-            baseRecipeId: recipe.id,
-            baseRecipeVersion: 1,
-            patches: [.addSubStep(parentStepId: SeedRecipes.stepMixId, text: "Sift flour", afterSubStepId: badSubId)]
-        )
-        let result = PatchValidator.validate(patchSet: patchSet, recipe: recipe)
-        #expect(result == .invalid([.invalidSubStepId(badSubId)]))
-    }
-
-    @Test("Accepts updateSubStep with valid parent and substep")
-    func updateSubStepValid() {
-        let recipe = SeedRecipes.sampleWithSubSteps()
-        let patchSet = PatchSet(
-            baseRecipeId: recipe.id,
-            baseRecipeVersion: 1,
-            patches: [.updateSubStep(parentStepId: SeedRecipes.stepMixId, subStepId: SeedRecipes.subStepAId, text: "Measure 2 cups flour")]
-        )
-        #expect(PatchValidator.validate(patchSet: patchSet, recipe: recipe) == .valid)
-    }
-
-    @Test("Rejects updateSubStep with unknown parent step ID")
-    func updateSubStepInvalidParent() {
-        let recipe = SeedRecipes.sampleWithSubSteps()
-        let badId = UUID()
-        let patchSet = PatchSet(
-            baseRecipeId: recipe.id,
-            baseRecipeVersion: 1,
-            patches: [.updateSubStep(parentStepId: badId, subStepId: SeedRecipes.subStepAId, text: "x")]
-        )
-        let result = PatchValidator.validate(patchSet: patchSet, recipe: recipe)
-        #expect(result == .invalid([.invalidStepId(badId)]))
-    }
-
-    @Test("Rejects updateSubStep with unknown substep ID")
-    func updateSubStepInvalidSubStepId() {
-        let recipe = SeedRecipes.sampleWithSubSteps()
-        let badSubId = UUID()
-        let patchSet = PatchSet(
-            baseRecipeId: recipe.id,
-            baseRecipeVersion: 1,
-            patches: [.updateSubStep(parentStepId: SeedRecipes.stepMixId, subStepId: badSubId, text: "x")]
-        )
-        let result = PatchValidator.validate(patchSet: patchSet, recipe: recipe)
-        #expect(result == .invalid([.invalidSubStepId(badSubId)]))
-    }
-
-    @Test("Accepts removeSubStep with valid parent and substep")
-    func removeSubStepValid() {
-        let recipe = SeedRecipes.sampleWithSubSteps()
-        let patchSet = PatchSet(
-            baseRecipeId: recipe.id,
-            baseRecipeVersion: 1,
-            patches: [.removeSubStep(parentStepId: SeedRecipes.stepMixId, subStepId: SeedRecipes.subStepAId)]
-        )
-        #expect(PatchValidator.validate(patchSet: patchSet, recipe: recipe) == .valid)
-    }
-
-    @Test("Rejects removeSubStep with unknown parent step ID")
-    func removeSubStepInvalidParent() {
-        let recipe = SeedRecipes.sampleWithSubSteps()
-        let badId = UUID()
-        let patchSet = PatchSet(
-            baseRecipeId: recipe.id,
-            baseRecipeVersion: 1,
-            patches: [.removeSubStep(parentStepId: badId, subStepId: SeedRecipes.subStepAId)]
-        )
-        let result = PatchValidator.validate(patchSet: patchSet, recipe: recipe)
-        #expect(result == .invalid([.invalidStepId(badId)]))
-    }
-
-    @Test("Rejects removeSubStep with unknown substep ID")
-    func removeSubStepInvalidSubStepId() {
-        let recipe = SeedRecipes.sampleWithSubSteps()
-        let badSubId = UUID()
-        let patchSet = PatchSet(
-            baseRecipeId: recipe.id,
-            baseRecipeVersion: 1,
-            patches: [.removeSubStep(parentStepId: SeedRecipes.stepMixId, subStepId: badSubId)]
-        )
-        let result = PatchValidator.validate(patchSet: patchSet, recipe: recipe)
-        #expect(result == .invalid([.invalidSubStepId(badSubId)]))
-    }
-
-    @Test("Detects internal conflict: update substep after remove in same patchSet")
-    func removeSubStepThenUpdateConflict() {
-        let recipe = SeedRecipes.sampleWithSubSteps()
-        let patchSet = PatchSet(
-            baseRecipeId: recipe.id,
-            baseRecipeVersion: 1,
-            patches: [
-                .removeSubStep(parentStepId: SeedRecipes.stepMixId, subStepId: SeedRecipes.subStepAId),
-                .updateSubStep(parentStepId: SeedRecipes.stepMixId, subStepId: SeedRecipes.subStepAId, text: "Should fail"),
-            ]
-        )
-        #expect(PatchValidator.validate(patchSet: patchSet, recipe: recipe) != .valid)
-    }
-
-    @Test("Accepts completeSubStep with valid parent and incomplete substep")
-    func completeSubStepValid() {
-        let recipe = SeedRecipes.sampleWithSubSteps()
-        let patchSet = PatchSet(
-            baseRecipeId: recipe.id,
-            baseRecipeVersion: 1,
-            patches: [.completeSubStep(parentStepId: SeedRecipes.stepMixId, subStepId: SeedRecipes.subStepAId)]
-        )
-        #expect(PatchValidator.validate(patchSet: patchSet, recipe: recipe) == .valid)
-    }
-
-    @Test("Rejects completeSubStep with unknown parent step ID")
-    func completeSubStepInvalidParent() {
-        let recipe = SeedRecipes.sampleWithSubSteps()
-        let badId = UUID()
-        let patchSet = PatchSet(
-            baseRecipeId: recipe.id,
-            baseRecipeVersion: 1,
-            patches: [.completeSubStep(parentStepId: badId, subStepId: SeedRecipes.subStepAId)]
-        )
-        let result = PatchValidator.validate(patchSet: patchSet, recipe: recipe)
-        #expect(result == .invalid([.invalidStepId(badId)]))
-    }
-
-    @Test("Rejects completeSubStep with unknown substep ID")
-    func completeSubStepInvalidSubStepId() {
-        let recipe = SeedRecipes.sampleWithSubSteps()
-        let badSubId = UUID()
-        let patchSet = PatchSet(
-            baseRecipeId: recipe.id,
-            baseRecipeVersion: 1,
-            patches: [.completeSubStep(parentStepId: SeedRecipes.stepMixId, subStepId: badSubId)]
-        )
-        let result = PatchValidator.validate(patchSet: patchSet, recipe: recipe)
-        #expect(result == .invalid([.invalidSubStepId(badSubId)]))
     }
 
     // MARK: - Hard-avoid violations
@@ -412,7 +392,7 @@ struct PatchValidatorTests {
         let patchSet = PatchSet(
             baseRecipeId: recipe.id,
             baseRecipeVersion: 1,
-            patches: [.addIngredient(text: "200g shrimp, peeled", afterId: nil)]
+            patches: [.addIngredient(groupId: nil, afterId: nil, text: "200g shrimp, peeled")]
         )
         let result = PatchValidator.validate(patchSet: patchSet, recipe: recipe, hardAvoids: ["shellfish", "shrimp"])
         #expect(result == .invalid([.hardAvoidViolation(ingredient: "shrimp")]))
@@ -424,7 +404,7 @@ struct PatchValidatorTests {
         let patchSet = PatchSet(
             baseRecipeId: recipe.id,
             baseRecipeVersion: 1,
-            patches: [.addIngredient(text: "1 cup Peanut Butter", afterId: nil)]
+            patches: [.addIngredient(groupId: nil, afterId: nil, text: "1 cup Peanut Butter")]
         )
         let result = PatchValidator.validate(patchSet: patchSet, recipe: recipe, hardAvoids: ["peanut"])
         #expect(result == .invalid([.hardAvoidViolation(ingredient: "peanut")]))
@@ -448,7 +428,7 @@ struct PatchValidatorTests {
         let patchSet = PatchSet(
             baseRecipeId: recipe.id,
             baseRecipeVersion: 1,
-            patches: [.addStep(text: "Toss in shrimp and cook 2 minutes", afterStepId: nil, preassignedId: nil)]
+            patches: [.addStep(parentId: nil, afterId: nil, text: "Toss in shrimp and cook 2 minutes", preassignedId: nil)]
         )
         let result = PatchValidator.validate(patchSet: patchSet, recipe: recipe, hardAvoids: ["shrimp"])
         #expect(result == .invalid([.hardAvoidViolation(ingredient: "shrimp")]))
@@ -466,25 +446,13 @@ struct PatchValidatorTests {
         #expect(result == .invalid([.hardAvoidViolation(ingredient: "shrimp")]))
     }
 
-    @Test("Rejects addSubStep whose text contains a hard-avoid keyword")
-    func hardAvoidOnAddSubStep() {
-        let recipe = SeedRecipes.sampleWithSubSteps()
-        let patchSet = PatchSet(
-            baseRecipeId: recipe.id,
-            baseRecipeVersion: 1,
-            patches: [.addSubStep(parentStepId: SeedRecipes.stepMixId, text: "Stir in shrimp", afterSubStepId: nil)]
-        )
-        let result = PatchValidator.validate(patchSet: patchSet, recipe: recipe, hardAvoids: ["shrimp"])
-        #expect(result == .invalid([.hardAvoidViolation(ingredient: "shrimp")]))
-    }
-
     @Test("Accepts patches when hardAvoids is empty")
     func hardAvoidEmptyListAllowsAll() {
         let recipe = SeedRecipes.sample()
         let patchSet = PatchSet(
             baseRecipeId: recipe.id,
             baseRecipeVersion: 1,
-            patches: [.addIngredient(text: "200g shrimp", afterId: nil)]
+            patches: [.addIngredient(groupId: nil, afterId: nil, text: "200g shrimp")]
         )
         #expect(PatchValidator.validate(patchSet: patchSet, recipe: recipe, hardAvoids: []) == .valid)
     }
@@ -495,22 +463,8 @@ struct PatchValidatorTests {
         let patchSet = PatchSet(
             baseRecipeId: recipe.id,
             baseRecipeVersion: 1,
-            patches: [.addIngredient(text: "fresh thyme", afterId: nil)]
+            patches: [.addIngredient(groupId: nil, afterId: nil, text: "fresh thyme")]
         )
         #expect(PatchValidator.validate(patchSet: patchSet, recipe: recipe, hardAvoids: ["shellfish", "peanuts"]) == .valid)
-    }
-
-    @Test("Rejects completeSubStep when parent step is already done")
-    func completeSubStepParentAlreadyDone() {
-        // stepDoneId in sampleWithSubSteps has one sub-step that is done,
-        // making the parent's effectiveStatus == .done.
-        let recipe = SeedRecipes.sampleWithSubSteps()
-        let patchSet = PatchSet(
-            baseRecipeId: recipe.id,
-            baseRecipeVersion: 1,
-            patches: [.completeSubStep(parentStepId: SeedRecipes.stepDoneId, subStepId: SeedRecipes.subStepDoneId)]
-        )
-        let result = PatchValidator.validate(patchSet: patchSet, recipe: recipe)
-        #expect(result == .invalid([.parentStepDone(SeedRecipes.stepDoneId)]))
     }
 }

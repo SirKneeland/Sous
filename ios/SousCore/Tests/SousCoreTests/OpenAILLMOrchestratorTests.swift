@@ -50,7 +50,7 @@ private extension OpenAILLMOrchestratorTests {
             "patchSetId": "\(patchSetId)",
             "baseRecipeId": "\(SeedRecipes.recipeId.uuidString)",
             "baseRecipeVersion": 1,
-            "patches": [{"type":"add_note","text":"Add chilli flakes"}]
+            "patches": [{"type":"set_title","title":"Add chilli flakes"}]
           }
         }
         """
@@ -62,13 +62,13 @@ private extension OpenAILLMOrchestratorTests {
 
     func wrongRecipeIdJSON() -> String {
         """
-        {"assistant_message":"Done.","patchSet":{"patchSetId":"ps-x","baseRecipeId":"AAAAAAAA-0000-0000-0000-000000000001","baseRecipeVersion":1,"patches":[{"type":"add_note","text":"hi"}]}}
+        {"assistant_message":"Done.","patchSet":{"patchSetId":"ps-x","baseRecipeId":"AAAAAAAA-0000-0000-0000-000000000001","baseRecipeVersion":1,"patches":[{"type":"set_title","title":"hi"}]}}
         """
     }
 
     func wrongVersionJSON() -> String {
         """
-        {"assistant_message":"Done.","patchSet":{"patchSetId":"ps-x","baseRecipeId":"\(SeedRecipes.recipeId.uuidString)","baseRecipeVersion":99,"patches":[{"type":"add_note","text":"hi"}]}}
+        {"assistant_message":"Done.","patchSet":{"patchSetId":"ps-x","baseRecipeId":"\(SeedRecipes.recipeId.uuidString)","baseRecipeVersion":99,"patches":[{"type":"set_title","title":"hi"}]}}
         """
     }
 

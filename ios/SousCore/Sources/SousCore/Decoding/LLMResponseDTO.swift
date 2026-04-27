@@ -39,17 +39,17 @@ enum LLMPatchOpDTO: Equatable, Sendable {
     case addIngredient(text: String, afterId: String?)
     case updateIngredient(id: String, text: String)
     case removeIngredient(id: String)
+    /// `clientId` is a model-assigned temporary reference used so sibling
+    /// add_substep ops can reference the correct parent via parentStepClientId.
     case addStep(text: String, afterStepId: String?, clientId: String?)
     case updateStep(id: String, text: String)
     case removeStep(id: String)
-    case addNote(text: String)
     case setTitle(title: String)
     /// Sub-step operations. `parentStepClientId` is the model-assigned client_id on the
-    /// parent `add_step` patch; it is a temporary reference resolved at toPatch time.
+    /// parent `add_step` patch; resolved to a parentId UUID at toPatch time.
     case addSubstep(text: String, parentStepClientId: String, afterSubstepId: String?)
     case updateSubstep(id: String, text: String)
     case removeSubstep(id: String)
-    case completeSubstep(id: String)
 }
 
 // MARK: - LLMSummaryDTO

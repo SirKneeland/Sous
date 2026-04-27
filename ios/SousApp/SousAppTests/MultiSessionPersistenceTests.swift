@@ -30,9 +30,9 @@ final class MultiSessionPersistenceTests: XCTestCase {
             id: UUID(),
             version: 1,
             title: title,
-            ingredients: [Ingredient(id: UUID(), text: "1 cup flour")],
+            ingredients: [IngredientGroup(items: [Ingredient(id: UUID(), text: "1 cup flour")])],
             steps: [Step(id: UUID(), text: "Mix", status: .todo)],
-            notes: []
+            notes: nil
         )
         return SessionSnapshot(
             schemaVersion: SessionSnapshot.currentSchemaVersion,
@@ -226,9 +226,9 @@ final class MultiSessionPersistenceTests: XCTestCase {
             hasCanvas: true,
             recipe: Recipe(
                 id: UUID(), version: 2, title: "Bolognese",
-                ingredients: [Ingredient(id: UUID(), text: "500g mince")],
+                ingredients: [IngredientGroup(items: [Ingredient(id: UUID(), text: "500g mince")])],
                 steps: [Step(id: UUID(), text: "Brown the mince", status: .done)],
-                notes: ["Classic Italian"]
+                notes: [NoteSection(items: ["Classic Italian"])]
             ),
             pendingPatchSet: nil,
             chatMessages: [

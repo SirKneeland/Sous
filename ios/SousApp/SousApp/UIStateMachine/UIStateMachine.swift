@@ -49,18 +49,15 @@ public enum UIStateMachine {
             let newHidden = hidden.appending(rejection)
             return .chatOpen(recipe: recipe, draftUserText: userText, hidden: newHidden)
 
-        // MARK: markStepDone — user-initiated, works in any state
+        // MARK: markStepDone — user-initiated, works in any state, searches full step tree
 
         case (_, .markStepDone(let stepId)):
             let recipe = state.recipe
-            // No-op if step doesn't exist or is already done (done steps are immutable).
-            guard recipe.steps.contains(where: { $0.id == stepId && $0.status == .todo }) else {
-                return state
+            let (updatedSteps, changed) = UIStateMachine.applyToSteps(recipe.steps, id: stepId) { step in
+                guard step.effectiveStatus == .todo else { return }
+                step.status = .done
             }
-            let updatedSteps = recipe.steps.map { step -> Step in
-                guard step.id == stepId else { return step }
-                return Step(id: step.id, text: step.text, status: .done)
-            }
+            guard changed else { return state }
             let updated = Recipe(
                 id: recipe.id,
                 version: recipe.version + 1,
@@ -78,40 +75,11 @@ public enum UIStateMachine {
 
         case (_, .markStepUndone(let stepId)):
             let recipe = state.recipe
-            guard recipe.steps.contains(where: { $0.id == stepId && $0.status == .done }) else {
-                return state
+            let (updatedSteps, changed) = UIStateMachine.applyToSteps(recipe.steps, id: stepId) { step in
+                guard step.effectiveStatus == .done else { return }
+                step.status = .todo
             }
-            let updatedSteps = recipe.steps.map { step -> Step in
-                guard step.id == stepId else { return step }
-                return Step(id: step.id, text: step.text, status: .todo)
-            }
-            let updated = Recipe(
-                id: recipe.id,
-                version: recipe.version + 1,
-                title: recipe.title,
-                ingredients: recipe.ingredients,
-                steps: updatedSteps,
-                notes: recipe.notes,
-                miseEnPlace: recipe.miseEnPlace
-            )
-            return state.replacingRecipe(updated)
-
-        // MARK: markSubStepDone — user-initiated, works in any state
-
-        case (_, .markSubStepDone(let parentStepId, let subStepId)):
-            let recipe = state.recipe
-            guard let parentIdx = recipe.steps.firstIndex(where: { $0.id == parentStepId }),
-                  let subs = recipe.steps[parentIdx].subSteps,
-                  let subIdx = subs.firstIndex(where: { $0.id == subStepId })
-            else { return state }
-            let subStep = subs[subIdx]
-            // No-op if already done (sub-steps are immutable once done).
-            guard subStep.effectiveStatus == .todo else { return state }
-            var updatedSubSteps = subs
-            updatedSubSteps[subIdx] = Step(id: subStep.id, text: subStep.text, status: .done, subSteps: subStep.subSteps)
-            let parent = recipe.steps[parentIdx]
-            var updatedSteps = recipe.steps
-            updatedSteps[parentIdx] = Step(id: parent.id, text: parent.text, status: parent.status, subSteps: updatedSubSteps)
+            guard changed else { return state }
             let updated = Recipe(
                 id: recipe.id,
                 version: recipe.version + 1,
@@ -128,5 +96,33 @@ public enum UIStateMachine {
         default:
             return state
         }
+    }
+
+    /// Searches `steps` recursively for a step with the given `id`, applies `mutation`, and
+    /// returns the updated array along with a flag indicating whether a match was found.
+    private static func applyToSteps(
+        _ steps: [Step],
+        id: UUID,
+        mutation: (inout Step) -> Void
+    ) -> (steps: [Step], changed: Bool) {
+        var changed = false
+        let result = steps.map { step -> Step in
+            if changed { return step }
+            if step.id == id {
+                var copy = step
+                mutation(&copy)
+                changed = copy != step
+                return copy
+            }
+            if let subs = step.subSteps, !subs.isEmpty {
+                let (newSubs, subChanged) = applyToSteps(subs, id: id, mutation: mutation)
+                if subChanged {
+                    changed = true
+                    return Step(id: step.id, text: step.text, status: step.status, subSteps: newSubs, notes: step.notes)
+                }
+            }
+            return step
+        }
+        return (result, changed)
     }
 }

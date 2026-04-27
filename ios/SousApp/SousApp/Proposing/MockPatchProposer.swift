@@ -35,7 +35,7 @@ struct MockPatchProposer: PatchProposer {
             baseRecipeId: recipe.id,
             baseRecipeVersion: recipe.version,
             patches: [
-                .addIngredient(text: "1 tsp yeast", afterId: AppStore.ingredientFlourId),
+                .addIngredient(groupId: AppStore.ingredientGroupId, afterId: AppStore.ingredientFlourId, text: "1 tsp yeast"),
                 .updateIngredient(id: AppStore.ingredientSaltId, text: "2 tsp salt"),
             ]
         )
@@ -47,7 +47,7 @@ struct MockPatchProposer: PatchProposer {
             baseRecipeId: recipe.id,
             baseRecipeVersion: recipe.version,
             patches: [
-                .addNote(text: "From chat"),
+                .addNoteSection(afterId: nil, header: nil, items: ["From chat"]),
             ]
         )
     }
