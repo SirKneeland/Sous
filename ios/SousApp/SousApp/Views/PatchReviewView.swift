@@ -261,6 +261,14 @@ struct PatchReviewView: View {
                 Spacer()
             }
 
+        case .groupHeader(_, let text):
+            Text(text.uppercased())
+                .font(.sousSectionHeader)
+                .foregroundStyle(Color.sousMuted)
+                .kerning(1.0)
+                .padding(.vertical, 6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
         case .unchanged:
             EmptyView()
         }
@@ -278,19 +286,39 @@ struct PatchReviewView: View {
     // MARK: - Diff Builders
 
     private var allChangedRows: [DiffRow] {
-        let ingredientChanges = ingredientRows.filter {
-            if case .unchanged = $0 { return false }
-            return true
+        // Include group headers only when at least one non-unchanged row follows in the same group.
+        var ingredientResult: [DiffRow] = []
+        var pendingHeader: DiffRow? = nil
+        for row in ingredientRows {
+            switch row {
+            case .groupHeader:
+                pendingHeader = row
+            case .unchanged:
+                break
+            default:
+                if let header = pendingHeader {
+                    ingredientResult.append(header)
+                    pendingHeader = nil
+                }
+                ingredientResult.append(row)
+            }
         }
+
         let stepChanges = stepRows.filter {
             if case .unchanged = $0 { return false }
             return true
         }
-        return ingredientChanges + stepChanges
+        return ingredientResult + stepChanges
     }
 
     private var ingredientRows: [DiffRow] {
-        var rows: [DiffRow] = recipe.ingredients.flatMap { $0.items }.map { .unchanged(id: $0.id, text: $0.text) }
+        var rows: [DiffRow] = []
+        for group in recipe.ingredients {
+            if let header = group.header {
+                rows.append(.groupHeader(id: group.id, text: header))
+            }
+            rows += group.items.map { .unchanged(id: $0.id, text: $0.text) }
+        }
 
         for patch in patchSet.patches {
             switch patch {
@@ -412,6 +440,7 @@ private enum DiffRow: Identifiable {
     case addedSubStep(id: UUID, parentId: UUID, text: String)
     case removedSubStep(id: UUID, parentId: UUID, text: String)
     case updatedSubStep(id: UUID, parentId: UUID, oldText: String, newText: String)
+    case groupHeader(id: UUID, text: String)
 
     var id: UUID {
         switch self {
@@ -423,6 +452,7 @@ private enum DiffRow: Identifiable {
         case .addedSubStep(let id, _, _):            return id
         case .removedSubStep(let id, _, _):          return id
         case .updatedSubStep(let id, _, _, _):       return id
+        case .groupHeader(let id, _):                return id
         }
     }
 }

@@ -208,16 +208,24 @@ struct PatchSetDecoder: Sendable {
             switch typeStr {
             case "add_ingredient":
                 guard let text = obj["text"] as? String else { return .schemaInvalid(.patchOpMissingField) }
-                patches.append(.addIngredient(text: text, afterId: obj["after_id"] as? String))
+                patches.append(.addIngredient(text: text, afterId: obj["after_id"] as? String, groupId: obj["group_id"] as? String))
             case "update_ingredient":
                 guard let id = obj["id"] as? String, let text = obj["text"] as? String else { return .schemaInvalid(.patchOpMissingField) }
                 patches.append(.updateIngredient(id: id, text: text))
             case "remove_ingredient":
                 guard let id = obj["id"] as? String else { return .schemaInvalid(.patchOpMissingField) }
                 patches.append(.removeIngredient(id: id))
+            case "add_ingredient_group":
+                patches.append(.addIngredientGroup(afterGroupId: obj["after_group_id"] as? String, header: obj["header"] as? String, clientId: obj["client_id"] as? String))
+            case "update_ingredient_group":
+                guard let id = obj["id"] as? String else { return .schemaInvalid(.patchOpMissingField) }
+                patches.append(.updateIngredientGroup(id: id, header: obj["header"] as? String))
+            case "remove_ingredient_group":
+                guard let id = obj["id"] as? String else { return .schemaInvalid(.patchOpMissingField) }
+                patches.append(.removeIngredientGroup(id: id))
             case "add_step":
                 guard let text = obj["text"] as? String else { return .schemaInvalid(.patchOpMissingField) }
-                patches.append(.addStep(text: text, afterStepId: obj["after_step_id"] as? String, clientId: obj["client_id"] as? String))
+                patches.append(.addStep(text: text, afterId: obj["after_id"] as? String, parentId: obj["parent_id"] as? String, clientId: obj["client_id"] as? String))
             case "update_step":
                 guard let id = obj["id"] as? String, let text = obj["text"] as? String else { return .schemaInvalid(.patchOpMissingField) }
                 patches.append(.updateStep(id: id, text: text))
@@ -227,16 +235,20 @@ struct PatchSetDecoder: Sendable {
             case "set_title":
                 guard let title = obj["title"] as? String else { return .schemaInvalid(.patchOpMissingField) }
                 patches.append(.setTitle(title: title))
-            case "add_substep":
-                guard let text = obj["text"] as? String,
-                      let parentId = obj["parent_step_id"] as? String else { return .schemaInvalid(.patchOpMissingField) }
-                patches.append(.addSubstep(text: text, parentStepClientId: parentId, afterSubstepId: obj["after_substep_id"] as? String))
-            case "update_substep":
-                guard let id = obj["id"] as? String, let text = obj["text"] as? String else { return .schemaInvalid(.patchOpMissingField) }
-                patches.append(.updateSubstep(id: id, text: text))
-            case "remove_substep":
+            case "set_step_notes":
+                guard let stepId = obj["step_id"] as? String,
+                      let notes = obj["notes"] as? [String] else { return .schemaInvalid(.patchOpMissingField) }
+                patches.append(.setStepNotes(stepId: stepId, notes: notes))
+            case "add_note_section":
+                guard let items = obj["items"] as? [String] else { return .schemaInvalid(.patchOpMissingField) }
+                patches.append(.addNoteSection(afterId: obj["after_id"] as? String, header: obj["header"] as? String, items: items))
+            case "update_note_section":
+                guard let id = obj["id"] as? String,
+                      let items = obj["items"] as? [String] else { return .schemaInvalid(.patchOpMissingField) }
+                patches.append(.updateNoteSection(id: id, header: obj["header"] as? String, items: items))
+            case "remove_note_section":
                 guard let id = obj["id"] as? String else { return .schemaInvalid(.patchOpMissingField) }
-                patches.append(.removeSubstep(id: id))
+                patches.append(.removeNoteSection(id: id))
             default:
                 return .schemaInvalid(.patchOpUnknownType)
             }

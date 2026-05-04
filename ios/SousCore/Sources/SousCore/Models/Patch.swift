@@ -8,7 +8,7 @@ public enum Patch: Equatable, Sendable {
     case addIngredient(groupId: UUID?, afterId: UUID?, text: String)
     case updateIngredient(id: UUID, text: String)
     case removeIngredient(id: UUID)
-    case addIngredientGroup(afterGroupId: UUID?, header: String?)
+    case addIngredientGroup(afterGroupId: UUID?, header: String?, preassignedId: UUID?)
     case updateIngredientGroup(id: UUID, header: String?)
     case removeIngredientGroup(id: UUID)
 

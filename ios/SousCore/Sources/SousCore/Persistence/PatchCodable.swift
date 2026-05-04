@@ -68,10 +68,11 @@ extension Patch: Codable {
             try c.encode("removeIngredient", forKey: .type)
             try c.encode(id, forKey: .id)
 
-        case .addIngredientGroup(let afterGroupId, let header):
+        case .addIngredientGroup(let afterGroupId, let header, let preassignedId):
             try c.encode("addIngredientGroup", forKey: .type)
             try c.encodeIfPresent(afterGroupId, forKey: .afterGroupId)
             try c.encodeIfPresent(header, forKey: .header)
+            try c.encodeIfPresent(preassignedId, forKey: .preassignedId)
 
         case .updateIngredientGroup(let id, let header):
             try c.encode("updateIngredientGroup", forKey: .type)
@@ -147,7 +148,8 @@ extension Patch: Codable {
         case "addIngredientGroup":
             self = .addIngredientGroup(
                 afterGroupId: try c.decodeIfPresent(UUID.self, forKey: .afterGroupId),
-                header: try c.decodeIfPresent(String.self, forKey: .header)
+                header: try c.decodeIfPresent(String.self, forKey: .header),
+                preassignedId: try c.decodeIfPresent(UUID.self, forKey: .preassignedId)
             )
 
         case "updateIngredientGroup":

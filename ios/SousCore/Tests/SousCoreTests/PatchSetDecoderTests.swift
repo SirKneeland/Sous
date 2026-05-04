@@ -310,7 +310,7 @@ struct PatchSetDecoderTests {
         """
         let result = decoder.decode(json)
         guard let dto = expectSuccess(result, extractionUsed: false) else { return }
-        guard case .addIngredient(let text, let afterId) = dto.patchSet?.patches[0] else {
+        guard case .addIngredient(let text, let afterId, _) = dto.patchSet?.patches[0] else {
             Issue.record("Expected addIngredient patch op")
             return
         }
@@ -335,7 +335,7 @@ struct PatchSetDecoderTests {
         """
         let result = decoder.decode(json)
         guard let dto = expectSuccess(result, extractionUsed: false) else { return }
-        guard case .addIngredient(let text, let afterId) = dto.patchSet?.patches[0] else {
+        guard case .addIngredient(let text, let afterId, _) = dto.patchSet?.patches[0] else {
             Issue.record("Expected addIngredient patch op")
             return
         }
@@ -343,9 +343,9 @@ struct PatchSetDecoderTests {
         #expect(afterId == uuidStr)
     }
 
-    // MARK: Test 19: add_step with JSON null after_step_id — success, afterStepId decoded as nil
+    // MARK: Test 19: add_step with JSON null after_id — success, afterId decoded as nil
 
-    @Test func addStep_jsonNullAfterStepId_decodesAsNil() {
+    @Test func addStep_jsonNullAfterId_decodesAsNil() {
         let json = """
         {
             "assistant_message": "Adding a new step.",
@@ -353,18 +353,19 @@ struct PatchSetDecoderTests {
                 "patchSetId": "ps-1",
                 "baseRecipeId": "r-1",
                 "baseRecipeVersion": 1,
-                "patches": [{"type": "add_step", "text": "Stir well", "after_step_id": null}]
+                "patches": [{"type": "add_step", "text": "Stir well", "after_id": null}]
             }
         }
         """
         let result = decoder.decode(json)
         guard let dto = expectSuccess(result, extractionUsed: false) else { return }
-        guard case .addStep(let text, let afterStepId, _) = dto.patchSet?.patches[0] else {
+        guard case .addStep(let text, let afterId, let parentId, _) = dto.patchSet?.patches[0] else {
             Issue.record("Expected addStep patch op")
             return
         }
         #expect(text == "Stir well")
-        #expect(afterStepId == nil, "JSON null after_step_id must decode as nil")
+        #expect(afterId == nil, "JSON null after_id must decode as nil")
+        #expect(parentId == nil)
     }
 
     @Test("set_title op decodes title correctly")
@@ -381,79 +382,206 @@ struct PatchSetDecoderTests {
         #expect(title == "Pasta Carbonara")
     }
 
-    // MARK: - Sub-step op decoding
+    // MARK: - add_step with parent_id
 
-    @Test("add_substep decodes text, parent_step_id, and null after_substep_id")
-    func addSubstep_decodesFields() {
+    @Test("add_step with parent_id decodes parentId field")
+    func addStep_withParentId_decodesField() {
+        let parentId = "AAAABBBB-0000-0000-0000-000000000001"
         let json = """
-        {
-            "assistant_message": "Structured import",
-            "patchSet": {
-                "patchSetId": "ps-1",
-                "baseRecipeId": "r-1",
-                "baseRecipeVersion": 0,
-                "patches": [
-                    {"type": "add_step", "text": "Parboil the potatoes:", "after_step_id": null, "client_id": "parboil-phase"},
-                    {"type": "add_substep", "text": "Fill a large pot with salted water", "parent_step_id": "parboil-phase", "after_substep_id": null}
-                ]
-            }
-        }
+        {"assistant_message":"ok","patchSet":{"patchSetId":"ps-1","baseRecipeId":"r-1","baseRecipeVersion":1,"patches":[{"type":"add_step","text":"Sub-step","after_id":null,"parent_id":"\(parentId)"}]}}
         """
         let result = decoder.decode(json)
         guard let dto = expectSuccess(result, extractionUsed: false) else { return }
-        guard case .addSubstep(let text, let parentId, let afterSubId) = dto.patchSet?.patches[1] else {
-            Issue.record("Expected addSubstep at index 1")
+        guard case .addStep(let text, _, let decodedParentId, _) = dto.patchSet?.patches[0] else {
+            Issue.record("Expected addStep patch op")
             return
         }
-        #expect(text == "Fill a large pot with salted water")
-        #expect(parentId == "parboil-phase")
-        #expect(afterSubId == nil)
+        #expect(text == "Sub-step")
+        #expect(decodedParentId == parentId)
     }
 
-    @Test("add_substep missing parent_step_id → patchOpMissingField")
-    func addSubstep_missingParentStepId_fails() {
+    // MARK: - Ingredient group ops
+
+    @Test("add_ingredient_group decodes all optional fields")
+    func addIngredientGroup_decodesFields() {
         let json = """
-        {"assistant_message":"x","patchSet":{"patchSetId":"p1","baseRecipeId":"r1","baseRecipeVersion":0,"patches":[{"type":"add_substep","text":"step text"}]}}
+        {"assistant_message":"ok","patchSet":{"patchSetId":"ps-1","baseRecipeId":"r-1","baseRecipeVersion":1,"patches":[{"type":"add_ingredient_group","after_group_id":null,"header":"Sauce","client_id":"sauce-group"}]}}
+        """
+        let result = decoder.decode(json)
+        guard let dto = expectSuccess(result, extractionUsed: false) else { return }
+        guard case .addIngredientGroup(let afterGroupId, let header, let clientId) = dto.patchSet?.patches[0] else {
+            Issue.record("Expected addIngredientGroup patch op")
+            return
+        }
+        #expect(afterGroupId == nil)
+        #expect(header == "Sauce")
+        #expect(clientId == "sauce-group")
+    }
+
+    @Test("update_ingredient_group decodes id and header")
+    func updateIngredientGroup_decodesFields() {
+        let id = "AAAABBBB-0000-0000-0000-000000000002"
+        let json = """
+        {"assistant_message":"ok","patchSet":{"patchSetId":"ps-1","baseRecipeId":"r-1","baseRecipeVersion":1,"patches":[{"type":"update_ingredient_group","id":"\(id)","header":"Updated header"}]}}
+        """
+        let result = decoder.decode(json)
+        guard let dto = expectSuccess(result, extractionUsed: false) else { return }
+        guard case .updateIngredientGroup(let decodedId, let header) = dto.patchSet?.patches[0] else {
+            Issue.record("Expected updateIngredientGroup patch op")
+            return
+        }
+        #expect(decodedId == id)
+        #expect(header == "Updated header")
+    }
+
+    @Test("update_ingredient_group missing id → patchOpMissingField")
+    func updateIngredientGroup_missingId_fails() {
+        let json = """
+        {"assistant_message":"x","patchSet":{"patchSetId":"p1","baseRecipeId":"r1","baseRecipeVersion":0,"patches":[{"type":"update_ingredient_group","header":"h"}]}}
         """
         expectFailure(decoder.decode(json), .schemaInvalid(.patchOpMissingField))
     }
 
-    @Test("update_substep decodes id and text")
-    func updateSubstep_decodesFields() {
-        let subId = "AAAABBBB-0000-0000-0000-000000000099"
+    @Test("remove_ingredient_group decodes id")
+    func removeIngredientGroup_decodesId() {
+        let id = "AAAABBBB-0000-0000-0000-000000000003"
         let json = """
-        {"assistant_message":"ok","patchSet":{"patchSetId":"ps-1","baseRecipeId":"r-1","baseRecipeVersion":1,"patches":[{"type":"update_substep","id":"\(subId)","text":"Updated sub-step text"}]}}
+        {"assistant_message":"ok","patchSet":{"patchSetId":"ps-1","baseRecipeId":"r-1","baseRecipeVersion":1,"patches":[{"type":"remove_ingredient_group","id":"\(id)"}]}}
         """
         let result = decoder.decode(json)
         guard let dto = expectSuccess(result, extractionUsed: false) else { return }
-        guard case .updateSubstep(let id, let text) = dto.patchSet?.patches[0] else {
-            Issue.record("Expected updateSubstep at index 0")
+        guard case .removeIngredientGroup(let decodedId) = dto.patchSet?.patches[0] else {
+            Issue.record("Expected removeIngredientGroup patch op")
             return
         }
-        #expect(id == subId)
-        #expect(text == "Updated sub-step text")
+        #expect(decodedId == id)
     }
 
-    @Test("remove_substep decodes id")
-    func removeSubstep_decodesId() {
-        let subId = "AAAABBBB-0000-0000-0000-000000000088"
+    // MARK: - set_step_notes
+
+    @Test("set_step_notes decodes stepId and notes array")
+    func setStepNotes_decodesFields() {
+        let stepId = "AAAABBBB-0000-0000-0000-000000000004"
         let json = """
-        {"assistant_message":"ok","patchSet":{"patchSetId":"ps-1","baseRecipeId":"r-1","baseRecipeVersion":1,"patches":[{"type":"remove_substep","id":"\(subId)"}]}}
+        {"assistant_message":"ok","patchSet":{"patchSetId":"ps-1","baseRecipeId":"r-1","baseRecipeVersion":1,"patches":[{"type":"set_step_notes","step_id":"\(stepId)","notes":["Don't over-stir","Use low heat"]}]}}
         """
         let result = decoder.decode(json)
         guard let dto = expectSuccess(result, extractionUsed: false) else { return }
-        guard case .removeSubstep(let id) = dto.patchSet?.patches[0] else {
-            Issue.record("Expected removeSubstep at index 0")
+        guard case .setStepNotes(let decodedStepId, let notes) = dto.patchSet?.patches[0] else {
+            Issue.record("Expected setStepNotes patch op")
             return
         }
-        #expect(id == subId)
+        #expect(decodedStepId == stepId)
+        #expect(notes == ["Don't over-stir", "Use low heat"])
     }
 
-    @Test("complete_substep is now an unknown type and returns patchOpUnknownType")
+    @Test("set_step_notes missing step_id → patchOpMissingField")
+    func setStepNotes_missingStepId_fails() {
+        let json = """
+        {"assistant_message":"x","patchSet":{"patchSetId":"p1","baseRecipeId":"r1","baseRecipeVersion":0,"patches":[{"type":"set_step_notes","notes":["a"]}]}}
+        """
+        expectFailure(decoder.decode(json), .schemaInvalid(.patchOpMissingField))
+    }
+
+    // MARK: - Note section ops
+
+    @Test("add_note_section decodes items and optional fields")
+    func addNoteSection_decodesFields() {
+        let json = """
+        {"assistant_message":"ok","patchSet":{"patchSetId":"ps-1","baseRecipeId":"r-1","baseRecipeVersion":1,"patches":[{"type":"add_note_section","after_id":null,"header":"Tips","items":["Store airtight","Reheat gently"]}]}}
+        """
+        let result = decoder.decode(json)
+        guard let dto = expectSuccess(result, extractionUsed: false) else { return }
+        guard case .addNoteSection(let afterId, let header, let items) = dto.patchSet?.patches[0] else {
+            Issue.record("Expected addNoteSection patch op")
+            return
+        }
+        #expect(afterId == nil)
+        #expect(header == "Tips")
+        #expect(items == ["Store airtight", "Reheat gently"])
+    }
+
+    @Test("add_note_section missing items → patchOpMissingField")
+    func addNoteSection_missingItems_fails() {
+        let json = """
+        {"assistant_message":"x","patchSet":{"patchSetId":"p1","baseRecipeId":"r1","baseRecipeVersion":0,"patches":[{"type":"add_note_section","header":"Tips"}]}}
+        """
+        expectFailure(decoder.decode(json), .schemaInvalid(.patchOpMissingField))
+    }
+
+    @Test("update_note_section decodes id, header, and items")
+    func updateNoteSection_decodesFields() {
+        let id = "AAAABBBB-0000-0000-0000-000000000005"
+        let json = """
+        {"assistant_message":"ok","patchSet":{"patchSetId":"ps-1","baseRecipeId":"r-1","baseRecipeVersion":1,"patches":[{"type":"update_note_section","id":"\(id)","header":"Storage","items":["Keep refrigerated"]}]}}
+        """
+        let result = decoder.decode(json)
+        guard let dto = expectSuccess(result, extractionUsed: false) else { return }
+        guard case .updateNoteSection(let decodedId, let header, let items) = dto.patchSet?.patches[0] else {
+            Issue.record("Expected updateNoteSection patch op")
+            return
+        }
+        #expect(decodedId == id)
+        #expect(header == "Storage")
+        #expect(items == ["Keep refrigerated"])
+    }
+
+    @Test("remove_note_section decodes id")
+    func removeNoteSection_decodesId() {
+        let id = "AAAABBBB-0000-0000-0000-000000000006"
+        let json = """
+        {"assistant_message":"ok","patchSet":{"patchSetId":"ps-1","baseRecipeId":"r-1","baseRecipeVersion":1,"patches":[{"type":"remove_note_section","id":"\(id)"}]}}
+        """
+        let result = decoder.decode(json)
+        guard let dto = expectSuccess(result, extractionUsed: false) else { return }
+        guard case .removeNoteSection(let decodedId) = dto.patchSet?.patches[0] else {
+            Issue.record("Expected removeNoteSection patch op")
+            return
+        }
+        #expect(decodedId == id)
+    }
+
+    // MARK: - Removed op types are now unknown
+
+    @Test("add_substep is now unknown type → patchOpUnknownType")
+    func addSubstep_isUnknownType() {
+        let json = """
+        {"assistant_message":"x","patchSet":{"patchSetId":"p1","baseRecipeId":"r1","baseRecipeVersion":0,"patches":[{"type":"add_substep","text":"text","parent_step_id":"p"}]}}
+        """
+        expectFailure(decoder.decode(json), .schemaInvalid(.patchOpUnknownType))
+    }
+
+    @Test("update_substep is now unknown type → patchOpUnknownType")
+    func updateSubstep_isUnknownType() {
+        let id = "AAAABBBB-0000-0000-0000-000000000099"
+        let json = """
+        {"assistant_message":"x","patchSet":{"patchSetId":"p1","baseRecipeId":"r1","baseRecipeVersion":0,"patches":[{"type":"update_substep","id":"\(id)","text":"t"}]}}
+        """
+        expectFailure(decoder.decode(json), .schemaInvalid(.patchOpUnknownType))
+    }
+
+    @Test("remove_substep is now unknown type → patchOpUnknownType")
+    func removeSubstep_isUnknownType() {
+        let id = "AAAABBBB-0000-0000-0000-000000000088"
+        let json = """
+        {"assistant_message":"x","patchSet":{"patchSetId":"p1","baseRecipeId":"r1","baseRecipeVersion":0,"patches":[{"type":"remove_substep","id":"\(id)"}]}}
+        """
+        expectFailure(decoder.decode(json), .schemaInvalid(.patchOpUnknownType))
+    }
+
+    @Test("complete_substep is unknown type → patchOpUnknownType")
     func completeSubstep_isUnknownType() {
-        let subId = "AAAABBBB-0000-0000-0000-000000000077"
+        let id = "AAAABBBB-0000-0000-0000-000000000077"
         let json = """
-        {"assistant_message":"ok","patchSet":{"patchSetId":"ps-1","baseRecipeId":"r-1","baseRecipeVersion":1,"patches":[{"type":"complete_substep","id":"\(subId)"}]}}
+        {"assistant_message":"ok","patchSet":{"patchSetId":"ps-1","baseRecipeId":"r-1","baseRecipeVersion":1,"patches":[{"type":"complete_substep","id":"\(id)"}]}}
+        """
+        expectFailure(decoder.decode(json), .schemaInvalid(.patchOpUnknownType))
+    }
+
+    @Test("add_note is unknown type → patchOpUnknownType")
+    func addNote_isUnknownType() {
+        let json = """
+        {"assistant_message":"x","patchSet":{"patchSetId":"p1","baseRecipeId":"r1","baseRecipeVersion":0,"patches":[{"type":"add_note","text":"Great with wine"}]}}
         """
         expectFailure(decoder.decode(json), .schemaInvalid(.patchOpUnknownType))
     }

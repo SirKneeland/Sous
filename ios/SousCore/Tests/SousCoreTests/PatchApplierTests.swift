@@ -99,7 +99,7 @@ struct PatchApplierTests {
         let patchSet = PatchSet(
             baseRecipeId: recipe.id,
             baseRecipeVersion: 1,
-            patches: [.addIngredientGroup(afterGroupId: nil, header: "Spices")]
+            patches: [.addIngredientGroup(afterGroupId: nil, header: "Spices", preassignedId: nil)]
         )
         let updated = try PatchApplier.apply(patchSet: patchSet, to: recipe)
         #expect(updated.ingredients.count == 2)
@@ -113,7 +113,7 @@ struct PatchApplierTests {
         let patchSet = PatchSet(
             baseRecipeId: recipe.id,
             baseRecipeVersion: 1,
-            patches: [.addIngredientGroup(afterGroupId: SeedRecipes.ingredientGroupId, header: "Spices")]
+            patches: [.addIngredientGroup(afterGroupId: SeedRecipes.ingredientGroupId, header: "Spices", preassignedId: nil)]
         )
         let updated = try PatchApplier.apply(patchSet: patchSet, to: recipe)
         #expect(updated.ingredients.count == 2)

@@ -80,8 +80,8 @@ public enum PatchApplier {
                     ingredients[gIdx].items.removeAll { $0.id == id }
                 }
 
-            case .addIngredientGroup(let afterGroupId, let header):
-                let newGroup = IngredientGroup(header: header, items: [])
+            case .addIngredientGroup(let afterGroupId, let header, let preassignedId):
+                let newGroup = IngredientGroup(id: preassignedId ?? UUID(), header: header, items: [])
                 if let afterGroupId = afterGroupId, let idx = ingredients.firstIndex(where: { $0.id == afterGroupId }) {
                     ingredients.insert(newGroup, at: idx + 1)
                 } else {

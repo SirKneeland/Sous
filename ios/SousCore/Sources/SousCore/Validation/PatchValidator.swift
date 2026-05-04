@@ -76,6 +76,8 @@ public enum PatchValidator {
         var removedIngredientIds: Set<UUID> = []
         var removedGroupIds: Set<UUID> = []
         var removedStepIds: Set<UUID> = []
+        var pendingGroupIds: Set<UUID> = []
+        var pendingStepIds: Set<UUID> = []
 
         for patch in patchSet.patches {
             switch patch {
@@ -89,9 +91,10 @@ public enum PatchValidator {
                 if let groupId = groupId {
                     let groupExists = recipe.ingredients.contains { $0.id == groupId }
                     let groupRemoved = removedGroupIds.contains(groupId)
-                    if !groupExists || groupRemoved {
+                    let groupPending = pendingGroupIds.contains(groupId)
+                    if (!groupExists && !groupPending) || groupRemoved {
                         errors.append(.invalidIngredientGroupId(groupId))
-                    } else if let afterId = afterId {
+                    } else if !groupPending, let afterId = afterId {
                         let group = recipe.ingredients.first(where: { $0.id == groupId })!
                         let afterExists = group.items.contains { $0.id == afterId }
                         let alreadyRemoved = removedIngredientIds.contains(afterId)
@@ -124,8 +127,8 @@ public enum PatchValidator {
                     removedIngredientIds.insert(id)
                 }
 
-            case .addIngredientGroup:
-                break
+            case .addIngredientGroup(_, _, let preassignedId):
+                pendingGroupIds.insert(preassignedId ?? UUID())
 
             case .updateIngredientGroup(let id, _):
                 let groupExists = recipe.ingredients.contains { $0.id == id }
@@ -146,12 +149,19 @@ public enum PatchValidator {
                     }
                 }
 
-            case .addStep(let parentId, let afterId, let text, _):
+            case .addStep(let parentId, let afterId, let text, let preassignedStepId):
+                if let preassignedStepId {
+                    pendingStepIds.insert(preassignedStepId)
+                }
                 if let match = hardAvoidMatch(in: text, hardAvoids: hardAvoids) {
                     errors.append(.hardAvoidViolation(ingredient: match))
                 }
                 if let parentId = parentId {
                     let parentRemoved = removedStepIds.contains(parentId)
+                    let parentPending = pendingStepIds.contains(parentId)
+                    if parentPending && !parentRemoved {
+                        break
+                    }
                     guard let parent = findStep(id: parentId, in: recipe.steps), !parentRemoved else {
                         errors.append(.invalidStepId(parentId))
                         break
@@ -200,6 +210,10 @@ public enum PatchValidator {
 
             case .setStepNotes(let stepId, _):
                 let alreadyRemoved = removedStepIds.contains(stepId)
+                let isPending = pendingStepIds.contains(stepId)
+                if isPending && !alreadyRemoved {
+                    break
+                }
                 guard let step = findStep(id: stepId, in: recipe.steps), !alreadyRemoved else {
                     errors.append(.invalidStepId(stepId))
                     break

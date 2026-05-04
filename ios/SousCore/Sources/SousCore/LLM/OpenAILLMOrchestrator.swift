@@ -28,7 +28,7 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
     public let model: String
     public let timeout: TimeInterval
 
-    private static let promptVersion = "v6"
+    private static let promptVersion = "v8"
     private static let maxCalls = 3
 
     public init(client: LLMClient,
@@ -444,16 +444,24 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
 
             // DTO → Patch (UUID parse failures are recoverable)
             // Pre-pass: assign UUIDs to any add_step ops that carry a client_id so
-            // sibling add_substep ops can reference the correct parentStepId.
+            // sibling add_step ops can reference the correct parentId.
             var clientIdToUUID: [String: UUID] = [:]
             for dto in psDTO.patches {
-                if case .addStep(_, _, let clientId) = dto, let clientId {
+                if case .addStep(_, _, _, let clientId) = dto, let clientId {
                     clientIdToUUID[clientId] = UUID()
+                }
+            }
+            // Pre-pass: assign UUIDs to any add_ingredient_group ops that carry a client_id
+            // so sibling add_ingredient ops can reference the group by client_id.
+            var groupClientIdToUUID: [String: UUID] = [:]
+            for dto in psDTO.patches {
+                if case .addIngredientGroup(_, _, let clientId) = dto, let clientId {
+                    groupClientIdToUUID[clientId] = UUID()
                 }
             }
             let patches: [Patch]
             do {
-                patches = try psDTO.patches.map { try toPatch($0, clientIdMap: clientIdToUUID) }
+                patches = try psDTO.patches.map { try toPatch($0, clientIdMap: clientIdToUUID, groupClientIdMap: groupClientIdToUUID) }
             } catch {
                 let sig = "validationRecoverable:INVALID_ID"
                 if sig == context.lastFailureSignature {
@@ -713,23 +721,47 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             7. In assistant_message, briefly acknowledge the loaded recipe by name and invite the user to adapt it (serving size, substitutions, dietary changes, etc.). Keep it short — one or two sentences.
 
             FORMATTING RULES — for richly-formatted sources (ChatGPT output, markdown, emoji-decorated text):
-            8. When a section header introduces a numbered or lettered list of sub-steps (e.g. "Parboil the potatoes:" followed by "1. Fill pot…", "2. Add potatoes…"), emit the header as add_step with a short kebab-case client_id, then emit each numbered item as add_substep with parent_step_id matching that client_id. Keep each sub-step's text verbatim. Do NOT fold numbered sub-steps into the header text.
-               Example source: "Parboil the potatoes:\n1. Fill a large pot with salted water and bring to a boil\n2. Add diced potatoes and cook 8 minutes\n3. Drain and set aside"
-               Example patches: {"type":"add_step","text":"Parboil the potatoes:","after_step_id":null,"client_id":"parboil-phase"} then {"type":"add_substep","text":"Fill a large pot with salted water and bring to a boil","parent_step_id":"parboil-phase","after_substep_id":null} then {"type":"add_substep","text":"Add diced potatoes and cook 8 minutes","parent_step_id":"parboil-phase","after_substep_id":null} then {"type":"add_substep","text":"Drain and set aside","parent_step_id":"parboil-phase","after_substep_id":null}
-            9. Emoji bullets used for tips or emphasis (e.g. 👉 Don't move too early) are annotations on their surrounding step context, not standalone steps. Incorporate them into the nearest logical step.
-            10. Omit non-actionable narrative sections entirely. This includes sections titled things like "What success looks like", "Common failure modes", "Game plan", closing remarks, and upgrade suggestions. Only extract ingredients and actionable cooking steps.
-            11. Section headers (e.g. "Meatloaf = crustmaxx", "Brioche = anti-sog system") are grouping labels, not steps. Omit them or fold their meaning into the first step of that section.
-            12. Inline context like heat settings (e.g. "Gas: medium-high / Induction: 400°F") belongs to the step it accompanies — incorporate it into that step's text, not as a separate step.
+            8. When a step header introduces sub-steps (numbered list, lettered list, or named sub-phases like "Prep / Cook / Finish"), emit the header as add_step with a client_id, then emit each sub-item as add_step with parent_id matching that client_id. Sub-items that themselves have children get their own client_id. Support up to three levels of nesting. Keep each item's text verbatim.
+               Example source: "Parboil the potatoes:\n1. Fill a large pot with salted water\n2. Add diced potatoes and cook 8 minutes\n3. Drain and set aside"
+               Example patches:
+               {"type":"add_step","text":"Parboil the potatoes","parent_id":null,"after_id":null,"client_id":"parboil"}
+               {"type":"add_step","text":"Fill a large pot with salted water","parent_id":"parboil","after_id":null}
+               {"type":"add_step","text":"Add diced potatoes and cook 8 minutes","parent_id":"parboil","after_id":null}
+               {"type":"add_step","text":"Drain and set aside","parent_id":"parboil","after_id":null}
+            9. Emoji bullets and inline tips (👉 etc.) that annotate a specific step belong on that step as set_step_notes, not as standalone steps. Reference the step by its client_id if just added: {"type":"set_step_notes","step_id":"<client_id_of_step>","notes":["tip text"]}
+            10. Non-actionable narrative sections — including "What success looks like", "Result", "Common failure modes", "Key notes", closing remarks, and upgrade suggestions — must be captured as a recipe-level note section, not discarded. Emit: {"type":"add_note_section","header":"<section title>","items":["item1","item2"],"after_id":null}
+            11. Named rule sections (e.g. "Tight & elite rules") become a note section with their header preserved and their bullet points as items.
+            12. Inline context like heat settings (e.g. "Gas: medium / Induction: 350°F") belongs in the step text it accompanies — incorporate it inline, not as a separate step.
+            13. When grouped ingredients are present (e.g. "Pork", "Cheese", "Bread"), emit add_ingredient_group for each group before its ingredients. Use a kebab client_id to reference the group in subsequent add_ingredient patches:
+                {"type":"add_ingredient_group","header":"Pork","after_group_id":null,"client_id":"group-pork"}
+                {"type":"add_ingredient","text":"Cooked pork chops","group_id":"group-pork","after_id":null}
+                If no grouping is present in the source, use add_ingredient with group_id: null throughout.
+            14. A line is only a step if it contains an imperative verb — an instruction to do something. Lines that fail this test must never become add_step patches. Handle them as follows:
+
+                "Key: value" lines (heat settings, pan specs, timing context) — e.g. "Gas: medium", "Induction: ~350°F", "Pan: cast iron" — belong on their parent step as set_step_notes, not as child steps. This includes any label that introduces only key:value or measurement lines beneath it ("Stovetop", "Pan:", "Heat:", "Equipment:") — that label is a category header, not a step. Never emit it as add_step. Fold the lines it introduces directly into set_step_notes on the nearest cooking action step.
+                WRONG — never do this:
+                {"type":"add_step","text":"Stovetop","parent_id":"step-1-cook","after_id":null,"client_id":"step-1-stovetop"}
+                {"type":"add_step","text":"Gas: medium","parent_id":"step-1-stovetop","after_id":null}
+                {"type":"add_step","text":"Induction: ~350°F","parent_id":"step-1-stovetop","after_id":null}
+                CORRECT — always do this:
+                {"type":"set_step_notes","step_id":"step-1-cook","notes":["Gas: medium","Induction: ~350°F"]}
+
+                Lines under outcome headers — headers like "You want:", "Goal:", "Result:", "You're looking for:", "You want" — and their bullet items are quality targets, not actions. Emit the header and its items together as set_step_notes on the nearest parent step that is an actual cooking action.
+                WRONG: {"type":"add_step","text":"You want:","parent_id":"step-1-cook","after_id":null} + child steps "soft", "slightly jammy", "a few golden edges"
+                CORRECT: {"type":"set_step_notes","step_id":"step-1-cook","notes":["You want: soft, slightly jammy, a few golden edges"]}
+
+                Single adjectives, noun phrases, or sentence fragments with no verb ("soft", "slightly jammy", "crispy edges", "moderate heat") are never steps. Fold them into the nearest set_step_notes or note section.
 
             Output shape (patchSetId must be a new UUID you generate):
-            {"assistant_message":"...","patchSet":{"patchSetId":"<new-uuid>","baseRecipeId":"<copy id from RECIPE CONTEXT>","baseRecipeVersion":<copy version from RECIPE CONTEXT>,"patches":[{"type":"set_title","title":"..."},{"type":"add_ingredient","text":"...","after_id":null},{"type":"add_step","text":"...","after_step_id":null},{"type":"add_substep","text":"...","parent_step_id":"<client_id>","after_substep_id":null}]}}
+            {"assistant_message":"...","patchSet":{"patchSetId":"<new-uuid>","baseRecipeId":"<copy id from RECIPE CONTEXT>","baseRecipeVersion":<copy version from RECIPE CONTEXT>,"patches":[{"type":"set_title","title":"..."},{"type":"add_ingredient","text":"...","group_id":null,"after_id":null},{"type":"add_step","text":"...","parent_id":null,"after_id":null}]}}
 
-            Patch operations (blank canvas — always null for after_id, after_step_id, and after_substep_id):
+            Patch operations (blank canvas — always null for after_id and after_group_id on add operations):
             {"type":"set_title","title":"..."}
-            {"type":"add_ingredient","text":"...","after_id":null}
-            {"type":"add_step","text":"...","after_step_id":null}                                    (add client_id:"<kebab-string>" when this step has numbered sub-steps)
-            {"type":"add_substep","text":"...","parent_step_id":"<client_id>","after_substep_id":null}
-            {"type":"add_note","text":"..."}
+            {"type":"add_ingredient_group","header":"<string or null>","after_group_id":null,"client_id":"<kebab>"}   (omit client_id if no ingredients reference this group)
+            {"type":"add_ingredient","text":"...","group_id":"<client_id or null>","after_id":null}
+            {"type":"add_step","text":"...","parent_id":"<client_id or null>","after_id":null,"client_id":"<kebab>"}  (add client_id when this step has children in the same patchSet)
+            {"type":"set_step_notes","step_id":"<client_id>","notes":["..."]}
+            {"type":"add_note_section","header":"<string or null>","items":["..."],"after_id":null}
             """
         } else if hasCanvas {
             return """
@@ -744,7 +776,7 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             RULES — never violate:
             1. Never reprint the full recipe. The canvas is the source of truth.
             2. Output JSON only. No markdown. No code fences. No prose outside JSON.
-            3. DONE STEPS ARE IMMUTABLE — HARD PROHIBITION. Before emitting any patchSet, check the "done step IDs (immutable)" list in RECIPE CONTEXT. Never include a patch that targets any of those IDs — not update_step, not remove_step, not any other operation. This applies even if the user explicitly asks. If the user asks to change a done step, set patchSet: null, explain in assistant_message that the step is already completed and cannot be changed, and offer a forward-looking workaround (e.g. add a corrective step after the done step). Wrong: {"type":"update_step","id":"<done-step-id>","text":"..."}. Correct: {"type":"add_step","text":"<corrective action>","after_step_id":"<done-step-id>"}.
+            3. DONE STEPS ARE IMMUTABLE — HARD PROHIBITION. Before emitting any patchSet, check the "done step IDs (immutable)" list in RECIPE CONTEXT. Never include a patch that targets any of those IDs — not update_step, not remove_step, not any other operation. This applies even if the user explicitly asks. If the user asks to change a done step, set patchSet: null, explain in assistant_message that the step is already completed and cannot be changed, and offer a forward-looking workaround (e.g. add a corrective step after the done step). Wrong: {"type":"update_step","id":"<done-step-id>","text":"..."}. Correct: {"type":"add_step","text":"<corrective action>","after_step_id":"<done-step-id>"}. Done step immutability is recursive — if all children of a parent step are done, the parent is also considered done and immutable. Never target a parent or any of its children if the parent's effectiveStatus is done.
             4. HARD-AVOID CONFLICTS — HARD PROHIBITION. Before emitting any patchSet that adds or substitutes an ingredient, check hardAvoids in RECIPE CONTEXT. If the ingredient matches a hard-avoid — including variants and derived forms (e.g. shrimp = shellfish, peanuts = nuts) — you MUST: (a) set patchSet: null, (b) name the conflict explicitly in assistant_message (e.g. "shrimp is shellfish and you have 'no shellfish' listed"), and (c) ask the user how to proceed or offer a compliant alternative. Never silently add a violating ingredient. Never emit a patchSet containing it. This applies even if the user asks directly — flag first, patch only after explicit confirmation.
             5. When you cannot fulfill a request due to a constraint — such as a step being marked done, a hard-avoid ingredient conflict, or any other restriction — you must always explain the constraint clearly in assistant_message and offer a workaround or recovery path. Never return an empty assistant_message.
             6. Handle vague, incomplete, or casual input gracefully. Don't ask the user to rephrase — read the intent, make a reasonable interpretation, and act on it. Only ask a question when you genuinely cannot proceed without one specific piece of information, and make that question feel natural, not like a form.
@@ -760,27 +792,34 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             Output shape — with changes (patchSetId must be a new UUID you generate):
             {"assistant_message":"...","patchSet":{"patchSetId":"<new-uuid>","baseRecipeId":"<copy id from RECIPE CONTEXT>","baseRecipeVersion":<copy version from RECIPE CONTEXT>,"patches":[<operations>]}}
 
-            Patch operations (exact "type" values; after_id / after_step_id are JSON null to append at end, or a UUID string to insert after that specific item):
+            Patch operations (exact "type" values; after_id is JSON null to append, or a UUID string to insert after that specific item):
             {"type":"set_title","title":"..."}
-            {"type":"add_ingredient","text":"...","after_id":null}
+            {"type":"add_ingredient","text":"...","group_id":"<uuid or null>","after_id":null}
             {"type":"update_ingredient","id":"<uuid>","text":"..."}
             {"type":"remove_ingredient","id":"<uuid>"}
-            {"type":"add_step","text":"...","after_step_id":null}            (add client_id:"<kebab-string>" when this new step will have sub-steps added in the same patchSet)
+            {"type":"add_ingredient_group","header":"<string or null>","after_group_id":null}
+            {"type":"update_ingredient_group","id":"<uuid>","header":"<string or null>"}
+            {"type":"remove_ingredient_group","id":"<uuid>"}
+            {"type":"add_step","text":"...","parent_id":"<uuid or null>","after_id":null,"client_id":"<kebab>"}  (parent_id null = top-level; add client_id only when this new step will have children added in the same patchSet)
             {"type":"update_step","id":"<uuid>","text":"..."}
             {"type":"remove_step","id":"<uuid>"}
-            {"type":"add_substep","text":"...","parent_step_id":"<uuid-or-client_id>","after_substep_id":null}   (parent_step_id is the UUID of an existing step, or the client_id of a new add_step in the same patchSet)
-            {"type":"update_substep","id":"<uuid>","text":"..."}
-            {"type":"remove_substep","id":"<uuid>"}
-            {"type":"complete_substep","id":"<uuid>"}
-            {"type":"add_note","text":"..."}
+            {"type":"set_step_notes","step_id":"<uuid>","notes":["..."]}   (replaces the full notes array on that step — include all notes, not just new ones)
+            {"type":"add_note_section","header":"<string or null>","items":["..."],"after_id":null}
+            {"type":"update_note_section","id":"<uuid>","header":"<string or null>","items":["..."]}
+            {"type":"remove_note_section","id":"<uuid>"}
 
             STEP DECOMPOSITION — few-shot example:
             Scenario: step s3 has id "a1b2c3d4-0000-0000-0000-000000000003" and text "Make the sauce: whisk soy sauce, sesame oil, garlic, ginger, and cornstarch." User says "Can you break that sauce step into smaller pieces?"
             WRONG — never do this:
             {"patches":[{"type":"remove_step","id":"a1b2c3d4-0000-0000-0000-000000000003"},{"type":"add_step","text":"Whisk soy sauce and sesame oil","after_step_id":null},{"type":"add_step","text":"Add minced garlic and grated ginger","after_step_id":null},{"type":"add_step","text":"Stir in cornstarch until smooth","after_step_id":null}]}
             CORRECT — always do this:
-            {"patches":[{"type":"update_step","id":"a1b2c3d4-0000-0000-0000-000000000003","text":"Make the sauce:"},{"type":"add_substep","text":"Whisk together soy sauce and sesame oil","parent_step_id":"a1b2c3d4-0000-0000-0000-000000000003","after_substep_id":null},{"type":"add_substep","text":"Add minced garlic and grated ginger","parent_step_id":"a1b2c3d4-0000-0000-0000-000000000003","after_substep_id":null},{"type":"add_substep","text":"Stir in cornstarch until smooth","parent_step_id":"a1b2c3d4-0000-0000-0000-000000000003","after_substep_id":null}]}
-            Rule: when decomposing a step, ALWAYS update_step the parent to a short header label and emit add_substep for each piece. NEVER remove_step + add_step.
+            {"patches":[
+              {"type":"update_step","id":"a1b2c3d4-0000-0000-0000-000000000003","text":"Make the sauce:"},
+              {"type":"add_step","text":"Whisk together soy sauce and sesame oil","parent_id":"a1b2c3d4-0000-0000-0000-000000000003","after_id":null},
+              {"type":"add_step","text":"Add minced garlic and grated ginger","parent_id":"a1b2c3d4-0000-0000-0000-000000000003","after_id":null},
+              {"type":"add_step","text":"Stir in cornstarch until smooth","parent_id":"a1b2c3d4-0000-0000-0000-000000000003","after_id":null}
+            ]}
+            Rule: when decomposing a step, ALWAYS update_step the parent to a short header label and emit add_step with parent_id for each piece. NEVER remove_step + add_step.
 
             MOVING A STEP — few-shot example:
             Scenario: step s3 has id "a1b2c3d4-0000-0000-0000-000000000003" and text "Brown the sausage." It appears in the middle of the recipe. User says "Move the sausage browning to the beginning."
@@ -828,25 +867,51 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             Output shape — creating recipe (patchSetId must be a new UUID you generate):
             {"assistant_message":"...","patchSet":{"patchSetId":"<new-uuid>","baseRecipeId":"<from RECIPE CONTEXT>","baseRecipeVersion":<from RECIPE CONTEXT>,"patches":[{"type":"set_title","title":"..."},{"type":"add_ingredient","text":"...","after_id":null},{"type":"add_step","text":"...","after_step_id":null}]}}
 
-            Patch operations for recipe creation (blank canvas — always null for after_id and after_step_id):
+            Patch operations for recipe creation (blank canvas — always null for after_id and after_group_id):
             {"type":"set_title","title":"..."}
-            {"type":"add_ingredient","text":"...","after_id":null}
-            {"type":"add_step","text":"...","after_step_id":null}
-            {"type":"add_note","text":"..."}
+            {"type":"add_ingredient_group","header":"<string or null>","after_group_id":null,"client_id":"<kebab>"}
+            {"type":"add_ingredient","text":"...","group_id":"<client_id or null>","after_id":null}
+            {"type":"add_step","text":"...","parent_id":"<client_id or null>","after_id":null,"client_id":"<kebab>"}
+            {"type":"add_note_section","header":"<string or null>","items":["..."],"after_id":null}
             """
+        }
+    }
+
+    private func stepJSON(_ step: Step) -> String {
+        var parts = [#""id":"\#(step.id.uuidString)""#, #""text":"\#(step.text)""#, #""status":"\#(step.status == .done ? "done" : "todo")""#]
+        if let notes = step.notes, !notes.isEmpty {
+            let notesJSON = notes.map { #""\#($0)""# }.joined(separator: ",")
+            parts.append(#""notes":[\#(notesJSON)]"#)
+        }
+        if let subs = step.subSteps, !subs.isEmpty {
+            let childrenJSON = subs.map { stepJSON($0) }.joined(separator: ",")
+            parts.append(#""children":[\#(childrenJSON)]"#)
+        }
+        return "{\(parts.joined(separator: ","))}"
+    }
+
+    private func allDoneIds(_ steps: [Step]) -> [String] {
+        steps.flatMap { step -> [String] in
+            var ids: [String] = []
+            if step.status == .done { ids.append(step.id.uuidString) }
+            if let subs = step.subSteps { ids += allDoneIds(subs) }
+            return ids
         }
     }
 
     private func recipeContextMessage(for request: LLMRequest) -> String {
         let r = request.recipeSnapshotForPrompt
         let ingredients = r.ingredients
-            .flatMap { $0.items }
-            .map { #"{"id":"\#($0.id.uuidString)","text":"\#($0.text)"}"# }
+            .map { group -> String in
+                let headerJSON = group.header.map { #""\#($0)""# } ?? "null"
+                let itemsJSON = group.items
+                    .map { #"{"id":"\#($0.id.uuidString)","text":"\#($0.text)"}"# }
+                    .joined(separator: ",")
+                return #"{"group":\#(headerJSON),"items":[\#(itemsJSON)]}"#
+            }
             .joined(separator: ",")
-        let steps = r.steps
-            .map { #"{"id":"\#($0.id.uuidString)","text":"\#($0.text)","status":"\#($0.status == .done ? "done" : "todo")"}"# }
-            .joined(separator: ",")
-        let doneIds = r.steps.filter { $0.status == .done }.map { $0.id.uuidString }.joined(separator: ", ")
+        let steps = r.steps.map { stepJSON($0) }.joined(separator: ",")
+        let doneIds = allDoneIds(r.steps).joined(separator: ", ")
         let prefs = request.userPrefs
         let avoids = prefs.hardAvoids.isEmpty ? "none" : prefs.hardAvoids.joined(separator: ", ")
 
@@ -859,6 +924,15 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             "hardAvoids: \(avoids)",
             "personalityMode: \(prefs.personalityMode)"
         ]
+
+        if let notes = r.notes, !notes.isEmpty {
+            let notesJSON = notes.map { section -> String in
+                let headerJSON = section.header.map { #""\#($0)""# } ?? "null"
+                let itemsJSON = section.items.map { #""\#($0)""# }.joined(separator: ",")
+                return #"{"id":"\#(section.id.uuidString)","header":\#(headerJSON),"items":[\#(itemsJSON)]}"#
+            }.joined(separator: ",")
+            lines.append("notes: [\(notesJSON)]")
+        }
 
         if !prefs.hardAvoids.isEmpty {
             let avoidsWarning = prefs.hardAvoids.joined(separator: ", ")
@@ -898,41 +972,59 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
     /// `clientIdMap` carries the pre-generated UUIDs for any `addStep` DTOs that
     /// supplied a `client_id`.  Must be built before calling this function (see the
     /// pre-pass in `decodeAndValidate`).
-    private func toPatch(_ dto: LLMPatchOpDTO, clientIdMap: [String: UUID] = [:]) throws -> Patch {
+    private func toPatch(_ dto: LLMPatchOpDTO, clientIdMap: [String: UUID] = [:], groupClientIdMap: [String: UUID] = [:]) throws -> Patch {
         func uuid(_ s: String) throws -> UUID {
             guard let u = UUID(uuidString: s) else { throw ConversionError.invalidUUID }
             return u
         }
         switch dto {
-        case .addIngredient(let text, let afterIdStr):
-            return .addIngredient(groupId: nil, afterId: try afterIdStr.map { try uuid($0) }, text: text)
+        case .addIngredient(let text, let afterIdStr, let groupIdStr):
+            let groupId: UUID? = try groupIdStr.map { str in
+                if let mapped = groupClientIdMap[str] { return mapped }
+                return try uuid(str)
+            }
+            return .addIngredient(groupId: groupId, afterId: try afterIdStr.map { try uuid($0) }, text: text)
         case .updateIngredient(let idStr, let text):
             return .updateIngredient(id: try uuid(idStr), text: text)
         case .removeIngredient(let idStr):
             return .removeIngredient(id: try uuid(idStr))
-        case .addStep(let text, let afterStepIdStr, let clientId):
-            // Use the pre-generated UUID when a client_id was supplied, so sibling
-            // addSubstep patches can reference this step via parentId.
+        case .addIngredientGroup(let afterGroupIdStr, let header, let clientId):
+            let preassignedId = clientId.flatMap { groupClientIdMap[$0] }
+            return .addIngredientGroup(afterGroupId: try afterGroupIdStr.map { try uuid($0) }, header: header, preassignedId: preassignedId)
+        case .updateIngredientGroup(let idStr, let header):
+            return .updateIngredientGroup(id: try uuid(idStr), header: header)
+        case .removeIngredientGroup(let idStr):
+            return .removeIngredientGroup(id: try uuid(idStr))
+        case .addStep(let text, let afterIdStr, let parentIdStr, let clientId):
+            // Use the pre-generated UUID when a client_id was supplied so sibling
+            // add_step ops can reference this step via parent_id.
             let preassignedId = clientId.flatMap { clientIdMap[$0] }
-            return .addStep(parentId: nil, afterId: try afterStepIdStr.map { try uuid($0) }, text: text, preassignedId: preassignedId)
+            let parentId = try parentIdStr.map { str -> UUID in
+                // parent_id may be a client_id reference or a real UUID
+                if let mapped = clientIdMap[str] { return mapped }
+                return try uuid(str)
+            }
+            return .addStep(parentId: parentId, afterId: try afterIdStr.map { try uuid($0) }, text: text, preassignedId: preassignedId)
         case .updateStep(let idStr, let text):
             return .updateStep(id: try uuid(idStr), text: text)
         case .removeStep(let idStr):
             return .removeStep(id: try uuid(idStr))
         case .setTitle(let title):
             return .setTitle(title)
-        case .addSubstep(let text, let parentClientId, let afterSubstepIdStr):
-            // Look up the pre-assigned UUID for the parent step.  If the model
-            // referenced an unknown client_id, fall back to a flat addStep so the
-            // import still succeeds rather than failing the whole patchSet.
-            guard let parentUUID = clientIdMap[parentClientId] else {
-                return .addStep(parentId: nil, afterId: nil, text: text, preassignedId: nil)
+        case .setStepNotes(let stepIdStr, let notes):
+            let stepId: UUID
+            if let mapped = clientIdMap[stepIdStr] {
+                stepId = mapped
+            } else {
+                stepId = try uuid(stepIdStr)
             }
-            return .addStep(parentId: parentUUID, afterId: try afterSubstepIdStr.map { try uuid($0) }, text: text, preassignedId: nil)
-        case .updateSubstep(let idStr, let text):
-            return .updateStep(id: try uuid(idStr), text: text)
-        case .removeSubstep(let idStr):
-            return .removeStep(id: try uuid(idStr))
+            return .setStepNotes(stepId: stepId, notes: notes)
+        case .addNoteSection(let afterIdStr, let header, let items):
+            return .addNoteSection(afterId: try afterIdStr.map { try uuid($0) }, header: header, items: items)
+        case .updateNoteSection(let idStr, let header, let items):
+            return .updateNoteSection(id: try uuid(idStr), header: header, items: items)
+        case .removeNoteSection(let idStr):
+            return .removeNoteSection(id: try uuid(idStr))
         }
     }
 

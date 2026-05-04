@@ -31,12 +31,12 @@ final class PatchCodableTests: XCTestCase {
     }
 
     func test_addIngredientGroup_withHeader() throws {
-        let patch = Patch.addIngredientGroup(afterGroupId: SeedRecipes.ingredientGroupId, header: "Spices")
+        let patch = Patch.addIngredientGroup(afterGroupId: SeedRecipes.ingredientGroupId, header: "Spices", preassignedId: nil)
         XCTAssertEqual(try roundTrip(patch), patch)
     }
 
     func test_addIngredientGroup_nilOptionals() throws {
-        let patch = Patch.addIngredientGroup(afterGroupId: nil, header: nil)
+        let patch = Patch.addIngredientGroup(afterGroupId: nil, header: nil, preassignedId: nil)
         XCTAssertEqual(try roundTrip(patch), patch)
     }
 

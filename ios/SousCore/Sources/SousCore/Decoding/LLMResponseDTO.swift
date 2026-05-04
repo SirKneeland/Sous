@@ -36,20 +36,21 @@ struct LLMPatchSetDTO: Equatable, Sendable {
 /// A fully decoded patch operation. IDs are raw strings; UUID parsing happens at the
 /// orchestrator boundary when converting to the canonical Patch enum.
 enum LLMPatchOpDTO: Equatable, Sendable {
-    case addIngredient(text: String, afterId: String?)
+    case addIngredient(text: String, afterId: String?, groupId: String?)
     case updateIngredient(id: String, text: String)
     case removeIngredient(id: String)
-    /// `clientId` is a model-assigned temporary reference used so sibling
-    /// add_substep ops can reference the correct parent via parentStepClientId.
-    case addStep(text: String, afterStepId: String?, clientId: String?)
+    case addIngredientGroup(afterGroupId: String?, header: String?, clientId: String?)
+    case updateIngredientGroup(id: String, header: String?)
+    case removeIngredientGroup(id: String)
+    /// `clientId` is a model-assigned temporary reference; `parentId` links to a parent step.
+    case addStep(text: String, afterId: String?, parentId: String?, clientId: String?)
     case updateStep(id: String, text: String)
     case removeStep(id: String)
     case setTitle(title: String)
-    /// Sub-step operations. `parentStepClientId` is the model-assigned client_id on the
-    /// parent `add_step` patch; resolved to a parentId UUID at toPatch time.
-    case addSubstep(text: String, parentStepClientId: String, afterSubstepId: String?)
-    case updateSubstep(id: String, text: String)
-    case removeSubstep(id: String)
+    case setStepNotes(stepId: String, notes: [String])
+    case addNoteSection(afterId: String?, header: String?, items: [String])
+    case updateNoteSection(id: String, header: String?, items: [String])
+    case removeNoteSection(id: String)
 }
 
 // MARK: - LLMSummaryDTO

@@ -1121,6 +1121,10 @@ final class AppStore: ObservableObject {
 
         let result = await orchestrator.run(request)
 
+        #if DEBUG
+        print("[runImportLLM] raw result: \(result)")
+        #endif
+
         guard !Task.isCancelled else {
             llmDebugStatus = "cancelled"
             return
