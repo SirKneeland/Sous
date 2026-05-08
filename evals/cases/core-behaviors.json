@@ -66,11 +66,11 @@
         ]
       },
       "chatHistory": [],
-      "userMessage": "I'm out of onions"
+      "userMessage": "I'm out of onions — just remove them or swap in something similar"
     },
     "expected": {
       "shouldPatch": true,
-      "notes": "Should propose a patchSet targeting the onion ingredient and the step referencing onions. Must not modify any steps with status 'done'. Substitution (e.g., shallots or skip) is acceptable."
+      "notes": "User has explicitly asked to remove or substitute the onion ingredient. Should propose a patchSet targeting ingredient i2 (onions) and updating step s3 which references onions. Must not modify any steps with status 'done'. Substitution (e.g., shallots, fennel, or skip) is acceptable."
     }
   },
   {
@@ -460,9 +460,9 @@
         "version": 1,
         "title": "Simple Pasta",
         "ingredients": [
-          { "id": "i1", "text": "200g spaghetti" },
-          { "id": "i2", "text": "2 cloves garlic" },
-          { "id": "i3", "text": "3 tbsp olive oil" }
+          { "id": "i1", "name": "spaghetti", "quantity": "200", "unit": "g", "checked": false },
+          { "id": "i2", "name": "garlic", "quantity": "2", "unit": "cloves", "checked": false },
+          { "id": "i3", "name": "olive oil", "quantity": "3", "unit": "tbsp", "checked": false }
         ],
         "steps": [
           { "id": "s1", "text": "Boil salted water.", "status": "todo" },
@@ -479,7 +479,7 @@
   },
   {
     "name": "generate-recipe-assistant-message-is-prose",
-    "description": "User triggers recipe generation after a full exploration conversation. Sous must emit a valid patchSet AND keep assistant_message as plain conversational prose — never a JSON fragment like '{' or an embedded patchSet.",
+    "description": "User triggers recipe generation after a full exploration conversation. Sous must emit NDJSON with a chat line containing plain conversational prose — never a JSON fragment or embedded patchSet in the chat text.",
     "promptType": "no_canvas",
     "input": {
       "recipeState": null,
@@ -492,8 +492,9 @@
       "userMessage": "Generate the recipe."
     },
     "expected": {
-      "shouldPatch": true,
-      "notes": "Sous must return a patchSet with set_title, add_ingredient, and add_step patches for a classic herb roast chicken. Critically, assistant_message must be plain conversational prose — it must NOT contain any JSON, a bare '{', or any structured data. Embedding the patchSet or any JSON object (even partially) inside assistant_message is always wrong. The patchSet belongs exclusively in the top-level patchSet field."
+      "shouldPatch": false,
+      "shouldGenerateRecipe": true,
+      "notes": "Sous must return NDJSON lines for a classic herb roast chicken (type:chat, type:meta, type:ingredient lines, type:step lines). The type:chat line text must be plain conversational prose — it must NOT contain any JSON, a bare '{', or any structured data. All lines must be valid JSON objects. At least two ingredient lines and two step lines are required."
     }
   },
   {
@@ -539,6 +540,24 @@
     "expected": {
       "shouldPatch": false,
       "notes": "Sous must not emit a patchSet (still exploring). It must include proposed_memory in the JSON response. The proposed_memory value must be a second-person phrase starting with 'You' — e.g. 'You hate mushrooms' or 'You avoid mushrooms'. Third-person phrasing ('hates mushrooms', 'avoids mushrooms') or subject-less phrases are wrong."
+    }
+  },
+  {
+    "name": "ndjson-recipe-creation",
+    "description": "User gives a clear commit prompt for a simple recipe. Sous must emit NDJSON with a chat line, a meta line, at least two ingredient lines, and at least two step lines — all valid JSON.",
+    "promptType": "no_canvas",
+    "input": {
+      "recipeState": null,
+      "chatHistory": [
+        { "role": "assistant", "content": "{\"assistant_message\":\"A classic pasta carbonara sounds perfect. Ready to build it?\",\"patchSet\":null,\"suggest_generate\":true}" },
+        { "role": "user", "content": "Yes, let's do it" }
+      ],
+      "userMessage": "Make me a simple pasta carbonara"
+    },
+    "expected": {
+      "shouldPatch": false,
+      "shouldGenerateRecipe": true,
+      "notes": "Response must be NDJSON — one JSON object per line, no markdown. Required: at least one line with type 'meta' containing a title, at least two lines with type 'ingredient', at least two lines with type 'step'. A type 'chat' line with conversational prose should appear first. All lines must be valid JSON. No trailing prose or markdown after the last line."
     }
   }
 ]

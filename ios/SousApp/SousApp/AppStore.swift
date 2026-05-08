@@ -116,6 +116,12 @@ final class AppStore: ObservableObject {
     /// Whether the mise en place section is expanded on the recipe canvas.
     /// Persisted in SessionSnapshot so it survives relaunch and recipe switches.
     @Published var miseEnPlaceExpanded: Bool = false
+    /// True while a recipe is being built via the streaming creation path.
+    /// Drives a loading indicator on the canvas until the title arrives.
+    @Published var isStreamingRecipe: Bool = false
+
+    /// Tracks the most recently opened IngredientGroup during streaming recipe creation.
+    private var streamingCurrentGroupId: UUID? = nil
 
     private let maxMessages = 200
     private let liveLLMModel = "gpt-5.4-mini"
@@ -674,6 +680,24 @@ final class AppStore: ObservableObject {
 #endif
 
         let llmClient = OpenAIClient(apiKey: resolvedAPIKey())
+
+        // Creation streaming path: bypass the standard orchestrator decode+validate pipeline.
+        // Only active when there is no canvas yet, not an import call, and no test orchestrator.
+        if !request.hasCanvas && !request.isImportExtraction && testOrchestrator == nil {
+            let orchForCreation = OpenAILLMOrchestrator(
+                client: llmClient,
+                streamingClient: llmClient,
+                model: liveLLMModel
+            )
+            await streamCreationRecipe(
+                request: request,
+                streamingClient: llmClient,
+                orchestrator: orchForCreation,
+                generation: generation
+            )
+            return
+        }
+
         let orchestrator: any LLMOrchestrator = testOrchestrator ?? OpenAILLMOrchestrator(
             client: llmClient,
             streamingClient: llmClient,   // explicit injection avoids runtime existential cast
@@ -1320,6 +1344,222 @@ final class AppStore: ObservableObject {
             miseEnPlaceExpanded: overrideMiseEnPlace ?? miseEnPlaceExpanded,
             cachedSummary: sessionSummaryCache[uiState.recipe.id]
         )
+    }
+
+    // MARK: - Streaming Recipe Creation
+
+    /// Creates an empty recipe, makes the canvas visible, and marks streaming as active.
+    /// Mirrors the import extraction bypass: no patch review, no PatchApplier.
+    /// Must not call cancelLiveLLM — this is invoked from within the streaming task itself.
+    func beginStreamedRecipe() {
+        let emptyRecipe = Recipe(id: UUID(), version: 1, title: "")
+        hasCanvas = true
+        isSessionPersistable = true
+        isStreamingRecipe = true
+        streamingCurrentGroupId = nil
+        chatTranscript = []
+        nextLLMContext = nil
+        uiState = .recipeOnly(recipe: emptyRecipe)
+    }
+
+    /// Applies a single parsed NDJSON line to the live recipe.
+    func applyStreamedLine(_ line: StreamedRecipeLine) {
+        var recipe = uiState.recipe
+        switch line {
+        case .chat(let text):
+            append(ChatMessage(role: .assistant, text: text))
+
+        case .meta(let title, _):
+            recipe.title = title
+            uiState = uiState.replacingRecipe(recipe)
+
+        case .ingredientGroup(let header):
+            let group = IngredientGroup(header: header)
+            streamingCurrentGroupId = group.id
+            recipe.ingredients.append(group)
+            uiState = uiState.replacingRecipe(recipe)
+
+        case .ingredient(let idString, let text):
+            let ingredient = Ingredient(id: UUID(uuidString: idString) ?? UUID(), text: text)
+            if let gid = streamingCurrentGroupId,
+               let idx = recipe.ingredients.firstIndex(where: { $0.id == gid }) {
+                recipe.ingredients[idx].items.append(ingredient)
+            } else {
+                var group = IngredientGroup()
+                group.items.append(ingredient)
+                streamingCurrentGroupId = group.id
+                recipe.ingredients.append(group)
+            }
+            uiState = uiState.replacingRecipe(recipe)
+
+        case .step(let idString, let parentIdString, let text):
+            let stepId = UUID(uuidString: idString) ?? UUID()
+            let newStep = Step(id: stepId, text: text)
+            if let parentStr = parentIdString, let parentId = UUID(uuidString: parentStr) {
+                recipe.steps = appendSubStep(newStep, parentId: parentId, in: recipe.steps)
+            } else {
+                recipe.steps.append(newStep)
+            }
+            uiState = uiState.replacingRecipe(recipe)
+
+        case .note(let idString, let title, let body):
+            let section = NoteSection(
+                id: UUID(uuidString: idString) ?? UUID(),
+                header: title,
+                items: [body]
+            )
+            var notes = recipe.notes ?? []
+            notes.append(section)
+            recipe.notes = notes
+            uiState = uiState.replacingRecipe(recipe)
+        }
+    }
+
+    /// Marks streaming complete and persists the assembled recipe to disk.
+    func finalizeStreamedRecipe() {
+        isStreamingRecipe = false
+        streamingCurrentGroupId = nil
+        saveSession()
+    }
+
+    // MARK: - Streaming Recipe Creation (NDJSON path)
+
+    /// Streams a creation response from the model, parsing NDJSON lines and applying them to
+    /// the canvas incrementally. Falls back to handleExplorationResponse if the model outputs
+    /// standard exploration JSON instead of NDJSON.
+    private func streamCreationRecipe(
+        request: LLMRequest,
+        streamingClient: any StreamingLLMClient,
+        orchestrator: OpenAILLMOrchestrator,
+        generation: Int
+    ) async {
+        let clientRequest = orchestrator.buildCreationStreamClientRequest(for: request)
+        let llmStream = streamingClient.stream(clientRequest)
+
+        var lineBuffer = ""
+        var accumulatedText = ""
+        var isNDJSON: Bool? = nil
+        var hasBegunRecipe = false
+        var pendingChatText: String? = nil
+
+        do {
+            for try await token in llmStream {
+                if Task.isCancelled { break }
+                accumulatedText += token
+                lineBuffer += token
+
+                while let newlineIdx = lineBuffer.firstIndex(of: "\n") {
+                    let line = String(lineBuffer[lineBuffer.startIndex..<newlineIdx])
+                    lineBuffer = String(lineBuffer[lineBuffer.index(after: newlineIdx)...])
+                    let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !trimmed.isEmpty else { continue }
+
+                    if isNDJSON == nil {
+                        if let parsed = StreamedRecipeLine.parse(trimmed) {
+                            isNDJSON = true
+                            if case .chat(let text) = parsed {
+                                pendingChatText = text
+                            } else {
+                                beginStreamedRecipe()
+                                hasBegunRecipe = true
+                                if let chatText = pendingChatText {
+                                    applyStreamedLine(.chat(text: chatText))
+                                    pendingChatText = nil
+                                }
+                                applyStreamedLine(parsed)
+                            }
+                        } else {
+                            isNDJSON = false
+                        }
+                    } else if isNDJSON == true {
+                        guard let parsed = StreamedRecipeLine.parse(trimmed) else { continue }
+                        if !hasBegunRecipe {
+                            if case .chat(let text) = parsed {
+                                pendingChatText = text
+                                continue
+                            }
+                            beginStreamedRecipe()
+                            hasBegunRecipe = true
+                            if let chatText = pendingChatText {
+                                applyStreamedLine(.chat(text: chatText))
+                                pendingChatText = nil
+                            }
+                        }
+                        applyStreamedLine(parsed)
+                    }
+                    // isNDJSON == false: just accumulate, handled after stream ends
+                }
+            }
+        } catch {
+            if hasBegunRecipe { finalizeStreamedRecipe() }
+            guard llmGeneration == generation else { return }
+            append(ChatMessage(role: .assistant, text: "Network issue. Check connection and try again."))
+            llmDebugStatus = "failed"
+            return
+        }
+
+        guard !Task.isCancelled else { return }
+
+        // Process any remaining content in the line buffer after stream ends
+        let remaining = lineBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !remaining.isEmpty, isNDJSON != false {
+            if let parsed = StreamedRecipeLine.parse(remaining) {
+                if !hasBegunRecipe {
+                    beginStreamedRecipe()
+                    hasBegunRecipe = true
+                    if let chatText = pendingChatText {
+                        applyStreamedLine(.chat(text: chatText))
+                        pendingChatText = nil
+                    }
+                }
+                applyStreamedLine(parsed)
+            }
+        }
+
+        guard llmGeneration == generation else { return }
+
+        if hasBegunRecipe {
+            finalizeStreamedRecipe()
+        } else {
+            // Exploration mode: model returned standard JSON rather than NDJSON
+            handleExplorationResponse(accumulatedText)
+        }
+    }
+
+    /// Parses a standard exploration JSON response and applies it to AppStore state.
+    /// Called when the creation streaming path receives non-NDJSON output (exploration phase).
+    private func handleExplorationResponse(_ text: String) {
+        guard let data = text.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            append(ChatMessage(role: .assistant, text: "Something went wrong. Please try again."))
+            llmDebugStatus = "failed"
+            return
+        }
+        let msg = (json["assistant_message"] as? String) ?? "Something went wrong. Please try again."
+        let sg = json["suggest_generate"] as? Bool
+        let mem = json["proposed_memory"] as? String
+        nextLLMContext = nil
+        let safeMessage = sanitizedAssistantMessage(msg, hasCanvas: hasCanvas)
+        append(ChatMessage(role: .assistant, text: safeMessage))
+        llmDebugStatus = "succeeded"
+        if let memory = mem { proposeMemory(text: memory) }
+        if let sg = sg { canGenerateRecipe = sg }
+    }
+
+    /// Recursively searches `steps` for a step with `parentId` and appends `newStep` as its sub-step.
+    private func appendSubStep(_ newStep: Step, parentId: UUID, in steps: [Step]) -> [Step] {
+        return steps.map { step in
+            if step.id == parentId {
+                var subs = step.subSteps ?? []
+                subs.append(newStep)
+                return Step(id: step.id, text: step.text, status: step.status, subSteps: subs, notes: step.notes)
+            }
+            if let subs = step.subSteps, !subs.isEmpty {
+                let updated = appendSubStep(newStep, parentId: parentId, in: subs)
+                return Step(id: step.id, text: step.text, status: step.status, subSteps: updated, notes: step.notes)
+            }
+            return step
+        }
     }
 
     // MARK: - Debug simulation

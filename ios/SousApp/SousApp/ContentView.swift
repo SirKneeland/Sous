@@ -94,6 +94,7 @@ struct ContentView: View {
                         let rowType: QuotedRowContext.RowType = type == "ingredient" ? .ingredient : .step
                         store.openChatWithRowContext(type: rowType, text: text)
                     },
+                    isStreamingRecipe: store.isStreamingRecipe,
                     miseEnPlaceIsLoading: store.miseEnPlaceIsLoading,
                     miseEnPlaceError: store.miseEnPlaceError,
                     llmDebugStatus: store.llmDebugStatus,

@@ -41,7 +41,7 @@ struct ChatSheetView: View {
             }
         }
         .offset(y: sheetBounceOffset)
-        // Root-level ThumbDrop zone: activates for the entire bottom fifth of the
+        // Root-level ThumbDrop zone: activates for the entire bottom 15% of the
         // screen when the chat sheet is presented in non-fullscreen (sheet) mode.
         // The input bar's own DragGesture remains unchanged and coexists with this.
         .background {

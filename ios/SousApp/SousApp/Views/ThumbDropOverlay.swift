@@ -4,7 +4,7 @@ import UIKit
 // MARK: - ThumbDropOverlay
 
 /// Installs a `UIPanGestureRecognizer` at the window level so that ThumbDrop
-/// can be triggered from anywhere in the bottom fifth of the screen, not just
+/// can be triggered from anywhere in the bottom 15% of the screen, not just
 /// from the input bar row.
 ///
 /// The UIView itself is zero-height and non-interactive; gesture recognition
@@ -219,14 +219,14 @@ struct ThumbDropOverlay: UIViewRepresentable {
         // MARK: - UIGestureRecognizerDelegate
 
         /// Reject the gesture before it begins if the touch did not start in the
-        /// bottom fifth of the screen, or if ThumbDrop is currently inactive.
+        /// bottom 15% of the screen, or if ThumbDrop is currently inactive.
         func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
             guard isActive else { return false }
             // location(in: nil) returns coordinates in the window — equivalent to
             // screen space on non-zoomed displays.
             let touchInWindow = gestureRecognizer.location(in: nil)
             let screenHeight = UIScreen.main.bounds.height
-            return touchInWindow.y >= screenHeight * 0.75
+            return touchInWindow.y >= screenHeight * 0.85
         }
 
         /// Always allow simultaneous recognition so this gesture never steals

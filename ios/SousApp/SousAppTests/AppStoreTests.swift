@@ -1314,4 +1314,196 @@ final class AppStoreTests: XCTestCase {
         XCTAssertNil(store.uiState.recipe.miseEnPlace,
                      "miseEnPlace must remain nil after reset when it was not set")
     }
+
+    // MARK: - StreamedRecipeLine.parse tests
+
+    // MARK: (m23-parse-a) parse returns correct case for all six type values
+
+    func test_m23parsa_parse_allSixTypes() {
+        let cases: [(String, Bool)] = [
+            (#"{"type":"chat","text":"Hello"}"#, true),
+            (#"{"type":"meta","title":"Pasta","servings":4}"#, true),
+            (#"{"type":"ingredientGroup","header":"Sauce"}"#, true),
+            (#"{"type":"ingredient","id":"A1B2C3D4-E5F6-7890-ABCD-EF1234567890","text":"Salt"}"#, true),
+            (#"{"type":"step","id":"A1B2C3D4-E5F6-7890-ABCD-EF1234567891","text":"Mix","parentId":null}"#, true),
+            (#"{"type":"note","id":"A1B2C3D4-E5F6-7890-ABCD-EF1234567892","body":"Tip"}"#, true),
+        ]
+        for (json, shouldParse) in cases {
+            let result = StreamedRecipeLine.parse(json)
+            XCTAssertEqual(result != nil, shouldParse, "Failed to parse: \(json)")
+        }
+    }
+
+    // MARK: (m23-parse-b) parse returns nil for unknown type
+
+    func test_m23parsb_parse_unknownType_returnsNil() {
+        let result = StreamedRecipeLine.parse(#"{"type":"unknown","foo":"bar"}"#)
+        XCTAssertNil(result)
+    }
+
+    // MARK: (m23-parse-c) parse returns nil for malformed JSON
+
+    func test_m23parsc_parse_malformedJSON_returnsNil() {
+        XCTAssertNil(StreamedRecipeLine.parse("not json"))
+        XCTAssertNil(StreamedRecipeLine.parse(""))
+    }
+
+    // MARK: (m23-parse-d) meta parses servings as optional
+
+    func test_m23parsd_parse_meta_servingsOptional() {
+        let withServings = StreamedRecipeLine.parse(#"{"type":"meta","title":"Soup","servings":2}"#)
+        let withoutServings = StreamedRecipeLine.parse(#"{"type":"meta","title":"Soup"}"#)
+        if case .meta(let t1, let s1) = withServings {
+            XCTAssertEqual(t1, "Soup")
+            XCTAssertEqual(s1, 2)
+        } else { XCTFail("Expected .meta with servings") }
+        if case .meta(let t2, let s2) = withoutServings {
+            XCTAssertEqual(t2, "Soup")
+            XCTAssertNil(s2)
+        } else { XCTFail("Expected .meta without servings") }
+    }
+
+    // MARK: (m23-parse-e) step parses optional parentId
+
+    func test_m23parse_step_parentIdOptional() {
+        let withParent = StreamedRecipeLine.parse(#"{"type":"step","id":"A1B2C3D4-E5F6-7890-ABCD-EF1234567891","text":"Sub","parentId":"A1B2C3D4-E5F6-7890-ABCD-EF1234567890"}"#)
+        let withoutParent = StreamedRecipeLine.parse(#"{"type":"step","id":"A1B2C3D4-E5F6-7890-ABCD-EF1234567891","text":"Root"}"#)
+        if case .step(_, let pid, _) = withParent {
+            XCTAssertNotNil(pid)
+        } else { XCTFail("Expected .step with parentId") }
+        if case .step(_, let pid, _) = withoutParent {
+            XCTAssertNil(pid)
+        } else { XCTFail("Expected .step without parentId") }
+    }
+
+    // MARK: - Streaming recipe creation tests
+
+    // MARK: (m23-a) beginStreamedRecipe — canvas visible, empty recipe, not patch review
+
+    func test_m23a_beginStreamedRecipe_canvasVisibleEmptyRecipeNoPatchReview() async {
+        let mock = ControlledOrchestrator()
+        let store = AppStore(testOrchestrator: mock)
+
+        store.beginStreamedRecipe()
+
+        XCTAssertTrue(store.hasCanvas, "hasCanvas must be true after beginStreamedRecipe")
+        XCTAssertTrue(store.isStreamingRecipe, "isStreamingRecipe must be true")
+        XCTAssertEqual(store.uiState.recipe.title, "", "Recipe title must be empty")
+        XCTAssertTrue(store.uiState.recipe.ingredients.isEmpty, "Ingredients must be empty")
+        XCTAssertTrue(store.uiState.recipe.steps.isEmpty, "Steps must be empty")
+        if case .recipeOnly = store.uiState {} else {
+            XCTFail("uiState must be .recipeOnly (canvas visible, no patch review)")
+        }
+    }
+
+    // MARK: (m23-b) applyStreamedLine(.meta) sets title
+
+    func test_m23b_applyStreamedLine_meta_setsTitle() async {
+        let mock = ControlledOrchestrator()
+        let store = AppStore(testOrchestrator: mock)
+
+        store.beginStreamedRecipe()
+        store.applyStreamedLine(.meta(title: "Pasta Carbonara", servings: 4))
+
+        XCTAssertEqual(store.uiState.recipe.title, "Pasta Carbonara",
+                       "Recipe title must be set by .meta line")
+    }
+
+    // MARK: (m23-c) applyStreamedLine(.step) with parentId nests correctly
+
+    func test_m23c_applyStreamedLine_step_withParentId_nestsUnderParent() async {
+        let mock = ControlledOrchestrator()
+        let store = AppStore(testOrchestrator: mock)
+        store.beginStreamedRecipe()
+
+        let parentId = UUID()
+        let childId = UUID()
+        store.applyStreamedLine(.step(id: parentId.uuidString, parentId: nil, text: "Parent step"))
+        store.applyStreamedLine(.step(id: childId.uuidString, parentId: parentId.uuidString, text: "Child step"))
+
+        let steps = store.uiState.recipe.steps
+        XCTAssertEqual(steps.count, 1, "Only the parent step should be at root level")
+        XCTAssertEqual(steps[0].id, parentId)
+        XCTAssertEqual(steps[0].subSteps?.count, 1, "Parent must have one sub-step")
+        XCTAssertEqual(steps[0].subSteps?[0].id, childId)
+        XCTAssertEqual(steps[0].subSteps?[0].text, "Child step")
+    }
+
+    // MARK: (m23-d) finalizeStreamedRecipe saves to disk
+
+    func test_m23d_finalizeStreamedRecipe_savesToDisk() async throws {
+        let tmpDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sous_test_m23d_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+
+        let store = AppStore(sessionsDirectory: tmpDir)
+        store.beginStreamedRecipe()
+        store.applyStreamedLine(.meta(title: "Test Recipe", servings: nil))
+        store.finalizeStreamedRecipe()
+
+        let recipeId = store.uiState.recipe.id
+        let fileURL = SessionPersistence.fileURL(for: recipeId, in: tmpDir)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: fileURL.path),
+                      "Session file must exist after finalizeStreamedRecipe")
+    }
+
+    // MARK: (m23-e) existing edit flow still goes through patch review
+
+    func test_m23e_existingEditFlow_stillGoesThroughPatchReview() async {
+        let mock = ControlledOrchestrator()
+        let store = AppStore(testOrchestrator: mock)
+
+        // Seed recipe is in recipeOnly state; open chat and send a message.
+        store.send(.openChat)
+        store.sendUserMessage("make it spicier")
+
+        // Allow the task to start and reach the orchestrator.
+        await drainMain()
+
+        // Resume with a valid patch result.
+        let patchSet = PatchSet(
+            baseRecipeId: AppStore.recipeId,
+            baseRecipeVersion: 1,
+            patches: [.setTitle("Spicy Bread")]
+        )
+        await mock.resume(with: .valid(patchSet: patchSet, assistantMessage: "Spiced it up!", raw: nil, debug: minimalDebug(), proposedMemory: nil))
+        await drainMain()
+
+        // Must land in patchReview, not recipeOnly.
+        if case .patchReview = store.uiState {} else {
+            XCTFail("Edit flow must land in patchReview, not bypass it")
+        }
+    }
+
+    // MARK: (m23-f) ingredient with no prior group auto-creates default group
+
+    func test_m23f_applyStreamedLine_ingredient_noGroup_autocreatesGroup() async {
+        let mock = ControlledOrchestrator()
+        let store = AppStore(testOrchestrator: mock)
+        store.beginStreamedRecipe()
+
+        store.applyStreamedLine(.ingredient(id: UUID().uuidString, text: "Salt"))
+
+        XCTAssertEqual(store.uiState.recipe.ingredients.count, 1, "Default group must be created")
+        XCTAssertEqual(store.uiState.recipe.ingredients[0].items.count, 1)
+        XCTAssertEqual(store.uiState.recipe.ingredients[0].items[0].text, "Salt")
+    }
+
+    // MARK: (m23-g) note appends NoteSection
+
+    func test_m23g_applyStreamedLine_note_appendsNoteSection() async {
+        let mock = ControlledOrchestrator()
+        let store = AppStore(testOrchestrator: mock)
+        store.beginStreamedRecipe()
+
+        let noteId = UUID()
+        store.applyStreamedLine(.note(id: noteId.uuidString, title: "Chef's tip", body: "Season generously"))
+
+        let notes = store.uiState.recipe.notes
+        XCTAssertEqual(notes?.count, 1)
+        XCTAssertEqual(notes?[0].id, noteId)
+        XCTAssertEqual(notes?[0].header, "Chef's tip")
+        XCTAssertEqual(notes?[0].items, ["Season generously"])
+    }
 }

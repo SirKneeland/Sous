@@ -23,6 +23,7 @@ struct RecipeCanvasView: View {
     /// Arguments: (rowType, rowText) where rowType is "ingredient" or "step".
     var onAskSousAbout: (String, String) -> Void = { _, _ in }
     var onMarkMiseEnPlaceUndone: (UUID) -> Void = { _ in }
+    var isStreamingRecipe: Bool = false
     var miseEnPlaceIsLoading: Bool = false
     var miseEnPlaceError: String? = nil
     var llmDebugStatus: String? = nil
@@ -64,6 +65,7 @@ struct RecipeCanvasView: View {
         onUpdateTitle: @escaping (String) -> Void = { _ in },
         onEditingTitleChanged: @escaping (Bool) -> Void = { _ in },
         onAskSousAbout: @escaping (String, String) -> Void = { _, _ in },
+        isStreamingRecipe: Bool = false,
         miseEnPlaceIsLoading: Bool = false,
         miseEnPlaceError: String? = nil,
         llmDebugStatus: String? = nil,
@@ -89,6 +91,7 @@ struct RecipeCanvasView: View {
         self.onUpdateTitle = onUpdateTitle
         self.onEditingTitleChanged = onEditingTitleChanged
         self.onAskSousAbout = onAskSousAbout
+        self.isStreamingRecipe = isStreamingRecipe
         self.miseEnPlaceIsLoading = miseEnPlaceIsLoading
         self.miseEnPlaceError = miseEnPlaceError
         self.llmDebugStatus = llmDebugStatus
@@ -117,6 +120,7 @@ struct RecipeCanvasView: View {
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
+                    .transition(.opacity)
             }
             ForEach(group.items, id: \.id) { ingredient in
                 IngredientRow(
@@ -132,6 +136,7 @@ struct RecipeCanvasView: View {
                     onCheckSwipe: { checkedIngredients.insert(ingredient.id) },
                     onAskSous: { onAskSousAbout("ingredient", ingredient.text) }
                 )
+                .transition(.opacity)
             }
         }
     }
@@ -176,6 +181,11 @@ struct RecipeCanvasView: View {
                                     // selection does not blur the field, so this is safe.
                                     if !focused { commitTitleEdit() }
                                 }
+                        } else if isStreamingRecipe && recipe.title.isEmpty {
+                            ProgressView()
+                                .tint(Color.sousTerracotta)
+                                .padding(.vertical, 8)
+                                .transition(.opacity)
                         } else {
                             Text(recipe.title.uppercased())
                                 .font(.sousTitle)
@@ -188,11 +198,13 @@ struct RecipeCanvasView: View {
                                     isTitleFocused = true
                                     onEditingTitleChanged(true)
                                 }
+                                .transition(.opacity)
                         }
                         Text("REV. \(recipe.version)")
                             .font(.sousCaption)
                             .foregroundStyle(Color.sousMuted)
                     }
+                    .animation(.easeIn(duration: 0.3), value: recipe.title.isEmpty)
                     .frame(maxWidth: .infinity)
                     .padding(.horizontal, titleInset)
                     .padding(.top, 20)
@@ -383,6 +395,7 @@ struct RecipeCanvasView: View {
                 // MARK: Step rows (recursive, flat-rendered)
                 ForEach(flatStepItems) { item in
                     stepFlatItemView(item)
+                        .transition(.opacity)
                 }
 
                 // MARK: Recipe-level note sections (collapsible)
@@ -481,6 +494,7 @@ struct RecipeCanvasView: View {
 #endif
 
             } // end List
+            .animation(isStreamingRecipe ? .easeIn(duration: 0.3) : nil, value: recipe.ingredients.flatMap { $0.items }.count + flatStepItems.count)
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .background(Color.sousBackground.paperTexture())
