@@ -116,7 +116,7 @@ private struct TimerStepTextView: UIViewRepresentable {
     // MARK: Shared style constants
 
     private var bodyFont: UIFont {
-        UIFont.monospacedSystemFont(ofSize: 15, weight: isCurrent ? .bold : .regular)
+        UIFont.systemFont(ofSize: 16, weight: isCurrent ? .bold : .regular)
     }
 
     private static var textUIColor: UIColor {

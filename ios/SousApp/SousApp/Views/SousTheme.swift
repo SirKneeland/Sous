@@ -58,23 +58,23 @@ extension Color {
 // MARK: - Typography
 
 extension Font {
-    /// Large, bold, ALL CAPS — recipe titles, screen titles
-    static let sousTitle: Font = .system(size: 24, weight: .bold, design: .monospaced)
+    /// New York serif, bold — recipe titles
+    static let sousTitle: Font = .system(size: 28, weight: .bold, design: .serif)
 
-    /// Small ALL CAPS burgundy — section headers (INGREDIENTS, PROCEDURE)
-    static let sousSectionHeader: Font = .system(size: 11, weight: .regular, design: .monospaced)
+    /// SF Pro, small ALL CAPS burgundy — section headers (INGREDIENTS, PROCEDURE)
+    static let sousSectionHeader: Font = .system(size: 11, weight: .semibold)
 
-    /// Regular weight — body text, ingredient names, step text, chat messages
-    static let sousBody: Font = .system(size: 15, weight: .regular, design: .monospaced)
+    /// SF Pro, regular weight — body text, ingredient names, step text, chat messages
+    static let sousBody: Font = .system(size: 16, weight: .regular)
 
-    /// Small — captions, timestamps, revision numbers
-    static let sousCaption: Font = .system(size: 11, weight: .regular, design: .monospaced)
+    /// SF Pro, small — captions, timestamps, revision numbers
+    static let sousCaption: Font = .system(size: 11, weight: .regular)
 
-    /// Medium weight — button labels (ALL CAPS)
-    static let sousButton: Font = .system(size: 14, weight: .semibold, design: .monospaced)
+    /// SF Pro, medium weight — button labels (ALL CAPS)
+    static let sousButton: Font = .system(size: 14, weight: .semibold)
 
-    /// Large bold — SOUS logotype in blank state
-    static let sousLogotype: Font = .system(size: 34, weight: .bold, design: .monospaced)
+    /// New York serif, large bold — SOUS logotype in blank state
+    static let sousLogotype: Font = .system(size: 34, weight: .bold, design: .serif)
 }
 
 // MARK: - Square Checkbox

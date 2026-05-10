@@ -36,7 +36,7 @@ struct APIKeyCallout: View {
                     .padding(.trailing, arrowTrailingPad)
 
                 Text("Start here — add your\nAPI key in Settings.")
-                    .font(.system(size: 15, weight: .semibold, design: .monospaced))
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Color.white)
                     .multilineTextAlignment(.trailing)
                     .padding(.horizontal, 12)

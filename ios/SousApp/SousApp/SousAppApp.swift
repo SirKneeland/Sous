@@ -30,20 +30,20 @@ struct SousAppApp: App {
                 : UIColor(red: 208/255, green: 203/255, blue: 195/255, alpha: 1)
         }
 
-        let monoFont = UIFont.monospacedSystemFont(ofSize: 16, weight: .semibold)
+        let titleFont = UIFont.systemFont(ofSize: 16, weight: .semibold)
 
         let appearance = UINavigationBarAppearance()
         appearance.configureWithOpaqueBackground()
         appearance.backgroundColor = creamColor
         appearance.shadowColor = separatorColor
         appearance.titleTextAttributes = [
-            .font: monoFont,
+            .font: titleFont,
             .foregroundColor: textColor
         ]
 
         let buttonAppearance = UIBarButtonItemAppearance()
         buttonAppearance.normal.titleTextAttributes = [
-            .font: UIFont.monospacedSystemFont(ofSize: 14, weight: .semibold),
+            .font: UIFont.systemFont(ofSize: 14, weight: .semibold),
             .foregroundColor: textColor
         ]
         appearance.buttonAppearance = buttonAppearance

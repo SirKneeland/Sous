@@ -797,7 +797,7 @@ struct RecipeCanvasView: View {
                         .frame(width: 12, height: 12)
                 } else {
                     Image(systemName: "carrot")
-                        .font(.system(size: 11, weight: .regular, design: .monospaced))
+                        .font(.system(size: 11, weight: .regular))
                 }
                 Text("MISE EN PLACE")
                     .font(.sousSectionHeader)
