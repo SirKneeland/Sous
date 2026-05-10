@@ -1352,12 +1352,11 @@ final class AppStore: ObservableObject {
     /// Mirrors the import extraction bypass: no patch review, no PatchApplier.
     /// Must not call cancelLiveLLM — this is invoked from within the streaming task itself.
     func beginStreamedRecipe() {
-        let emptyRecipe = Recipe(id: UUID(), version: 1, title: "")
+        let emptyRecipe = Recipe(id: uiState.recipe.id, version: 1, title: "")
         hasCanvas = true
         isSessionPersistable = true
         isStreamingRecipe = true
         streamingCurrentGroupId = nil
-        chatTranscript = []
         nextLLMContext = nil
         uiState = .recipeOnly(recipe: emptyRecipe)
     }
