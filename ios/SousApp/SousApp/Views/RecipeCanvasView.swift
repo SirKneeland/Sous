@@ -472,9 +472,10 @@ struct RecipeCanvasView: View {
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
 
-                // Bottom breathing room — sized to bottomZoneHeight so the Reset
-                // button scrolls fully clear of the BottomZoneView frame.
-                Color.clear.frame(height: bottomZoneHeight)
+                // Spacer so the Reset button has clearance above the home indicator.
+                // The remaining gap (BottomZoneView height) is handled by .safeAreaInset
+                // on the List, which accounts for the full visual coverage of the bar.
+                Color.clear.frame(height: 8)
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
@@ -497,6 +498,9 @@ struct RecipeCanvasView: View {
             .animation(isStreamingRecipe ? .easeIn(duration: 0.3) : nil, value: recipe.ingredients.flatMap { $0.items }.count + flatStepItems.count)
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                Color.clear.frame(height: bottomZoneHeight)
+            }
             .background(Color.sousBackground.paperTexture())
             .onScrollGeometryChange(for: ScrollState.self) { geo in
                 ScrollState(
