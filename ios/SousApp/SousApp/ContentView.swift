@@ -184,25 +184,9 @@ struct ContentView: View {
                 isCanvasEnabled: $isCanvasEnabled,
                 canvasOffset: $canvasOffset,
                 onNewRecipe: { store.requestNewSession(); timerManager.clearAll() },
-                onSettings: { showSettings = true }
+                onSettings: { showSettings = true },
+                isHamburgerVisible: !isChatOpen
             )
-        }
-        // Hamburger button — floats above the canvas and sidebar, but below the chat overlay.
-        .overlay(alignment: .topLeading) {
-            if !isChatOpen {
-                Button {
-                    store.showRecentRecipes.toggle()
-                } label: {
-                    Image(systemName: "line.3.horizontal")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundStyle(.white)
-                        .frame(width: 44, height: 44)
-                        .background(Color.sousTerracotta)
-                }
-                .buttonStyle(.plain)
-                .padding(.leading, 16)
-                .padding(.top, 16)
-            }
         }
         .sheet(isPresented: $store.isShowingImportSheet) {
             RecipeImportSheet(store: store, onCancel: {

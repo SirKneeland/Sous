@@ -24,6 +24,7 @@ struct HistoryDrawer: View {
     @Binding var canvasOffset: CGFloat
     var onNewRecipe: () -> Void = {}
     var onSettings: () -> Void = {}
+    var isHamburgerVisible: Bool = false
 
     @State private var progress: CGFloat = 0
     @State private var gestureActive = false
@@ -34,17 +35,14 @@ struct HistoryDrawer: View {
         GeometryReader { geo in
             let dw = geo.size.width * 0.80
             ZStack(alignment: .leading) {
-                if gestureActive || progress > 0.001 {
                     // Tap zone covering only the exposed right strip — dismisses drawer.
                     // z-order below the drawer panel so panel rows handle their own taps.
-                    // .transition(.identity) suppresses the default fade when this view
-                    // is removed as progress crosses 0 during the close animation.
                     Color.clear
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .contentShape(Rectangle())
                         .onTapGesture { snap(open: false) }
                         .padding(.leading, dw * progress)
-                        .transition(.identity)
+                        .allowsHitTesting(progress > 0.001)
 
                     VStack(spacing: 0) {
                         // MARK: Header
@@ -143,7 +141,6 @@ struct HistoryDrawer: View {
                             }
                         )
                     )
-                }
 
                 // 20pt left-edge hit zone. Always present and above the canvas.
                 Color.clear
@@ -167,6 +164,22 @@ struct HistoryDrawer: View {
                                 snap(open: p > 0.4 || value.velocity.width > 300)
                             }
                     )
+            }
+            .overlay(alignment: .topLeading) {
+                if isHamburgerVisible {
+                    Button {
+                        snap(open: !store.showRecentRecipes)
+                    } label: {
+                        Image(systemName: "line.3.horizontal")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundStyle(.white)
+                            .frame(width: 44, height: 44)
+                            .background(Color.sousTerracotta)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.leading, 16)
+                    .padding(.top, 16)
+                }
             }
             .onAppear { drawerWidth = dw }
             .onChange(of: geo.size.width) { _, w in drawerWidth = w * 0.80 }
