@@ -500,6 +500,67 @@ Commit triggers on either condition:
 - Downward translation ≥ 50pt, or
 - Peak downward velocity ≥ 400pt/s (tracked during drag, not at lift)
 
+## Voice Mode
+
+Voice Mode is a distinct interaction mode designed for hands-free cooking. It is not a variant of Chat Mode — it is a separate mode with its own UI surface, entry point, and state machine.
+
+### Entry
+
+Voice Mode is entered from Cook Mode via a dedicated mic button, positioned near the existing "Open Chat" button. It is not accessible from within Chat Mode.
+
+### UI Model
+
+- The recipe canvas remains the primary surface and stays visible and scrollable.
+- Voice Mode overlays a persistent bar at the bottom of the screen, rendered in the app's burgundy accent color.
+- The bar contains a centered state label and a full-width dot/bar animation strip at its bottom edge.
+- The X exit button is always visible in the top-right of the bar.
+
+### Bar States
+
+Voice Mode has five distinct states, each with a specific visual treatment:
+
+| State | Label | Animation |
+|---|---|---|
+| Ready | ○ ready | Two rows of pulsing square dots, moderate intensity |
+| Listening | ● listening | Full-width reactive bars (cream), responding to voice input |
+| Thinking | ○ thinking | Two rows of pulsing square dots, high intensity |
+| Speaking | ● speaking | Full-width reactive bars (salmon) |
+| Patch Pending | — | Accept/Reject buttons + two rows of slow-pulsing dots |
+
+Dot and bar animations share the same pixel pitch: 3px unit, 2px gap, 5px step. In the two-row dot states, the vertical gap between rows also matches this 2px gap.
+
+### Patch Proposals in Voice Mode
+
+When a patch arrives in Voice Mode:
+- The AI speaks a verbal summary of the proposed changes.
+- The bar transitions to Patch Pending state, showing Accept/Reject buttons alongside the voice dot indicator.
+- The full Patch Review Mode UI renders on the recipe canvas, identical to text-mode patch review.
+- The user can respond by voice ("accept" / "reject" / "yes" / "no") or by tapping the buttons.
+- Voice accept/reject is handled client-side via keyword detection — it does not route through the LLM.
+
+### Interrupt Behavior
+
+While the AI is speaking, lightweight keyword detection runs in parallel. Triggering words ("stop", "no", "wait", "shut up") immediately halt TTS playback, fire a haptic, and transition the bar to the Ready state as a cue to speak.
+
+Full barge-in (continuous listening during playback) is a future enhancement.
+
+### Exit
+
+Voice Mode can be exited via:
+- Voice keyword: "done", "exit", "stop listening"
+- Tapping the X button in the bar
+- ThumbDrop gesture
+
+### Architecture
+
+Voice Mode uses a hybrid pipeline (Path B):
+- **STT:** Apple SpeechAnalyzer (iOS 26+, on-device)
+- **LLM:** Existing Chat Completions pipeline, unchanged
+- **TTS:** OpenAI TTS API
+- **Keyword detection:** SpeechAnalyzer, handled entirely client-side
+
+This reuses the existing LLM orchestration, patch validation, and patch review flows without modification.
+
 ---
 
 ## Non-Goals (current)
@@ -516,4 +577,3 @@ Out of scope until explicitly added to the roadmap:
 - Preference inference or automated learning
 - Inline generated image display in chat responses (future paid feature)
 - Generated images (future paid feature)
-- Voice input/output (future paid feature)

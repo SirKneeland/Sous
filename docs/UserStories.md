@@ -295,3 +295,14 @@
   of the screen
 - Then the ThumbDrop gesture fires with a slingshot haptic sequence
 - And the chat sheet dismisses returning to Cook Mode
+
+--- 
+## Voice Mode
+
+- As a user cooking with messy hands, I can activate voice mode from Cook Mode so I can interact with Sous without touching my phone.
+- As a user in voice mode, I can see a persistent visual indicator at the bottom of the screen showing whether the system is ready, listening, thinking, or speaking.
+- As a user in voice mode, I can speak naturally to Sous and receive a spoken response, so the interaction feels conversational rather than transactional.
+- As a user in voice mode, I can interrupt Sous while it is speaking by saying "stop" or "wait", so I am not forced to listen to a response I already know is wrong.
+- As a user in voice mode, when a patch is proposed I can say "accept" or "reject" to action it, as an alternative to tapping the buttons.
+- As a user in voice mode, I can exit by saying "done" or "exit", tapping the X button in the bar, or using a ThumbDrop gesture.
+- As a user, the recipe canvas remains visible and readable while voice mode is active, so I can glance at my current step without switching modes.
