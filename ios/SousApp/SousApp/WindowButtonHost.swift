@@ -1,6 +1,17 @@
 import SwiftUI
 import UIKit
 
+// MARK: - HapticOnPressStyle
+
+private struct HapticOnPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .onChange(of: configuration.isPressed) { _, pressed in
+                if pressed { UIImpactFeedbackGenerator(style: .medium).impactOccurred() }
+            }
+    }
+}
+
 // MARK: - Keyboard Prewarm
 
 /// A zero-footprint UITextField kept in the view hierarchy while the recipe canvas is visible.
@@ -85,7 +96,7 @@ struct BottomZoneView: View {
                     .frame(height: 52)
                     .background(Color.sousTerracotta)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(HapticOnPressStyle())
 
                 Rectangle()
                     .fill(Color.white.opacity(0.25))
@@ -100,7 +111,7 @@ struct BottomZoneView: View {
                         .frame(width: 60, height: 52)
                         .background(Color.sousTerracotta)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(HapticOnPressStyle())
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
