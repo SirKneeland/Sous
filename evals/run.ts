@@ -48,13 +48,15 @@ interface TestExpected {
   shouldPatch?: boolean;
   shouldGenerateRecipe?: boolean;
   shouldSuggestGenerate?: boolean;
+  /** Voice-mode only. Expected function name, or false if no function call should be made. */
+  shouldCallVoiceFunction?: string | false;
   notes: string;
 }
 
 interface TestCase {
   name: string;
   description: string;
-  promptType: "no_canvas" | "has_canvas" | "import";
+  promptType: "no_canvas" | "has_canvas" | "import" | "voice";
   input: TestInput;
   expected: TestExpected;
   /** When true, the case is excluded from the eval run (known capability gap or WIP). */
@@ -66,6 +68,8 @@ interface EvalOutput {
   rawResponse: unknown;
   hasPatchSet: boolean;
   isValidJson: boolean;
+  /** Populated only for voice-mode cases when the model makes a function call. */
+  voiceFunctionCall?: { name: string; args: Record<string, unknown> };
 }
 
 // ---------------------------------------------------------------------------
@@ -224,6 +228,154 @@ Output shape — creating recipe (NDJSON — one JSON object per line, no other 
 {"type":"note","id":"note-1","title":"Tips","body":"Use room-temperature eggs to prevent scrambling when you add them to the pasta"}`;
 
 // ---------------------------------------------------------------------------
+// Voice mode: function tool definitions and system prompt builder
+// ---------------------------------------------------------------------------
+
+const VOICE_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
+  {
+    type: "function",
+    function: {
+      name: "propose_patch",
+      description:
+        "Propose a change to the current recipe. Call this immediately when the user requests a recipe change. Pass the complete PatchSet as a JSON string in patchJson.",
+      parameters: {
+        type: "object",
+        properties: {
+          patchJson: {
+            type: "string",
+            description: "A JSON string representing the full PatchSet to apply.",
+          },
+        },
+        required: ["patchJson"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "accept_recipe",
+      description:
+        "Accept the pending recipe change. Call this when the user says yes, accept, do it, looks good, or sounds good.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "reject_recipe",
+      description:
+        "Reject the pending recipe change. Call this when the user says no, reject, undo, cancel, or nope.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "exit_voice",
+      description:
+        "Exit voice mode. Call this when the user says done, exit, or stop listening. Say nothing before or after this call.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+];
+
+const VOICE_RECIPE_ID = "00000000-0000-0000-0000-000000000000";
+
+function buildVoiceSystemPromptForEval(recipeState: RecipeState | null): string {
+  const core = `You are Sous, a voice cooking assistant. The user is at the stove right now, speaking to you hands-free.
+
+VOICE DELIVERY RULES:
+Never use markdown, bullet points, numbered lists, bold, italics, or any formatting. Everything you say is spoken aloud.
+Keep replies to one or two sentences. Three sentences is the absolute maximum, and only when a patch announcement requires it.
+Never open with filler phrases like "Sure!", "Of course!", "Absolutely!", or "Great question!".
+Speak like a knowledgeable friend standing next to the user at the stove, not a corporate assistant reading from a script.
+
+WHAT YOU CAN DO:
+Answer cooking questions, give substitution advice, help troubleshoot problems, and propose changes to the recipe on the canvas.
+
+WHAT YOU CANNOT DO:
+Generate a new recipe. Enter an exploration or discovery mode. Help the user start a new recipe or change what they are cooking entirely.
+If the user asks to start over or cook something else, tell them in one sentence to exit voice mode and do it there.
+
+PROPOSING RECIPE CHANGES:
+When the user wants to change the recipe, call propose_patch immediately. Do not ask for confirmation first. Pass the complete PatchSet as a JSON string in the patchJson argument. After the call, announce what changed in one spoken sentence in plain language.
+Good: "I have doubled the chili flakes, say accept or reject or use the buttons on screen."
+Bad: reading field names, JSON, or asking whether to propose the change.
+Only call propose_patch when the user is clearly asking for a recipe change. For questions or advice, answer verbally with no function call.
+Never propose a change to a step the user has already marked done.
+
+ACCEPTING AND REJECTING:
+If the user says yes, accept, do it, looks good, or sounds good, call accept_recipe with no arguments.
+If the user says no, reject, undo, cancel, or nope, call reject_recipe with no arguments.
+
+EXITING VOICE MODE:
+If the user says done, exit, or stop listening, call exit_voice with no arguments. Say nothing before or after this call.
+
+PATCHSET FORMAT:
+When calling propose_patch, the patchJson argument must be a valid JSON string representing a PatchSet with this structure:
+{
+  "patchSetId": "<new uuid>",
+  "baseRecipeId": "${VOICE_RECIPE_ID}",
+  "baseRecipeVersion": <integer matching current recipe version>,
+  "status": "pending",
+  "patches": [ <array of Patch objects> ],
+  "summary": "<one sentence plain English summary>"
+}
+Patch types (use the exact type string as the JSON key):
+setTitle: { "setTitle": { "title": "<string>" } }
+addIngredient: { "addIngredient": { "groupId": null, "text": "<full ingredient string e.g. 2 cups flour>", "afterId": null } }
+updateIngredient: { "updateIngredient": { "id": "<uuid>", "text": "<new full ingredient string>" } }
+removeIngredient: { "removeIngredient": { "id": "<uuid>" } }
+addStep: { "addStep": { "text": "<string>", "afterId": null } }
+updateStep: { "updateStep": { "id": "<uuid>", "text": "<string>" } }
+removeStep: { "removeStep": { "id": "<uuid>" } }
+Never modify a step whose status is done.
+
+PERSONALITY: Warm and conversational without being chatty. Sounds like a knowledgeable friend. Stay useful above all else.`;
+
+  const version = recipeState?.version ?? 0;
+  const title = recipeState?.title ?? "";
+  const ingredients = recipeState?.ingredients ?? [];
+  const steps = recipeState?.steps ?? [];
+
+  const recipeLines: string[] = [
+    `CURRENT RECIPE ON CANVAS:`,
+    `id: ${VOICE_RECIPE_ID}  version: ${version}  title: "${title}"`,
+    ``,
+  ];
+
+  if (ingredients.length === 0) {
+    recipeLines.push("(no ingredients)");
+  } else {
+    for (const ing of ingredients) {
+      const text = [ing.quantity, ing.unit, ing.name].filter(Boolean).join(" ");
+      recipeLines.push(`- ${text}  [id: ${ing.id}]`);
+    }
+  }
+
+  recipeLines.push("");
+
+  if (steps.length === 0) {
+    recipeLines.push("(no steps)");
+  } else {
+    steps.forEach((s, i) => {
+      recipeLines.push(`${i + 1}. [${s.status}] ${s.text}  [id: ${s.id}]`);
+    });
+  }
+
+  const doneIds = steps.filter((s) => s.status === "done").map((s) => s.id);
+  if (doneIds.length > 0) {
+    recipeLines.push(`\ndone step IDs (immutable): [${doneIds.join(", ")}]`);
+  }
+
+  const recipeSection = recipeLines.join("\n");
+
+  return [core, recipeSection, "USER MEMORIES: None saved yet.", "USER PREFERENCES: None set."].join(
+    "\n\n"
+  );
+}
+
+// ---------------------------------------------------------------------------
 // OpenAI client
 // ---------------------------------------------------------------------------
 
@@ -276,13 +428,68 @@ function buildRecipeContext(recipeState: RecipeState | null): string {
 
 function selectSystemPrompt(promptType: TestCase["promptType"]): string {
   switch (promptType) {
-    case "import":    return SYSTEM_PROMPT_IMPORT;
+    case "import":     return SYSTEM_PROMPT_IMPORT;
     case "has_canvas": return SYSTEM_PROMPT_HAS_CANVAS;
     case "no_canvas":  return SYSTEM_PROMPT_NO_CANVAS;
+    case "voice":      return ""; // voice uses buildVoiceSystemPromptForEval instead
   }
 }
 
+// ---------------------------------------------------------------------------
+// Voice task runner — function-calling path
+// ---------------------------------------------------------------------------
+
+async function runVoiceTask(input: TestInput): Promise<EvalOutput> {
+  const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+    { role: "system", content: buildVoiceSystemPromptForEval(input.recipeState) },
+  ];
+
+  for (const msg of input.chatHistory) {
+    messages.push({ role: msg.role, content: msg.content });
+  }
+  messages.push({ role: "user", content: input.userMessage });
+
+  const completion = await openai.chat.completions.create({
+    model: "gpt-5.4-mini",
+    messages,
+    tools: VOICE_TOOLS,
+    tool_choice: "auto",
+    temperature: 0,
+  });
+
+  const choice = completion.choices[0];
+  const toolCalls = choice?.message?.tool_calls;
+
+  if (toolCalls && toolCalls.length > 0) {
+    const call = toolCalls[0];
+    let args: Record<string, unknown> = {};
+    try {
+      args = JSON.parse(call.function.arguments) as Record<string, unknown>;
+    } catch {
+      // leave args empty; schemaScorer will flag the invalid JSON
+    }
+    return {
+      rawResponse: { functionCall: call.function.name, args },
+      hasPatchSet: call.function.name === "propose_patch",
+      isValidJson: true,
+      voiceFunctionCall: { name: call.function.name, args },
+    };
+  }
+
+  const rawContent = choice?.message?.content ?? "";
+  return {
+    rawResponse: rawContent,
+    hasPatchSet: false,
+    isValidJson: false,
+    voiceFunctionCall: undefined,
+  };
+}
+
 async function runTask(input: TestInput, promptType: TestCase["promptType"]): Promise<EvalOutput> {
+  if (promptType === "voice") {
+    return runVoiceTask(input);
+  }
+
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
     { role: "system", content: selectSystemPrompt(promptType) },
   ];
@@ -385,34 +592,115 @@ function schemaScorer({
   expected: TestExpected;
 }): { name: string; score: number; metadata?: Record<string, unknown> } {
   const { hasPatchSet, isValidJson, rawResponse } = output;
-  const { shouldPatch, shouldSuggestGenerate } = expected;
+  const { shouldPatch, shouldSuggestGenerate, shouldCallVoiceFunction } = expected;
 
   const checks: { name: string; pass: boolean; reason: string }[] = [];
 
-  // Check 1: patchSet presence/absence
-  if (shouldPatch === true && !hasPatchSet) {
-    checks.push({ name: "patchSet", pass: false, reason: "Expected patchSet but none found" });
-  } else if (shouldPatch === false && hasPatchSet) {
-    checks.push({ name: "patchSet", pass: false, reason: "Expected no patchSet but one was found" });
-  } else if (hasPatchSet && !isValidJson) {
-    checks.push({ name: "patchSet", pass: false, reason: "patchSet found but JSON is invalid" });
-  } else if (shouldPatch !== undefined) {
-    checks.push({ name: "patchSet", pass: true, reason: "patchSet check passed" });
-  }
-
-  // Check 2: suggest_generate presence/absence (only when shouldSuggestGenerate is defined)
-  if (shouldSuggestGenerate !== undefined) {
-    const parsed = (typeof rawResponse === "object" && rawResponse !== null)
-      ? rawResponse as Record<string, unknown>
-      : {};
-    const hasSuggestGenerate = parsed.suggest_generate === true;
-
-    if (shouldSuggestGenerate === true && !hasSuggestGenerate) {
-      checks.push({ name: "suggest_generate", pass: false, reason: "Expected suggest_generate: true but not found" });
-    } else if (shouldSuggestGenerate === false && hasSuggestGenerate) {
-      checks.push({ name: "suggest_generate", pass: false, reason: "Expected suggest_generate absent/false but it was true" });
+  // Voice-mode check: function call routing
+  if (shouldCallVoiceFunction !== undefined) {
+    const call = output.voiceFunctionCall;
+    if (shouldCallVoiceFunction === false) {
+      if (call) {
+        checks.push({
+          name: "voiceFunction",
+          pass: false,
+          reason: `Expected no function call but model called: ${call.name}`,
+        });
+      } else {
+        checks.push({ name: "voiceFunction", pass: true, reason: "No function call as expected" });
+      }
     } else {
-      checks.push({ name: "suggest_generate", pass: true, reason: "suggest_generate check passed" });
+      if (!call) {
+        checks.push({
+          name: "voiceFunction",
+          pass: false,
+          reason: `Expected function call '${shouldCallVoiceFunction}' but none was made`,
+        });
+      } else if (call.name !== shouldCallVoiceFunction) {
+        checks.push({
+          name: "voiceFunction",
+          pass: false,
+          reason: `Expected function call '${shouldCallVoiceFunction}' but got '${call.name}'`,
+        });
+      } else {
+        checks.push({ name: "voiceFunction", pass: true, reason: `Correct function call: ${call.name}` });
+      }
+    }
+
+    // When propose_patch is expected, also validate the patchJson payload
+    if (shouldCallVoiceFunction === "propose_patch" && shouldPatch === true) {
+      const call = output.voiceFunctionCall;
+      if (call?.name === "propose_patch") {
+        const patchJsonStr = call.args["patchJson"];
+        if (typeof patchJsonStr !== "string") {
+          checks.push({
+            name: "proposePatchPayload",
+            pass: false,
+            reason: "propose_patch called but patchJson argument is missing or not a string",
+          });
+        } else {
+          try {
+            const patchSet = JSON.parse(patchJsonStr) as Record<string, unknown>;
+            const hasRequired =
+              typeof patchSet["patchSetId"] === "string" &&
+              typeof patchSet["baseRecipeId"] === "string" &&
+              typeof patchSet["baseRecipeVersion"] === "number" &&
+              Array.isArray(patchSet["patches"]) &&
+              (patchSet["patches"] as unknown[]).length > 0;
+            checks.push({
+              name: "proposePatchPayload",
+              pass: hasRequired,
+              reason: hasRequired
+                ? "patchJson is a valid PatchSet with required fields"
+                : "patchJson is valid JSON but missing required PatchSet fields (patchSetId, baseRecipeId, baseRecipeVersion, patches)",
+            });
+          } catch {
+            checks.push({
+              name: "proposePatchPayload",
+              pass: false,
+              reason: "patchJson argument is not valid JSON",
+            });
+          }
+        }
+      }
+    }
+  } else {
+    // Non-voice checks
+
+    // Check 1: patchSet presence/absence
+    if (shouldPatch === true && !hasPatchSet) {
+      checks.push({ name: "patchSet", pass: false, reason: "Expected patchSet but none found" });
+    } else if (shouldPatch === false && hasPatchSet) {
+      checks.push({ name: "patchSet", pass: false, reason: "Expected no patchSet but one was found" });
+    } else if (hasPatchSet && !isValidJson) {
+      checks.push({ name: "patchSet", pass: false, reason: "patchSet found but JSON is invalid" });
+    } else if (shouldPatch !== undefined) {
+      checks.push({ name: "patchSet", pass: true, reason: "patchSet check passed" });
+    }
+
+    // Check 2: suggest_generate presence/absence (only when shouldSuggestGenerate is defined)
+    if (shouldSuggestGenerate !== undefined) {
+      const parsed =
+        typeof rawResponse === "object" && rawResponse !== null
+          ? (rawResponse as Record<string, unknown>)
+          : {};
+      const hasSuggestGenerate = parsed.suggest_generate === true;
+
+      if (shouldSuggestGenerate === true && !hasSuggestGenerate) {
+        checks.push({
+          name: "suggest_generate",
+          pass: false,
+          reason: "Expected suggest_generate: true but not found",
+        });
+      } else if (shouldSuggestGenerate === false && hasSuggestGenerate) {
+        checks.push({
+          name: "suggest_generate",
+          pass: false,
+          reason: "Expected suggest_generate absent/false but it was true",
+        });
+      } else {
+        checks.push({ name: "suggest_generate", pass: true, reason: "suggest_generate check passed" });
+      }
     }
   }
 

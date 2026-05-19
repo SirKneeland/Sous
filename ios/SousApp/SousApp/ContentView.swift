@@ -4,6 +4,7 @@ import UIKit
 
 struct ContentView: View {
     @StateObject private var store = AppStore()
+    @StateObject private var voiceCoordinator = VoiceModeCoordinator()
     @State private var showSettings = false
     @State private var navigateToMemoriesInSettings = false
     @State private var timerManager = StepTimerManager()
@@ -40,12 +41,15 @@ struct ContentView: View {
     }
 
     /// True when the bottom zone (banners + Talk to Sous button) should be visible.
+    private var isVoiceActive: Bool { store.uiState.isVoiceActive }
+
     private var shouldShowBottomZone: Bool {
         store.hasCanvas
             && !store.uiState.isSheetPresented
             && !store.uiState.isPatchReview
             && !hasDoneBanner
             && !isTitleEditing
+            && !isVoiceActive
     }
 
     var body: some View {
@@ -53,7 +57,7 @@ struct ContentView: View {
             Color.sousBackground.ignoresSafeArea()
 
             if case .patchReview(let recipe, let patchSet, let validation, _) = store.uiState {
-                PatchReviewView(recipe: recipe, patchSet: patchSet, validation: validation, store: store)
+                PatchReviewView(recipe: recipe, patchSet: patchSet, validation: validation, store: store, voiceCoordinator: voiceCoordinator)
             } else if !store.hasCanvas {
                 ChatSheetView(
                     store: store,
@@ -154,6 +158,10 @@ struct ContentView: View {
                 BottomZoneView(
                     timerManager: timerManager,
                     onOpenChat: { store.send(.openChat) },
+                    onOpenVoiceMode: {
+                        store.send(.openVoiceMode)
+                        Task { await voiceCoordinator.activate() }
+                    },
                     onTimerBannerTap: { stepId in
                         scrollToStepId = stepId
                         highlightedStepId = stepId
@@ -165,7 +173,36 @@ struct ContentView: View {
                 .disabled(!isCanvasEnabled)
             }
         }
+        .overlay(alignment: .bottom) {
+            if voiceCoordinator.isActive && !store.uiState.isPatchReview {
+                VoiceBarView(
+                    coordinator: voiceCoordinator,
+                    onExit: {
+                        voiceCoordinator.deactivate()
+                        store.send(.closeVoiceMode)
+                    },
+                    onAccept: { store.send(.acceptPatch) },
+                    onReject: { store.send(.rejectPatch(userText: "")) }
+                )
+                .background {
+                    ThumbDropOverlay(
+                        isActive: true,
+                        onOffsetChanged: { _ in },
+                        onCommit: {},
+                        onCancel: {},
+                        onVoiceModeExit: {
+                            voiceCoordinator.deactivate()
+                            store.send(.closeVoiceMode)
+                        }
+                    )
+                }
+            }
+        }
         .onAppear {
+            voiceCoordinator.configure(store: store)
+            voiceCoordinator.onExit = { store.send(.closeVoiceMode) }
+            voiceCoordinator.onVoiceAccept = { store.send(.acceptPatch) }
+            voiceCoordinator.onVoiceReject = { store.send(.rejectPatch(userText: "")) }
             timerManager.registerNotificationDelegate()
             timerManager.isRecipeCanvasActive = isRecipeCanvasActive
         }
@@ -206,6 +243,7 @@ struct ContentView: View {
         }
     }
 }
+
 
 #Preview {
     ContentView()

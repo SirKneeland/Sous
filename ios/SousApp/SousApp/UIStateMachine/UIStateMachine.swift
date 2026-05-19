@@ -15,6 +15,17 @@ public enum UIStateMachine {
         case (.recipeOnly(let recipe), .openChat):
             return .chatOpen(recipe: recipe, draftUserText: "", hidden: HiddenContext())
 
+        case (.recipeOnly(let recipe), .openVoiceMode):
+            return .voiceActive(recipe: recipe)
+
+        // MARK: voiceActive transitions
+
+        case (.voiceActive(let recipe), .closeVoiceMode):
+            return .recipeOnly(recipe: recipe)
+
+        case (.voiceActive(let recipe), .patchReceived(let patchSet)):
+            return .patchProposed(recipe: recipe, patchSet: patchSet, validation: nil, hidden: HiddenContext())
+
         // MARK: chatOpen transitions
 
         case (.chatOpen(let recipe, _, _), .closeChat):

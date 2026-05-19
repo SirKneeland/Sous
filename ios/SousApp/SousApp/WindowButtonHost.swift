@@ -53,6 +53,7 @@ struct KeyboardPrewarmField: UIViewRepresentable {
 struct BottomZoneView: View {
     var timerManager: StepTimerManager
     var onOpenChat: () -> Void
+    var onOpenVoiceMode: () -> Void = {}
     var onPrewarmKeyboard: () -> Void = {}
     var onTimerBannerTap: (UUID) -> Void
     var onHeightChange: (CGFloat) -> Void
@@ -67,27 +68,45 @@ struct BottomZoneView: View {
                     .allowsHitTesting(true)
             }
             SousRule()
-            Button {
-                onPrewarmKeyboard()
-                onOpenChat()
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "message")
-                        .font(.system(size: 14, weight: .semibold))
-                    Text("TALK TO SOUS")
-                        .font(.sousButton)
+            // Chat + mic buttons side by side
+            HStack(spacing: 0) {
+                Button {
+                    onPrewarmKeyboard()
+                    onOpenChat()
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "message")
+                            .font(.system(size: 14, weight: .semibold))
+                        Text("TALK TO SOUS")
+                            .font(.sousButton)
+                    }
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 52)
+                    .background(Color.sousTerracotta)
                 }
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .frame(height: 52)
-                .background(Color.sousTerracotta)
+                .buttonStyle(.plain)
+
+                Rectangle()
+                    .fill(Color.white.opacity(0.25))
+                    .frame(width: 1, height: 52)
+
+                Button {
+                    onOpenVoiceMode()
+                } label: {
+                    Image(systemName: "mic.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 60, height: 52)
+                        .background(Color.sousTerracotta)
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
             .background(Color.sousBackground)
             .offset(y: dragOffset)
-            .zIndex(1) // keep button above chevron strip during drag translation
+            .zIndex(1)
             .allowsHitTesting(true)
             // ThumbDrop affordance hint
             Image(systemName: "chevron.down")
@@ -106,11 +125,8 @@ struct BottomZoneView: View {
                 .onAppear { onHeightChange(geo.size.height) }
                 .onChange(of: geo.size.height) { _, h in onHeightChange(h) }
         })
-        // Root-level ThumbDrop zone for the recipe canvas → chat direction.
-        // ThumbDropOverlay installs a UIPanGestureRecognizer on the window and gates to
-        // the bottom 15% of the screen (matching the chat→canvas side). The view lifecycle
-        // auto-removes the recognizer when BottomZoneView leaves the hierarchy (i.e. when
-        // the chat sheet opens), so no explicit isActive toggle is needed here.
+        // Root-level ThumbDrop zone for the recipe canvas → voice mode direction.
+        // Downward commit opens chat; upward commit opens voice mode.
         .background {
             ThumbDropOverlay(
                 isActive: isEnabled,
@@ -126,7 +142,7 @@ struct BottomZoneView: View {
                 },
                 onUpwardCommit: {
                     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    onOpenChat()
+                    onOpenVoiceMode()
                 }
             )
         }

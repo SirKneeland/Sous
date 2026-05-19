@@ -7,6 +7,7 @@ struct PatchReviewView: View {
     let patchSet: PatchSet
     let validation: PatchValidationResult
     @ObservedObject var store: AppStore
+    var voiceCoordinator: VoiceModeCoordinator?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -88,14 +89,24 @@ struct PatchReviewView: View {
             .background(Color.sousBackground)
 
             // MARK: Last Assistant Message
-            if let lastAssistantMessage = store.chatTranscript.last(where: { $0.role == .assistant }) {
+            let sousMessage: String? = {
+                if let coordinator = voiceCoordinator,
+                   coordinator.state == .patchPending,
+                   !coordinator.patchAnnouncementTranscript.isEmpty {
+                    return coordinator.patchAnnouncementTranscript
+                }
+                return store.chatTranscript
+                    .last(where: { $0.role == .assistant })
+                    .map { $0.text }
+            }()
+            if let message = sousMessage {
                 SousRule()
                 VStack(alignment: .leading, spacing: 8) {
                     SousSectionLabel(title: "Sous Says...")
                         .padding(.horizontal, 20)
                         .padding(.top, 14)
                     HStack {
-                        MarkdownTextView(text: lastAssistantMessage.text, textColor: .sousText)
+                        MarkdownTextView(text: message, textColor: .sousText)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
                             .background(Color.sousBackground)
@@ -142,6 +153,16 @@ struct PatchReviewView: View {
                 .disabled(!isValid)
             }
             .background(Color.sousBackground)
+
+            if let coordinator = voiceCoordinator,
+               coordinator.isActive {
+                VoiceBarView(
+                    coordinator: coordinator,
+                    onExit: {},
+                    onAccept: {},
+                    onReject: {}
+                )
+            }
         }
     }
 

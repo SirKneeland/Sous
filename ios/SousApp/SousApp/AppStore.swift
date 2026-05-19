@@ -17,7 +17,13 @@ struct QuotedRowContext: Equatable {
 extension UIState {
     var isSheetPresented: Bool {
         if case .recipeOnly = self { return false }
+        if case .voiceActive = self { return false }
         return true
+    }
+
+    var isVoiceActive: Bool {
+        if case .voiceActive = self { return true }
+        return false
     }
 
     var isPatchProposed: Bool {
@@ -156,6 +162,8 @@ final class AppStore: ObservableObject {
         default: return false
         }
     }
+
+    var lastPatchDecision: PatchDecision? { nextLLMContext?.lastPatchDecision }
 
     let keyProvider: any OpenAIKeyProviding
 
@@ -576,6 +584,24 @@ final class AppStore: ObservableObject {
     func openChatWithRowContext(type: QuotedRowContext.RowType, text: String) {
         quotedRowContext = QuotedRowContext(type: type, text: text)
         send(.openChat)
+    }
+
+    /// Routes a voice-captured transcript through the standard LLM pipeline.
+    /// Appends a user bubble and fires the LLM call, identical to sendUserMessage.
+    func sendVoiceTranscript(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        guard !hasPendingPatch else { return }
+        if useLiveLLM && llmTask != nil {
+            llmDebugStatus = "blocked_inflight_llm"
+            return
+        }
+        append(ChatMessage(role: .user, text: trimmed))
+        if useLiveLLM {
+            llmGeneration += 1
+            let gen = llmGeneration
+            llmTask = Task { await self.sendWithLLM(trimmed, generation: gen) }
+        }
     }
 
     func sendUserMessage(_ text: String) {

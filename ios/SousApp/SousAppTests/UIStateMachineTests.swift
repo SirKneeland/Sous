@@ -373,4 +373,83 @@ final class UIStateMachineTests: XCTestCase {
         let untouched = parent?.subSteps?.first { $0.id == Self.subStep2Id }
         XCTAssertEqual(untouched?.effectiveStatus, .todo, "Untouched sub-step must remain todo")
     }
+
+    // MARK: voice mode
+
+    func test_recipeOnly_openVoiceMode_returnsVoiceActive() {
+        let recipe = Self.seedRecipe()
+        let state = UIState.recipeOnly(recipe: recipe)
+
+        let next = UIStateMachine.reduce(state, .openVoiceMode)
+
+        guard case .voiceActive(let r) = next else {
+            return XCTFail("Expected voiceActive, got \(next)")
+        }
+        XCTAssertEqual(r, recipe)
+    }
+
+    func test_voiceActive_closeVoiceMode_returnsRecipeOnly() {
+        let recipe = Self.seedRecipe()
+        let state = UIState.voiceActive(recipe: recipe)
+
+        let next = UIStateMachine.reduce(state, .closeVoiceMode)
+
+        guard case .recipeOnly(let r) = next else {
+            return XCTFail("Expected recipeOnly, got \(next)")
+        }
+        XCTAssertEqual(r, recipe)
+    }
+
+    func test_voiceActive_patchReceived_returnsPatchProposed() {
+        let recipe = Self.seedRecipe()
+        let patchSet = Self.validPatchSet()
+        let state = UIState.voiceActive(recipe: recipe)
+
+        let next = UIStateMachine.reduce(state, .patchReceived(patchSet))
+
+        guard case .patchProposed(let r, let ps, let validation, _) = next else {
+            return XCTFail("Expected patchProposed, got \(next)")
+        }
+        XCTAssertEqual(r, recipe)
+        XCTAssertEqual(ps, patchSet)
+        XCTAssertNil(validation)
+    }
+
+    func test_chatOpen_openVoiceMode_isNoOp() {
+        let recipe = Self.seedRecipe()
+        let state = UIState.chatOpen(recipe: recipe, draftUserText: "hello", hidden: HiddenContext())
+
+        let next = UIStateMachine.reduce(state, .openVoiceMode)
+
+        guard case .chatOpen = next else {
+            return XCTFail("openVoiceMode from chatOpen must be a no-op, got \(next)")
+        }
+    }
+
+    func test_voiceActive_markStepDone_worksLikeOtherStates() {
+        let recipe = Self.seedRecipe()
+        let state = UIState.voiceActive(recipe: recipe)
+
+        let next = UIStateMachine.reduce(state, .markStepDone(stepId: Self.stepMixId))
+
+        guard case .voiceActive(let updated) = next else {
+            return XCTFail("Expected voiceActive after markStepDone, got \(next)")
+        }
+        XCTAssertEqual(updated.steps.first { $0.id == Self.stepMixId }?.status, .done)
+    }
+
+    func test_voiceActive_preservesRecipe() {
+        let recipe = Self.seedRecipe()
+        let state = UIState.voiceActive(recipe: recipe)
+        XCTAssertEqual(state.recipe, recipe)
+    }
+
+    func test_voiceActive_replacingRecipe_updatesRecipe() {
+        let original = Self.seedRecipe()
+        let state = UIState.voiceActive(recipe: original)
+        var updated = original
+        updated.title = "Updated"
+        let next = state.replacingRecipe(updated)
+        XCTAssertEqual(next.recipe.title, "Updated")
+    }
 }

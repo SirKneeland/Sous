@@ -28,13 +28,16 @@ struct ThumbDropOverlay: UIViewRepresentable {
     /// Called when the gesture commits upward: ≥50 pt up or ≥400 pt/s peak upward velocity.
     /// Pass nil to disable upward commit detection (default).
     var onUpwardCommit: (() -> Void)? = nil
+    /// Called instead of onCommit when voice mode is active. Pass nil to use onCommit always.
+    var onVoiceModeExit: (() -> Void)? = nil
 
     func makeCoordinator() -> Coordinator {
         Coordinator(isActive: isActive,
                     onOffsetChanged: onOffsetChanged,
                     onCommit: onCommit,
                     onCancel: onCancel,
-                    onUpwardCommit: onUpwardCommit)
+                    onUpwardCommit: onUpwardCommit,
+                    onVoiceModeExit: onVoiceModeExit)
     }
 
     func makeUIView(context: Context) -> ThumbDropHostView {
@@ -57,6 +60,7 @@ struct ThumbDropOverlay: UIViewRepresentable {
         context.coordinator.onCommit = onCommit
         context.coordinator.onCancel = onCancel
         context.coordinator.onUpwardCommit = onUpwardCommit
+        context.coordinator.onVoiceModeExit = onVoiceModeExit
     }
 
     // MARK: - Coordinator
@@ -67,6 +71,7 @@ struct ThumbDropOverlay: UIViewRepresentable {
         var onCommit: () -> Void
         var onCancel: () -> Void
         var onUpwardCommit: (() -> Void)?
+        var onVoiceModeExit: (() -> Void)?
 
         /// Set to true when the angle gate fires mid-gesture so we ignore
         /// subsequent `.changed` events and don't call `onCommit` at `.ended`.
@@ -93,12 +98,14 @@ struct ThumbDropOverlay: UIViewRepresentable {
              onOffsetChanged: @escaping (CGFloat) -> Void,
              onCommit: @escaping () -> Void,
              onCancel: @escaping () -> Void,
-             onUpwardCommit: (() -> Void)? = nil) {
+             onUpwardCommit: (() -> Void)? = nil,
+             onVoiceModeExit: (() -> Void)? = nil) {
             self.isActive = isActive
             self.onOffsetChanged = onOffsetChanged
             self.onCommit = onCommit
             self.onCancel = onCancel
             self.onUpwardCommit = onUpwardCommit
+            self.onVoiceModeExit = onVoiceModeExit
         }
 
         @objc func handlePan(_ gesture: UIPanGestureRecognizer) {
@@ -194,7 +201,11 @@ struct ThumbDropOverlay: UIViewRepresentable {
                 let commitsUp = translation.y <= -50 || peakUpwardVelocity >= 400
                 if commitsDown {
                     onOffsetChanged(0)
-                    onCommit()
+                    if let onVoiceModeExit {
+                        onVoiceModeExit()
+                    } else {
+                        onCommit()
+                    }
                 } else if commitsUp, let onUpwardCommit {
                     onOffsetChanged(0)
                     onUpwardCommit()

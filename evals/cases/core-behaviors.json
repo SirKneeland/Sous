@@ -559,5 +559,170 @@
       "shouldGenerateRecipe": true,
       "notes": "Response must be NDJSON — one JSON object per line, no markdown. Required: at least one line with type 'meta' containing a title, at least two lines with type 'ingredient', at least two lines with type 'step'. A type 'chat' line with conversational prose should appear first. All lines must be valid JSON. No trailing prose or markdown after the last line."
     }
+  },
+  {
+    "name": "voice-propose-patch",
+    "description": "Voice mode: user requests a recipe change. Model must call propose_patch immediately with a valid PatchSet JSON string — no confirmation, no text-only response.",
+    "promptType": "voice",
+    "input": {
+      "recipeState": {
+        "version": 1,
+        "title": "Simple Roast Chicken",
+        "ingredients": [
+          { "id": "i1", "name": "whole chicken", "quantity": "1", "unit": "whole", "checked": false },
+          { "id": "i2", "name": "olive oil", "quantity": "2", "unit": "tbsp", "checked": false },
+          { "id": "i3", "name": "garlic", "quantity": "4", "unit": "cloves", "checked": false },
+          { "id": "i4", "name": "fresh thyme", "quantity": "4", "unit": "sprigs", "checked": false }
+        ],
+        "steps": [
+          { "id": "s1", "text": "Preheat oven to 425°F.", "status": "todo" },
+          { "id": "s2", "text": "Pat chicken dry and season with salt and pepper.", "status": "todo" },
+          { "id": "s3", "text": "Rub chicken with olive oil, garlic, and thyme.", "status": "todo" },
+          { "id": "s4", "text": "Roast for 60–75 minutes until juices run clear.", "status": "todo" }
+        ]
+      },
+      "chatHistory": [],
+      "userMessage": "Add a pinch of cayenne pepper to the spice mix"
+    },
+    "expected": {
+      "shouldPatch": true,
+      "shouldCallVoiceFunction": "propose_patch",
+      "notes": "User is requesting a recipe change in voice mode. Model must call propose_patch immediately (not ask for confirmation). The patchJson argument must be a valid JSON string representing a PatchSet with at minimum patchSetId, baseRecipeId, baseRecipeVersion, and a patches array containing an addIngredient patch for cayenne pepper. A plain-text-only response without calling propose_patch is wrong."
+    }
+  },
+  {
+    "name": "voice-conversational-no-function",
+    "description": "Voice mode: user asks a cooking knowledge question. Model must answer verbally with no function call.",
+    "promptType": "voice",
+    "input": {
+      "recipeState": {
+        "version": 1,
+        "title": "Simple Roast Chicken",
+        "ingredients": [
+          { "id": "i1", "name": "whole chicken", "quantity": "1", "unit": "whole", "checked": false },
+          { "id": "i2", "name": "garlic", "quantity": "4", "unit": "cloves", "checked": false }
+        ],
+        "steps": [
+          { "id": "s1", "text": "Preheat oven to 425°F.", "status": "done" },
+          { "id": "s2", "text": "Pat chicken dry and season with salt and pepper.", "status": "done" },
+          { "id": "s3", "text": "Roast for 60–75 minutes until juices run clear.", "status": "todo" }
+        ]
+      },
+      "chatHistory": [],
+      "userMessage": "How do I tell when the chicken is done without a thermometer?"
+    },
+    "expected": {
+      "shouldPatch": false,
+      "shouldCallVoiceFunction": false,
+      "notes": "This is a knowledge question, not a recipe change request. Model must answer conversationally in plain spoken language with no function call. A correct answer describes visual or tactile cues (juices run clear, leg wiggles freely, golden skin). Calling any function — especially propose_patch — is the critical failure mode here."
+    }
+  },
+  {
+    "name": "voice-accept-call",
+    "description": "Voice mode: a patch was just proposed. User says 'yes, do it'. Model must call accept_recipe with no arguments.",
+    "promptType": "voice",
+    "input": {
+      "recipeState": {
+        "version": 1,
+        "title": "Simple Roast Chicken",
+        "ingredients": [
+          { "id": "i1", "name": "whole chicken", "quantity": "1", "unit": "whole", "checked": false },
+          { "id": "i2", "name": "olive oil", "quantity": "2", "unit": "tbsp", "checked": false },
+          { "id": "i3", "name": "cayenne pepper", "quantity": "1", "unit": "pinch", "checked": false }
+        ],
+        "steps": [
+          { "id": "s1", "text": "Preheat oven to 425°F.", "status": "todo" },
+          { "id": "s2", "text": "Rub chicken with olive oil and cayenne.", "status": "todo" }
+        ]
+      },
+      "chatHistory": [
+        {
+          "role": "assistant",
+          "content": "I've added a pinch of cayenne to the rub — say accept or reject, or use the buttons on screen."
+        }
+      ],
+      "userMessage": "Yes, do it"
+    },
+    "expected": {
+      "shouldCallVoiceFunction": "accept_recipe",
+      "notes": "The user is accepting the previously proposed patch. Model must call accept_recipe with no arguments. Calling propose_patch, reject_recipe, exit_voice, or returning a plain text response without calling accept_recipe are all wrong."
+    }
+  },
+  {
+    "name": "voice-reject-call",
+    "description": "Voice mode: a patch was just proposed. User says 'no, cancel that'. Model must call reject_recipe with no arguments.",
+    "promptType": "voice",
+    "input": {
+      "recipeState": {
+        "version": 1,
+        "title": "Simple Roast Chicken",
+        "ingredients": [
+          { "id": "i1", "name": "whole chicken", "quantity": "1", "unit": "whole", "checked": false },
+          { "id": "i2", "name": "olive oil", "quantity": "2", "unit": "tbsp", "checked": false }
+        ],
+        "steps": [
+          { "id": "s1", "text": "Preheat oven to 425°F.", "status": "todo" },
+          { "id": "s2", "text": "Rub chicken with olive oil.", "status": "todo" }
+        ]
+      },
+      "chatHistory": [
+        {
+          "role": "assistant",
+          "content": "I've added smoked paprika to the rub — say accept or reject, or use the buttons on screen."
+        }
+      ],
+      "userMessage": "No, cancel that"
+    },
+    "expected": {
+      "shouldCallVoiceFunction": "reject_recipe",
+      "notes": "The user is rejecting the previously proposed patch. Model must call reject_recipe with no arguments. Calling propose_patch, accept_recipe, exit_voice, or a plain text response without reject_recipe are all wrong."
+    }
+  },
+  {
+    "name": "voice-exit-call",
+    "description": "Voice mode: user says 'exit'. Model must call exit_voice with no arguments and say nothing.",
+    "promptType": "voice",
+    "input": {
+      "recipeState": {
+        "version": 1,
+        "title": "Simple Roast Chicken",
+        "ingredients": [
+          { "id": "i1", "name": "whole chicken", "quantity": "1", "unit": "whole", "checked": false }
+        ],
+        "steps": [
+          { "id": "s1", "text": "Preheat oven to 425°F.", "status": "todo" }
+        ]
+      },
+      "chatHistory": [],
+      "userMessage": "Exit"
+    },
+    "expected": {
+      "shouldCallVoiceFunction": "exit_voice",
+      "notes": "User said the exit keyword. Model must call exit_voice with no arguments. No spoken response before or after the call. Calling any other function or returning a plain text response without calling exit_voice is wrong."
+    }
+  },
+  {
+    "name": "voice-no-canvas-guard",
+    "description": "Voice mode: user asks to abandon the current recipe and start something new. Model must NOT generate a recipe or enter exploration mode — it must redirect to exit voice mode.",
+    "promptType": "voice",
+    "input": {
+      "recipeState": {
+        "version": 1,
+        "title": "Simple Roast Chicken",
+        "ingredients": [
+          { "id": "i1", "name": "whole chicken", "quantity": "1", "unit": "whole", "checked": false }
+        ],
+        "steps": [
+          { "id": "s1", "text": "Preheat oven to 425°F.", "status": "todo" }
+        ]
+      },
+      "chatHistory": [],
+      "userMessage": "Actually forget the chicken, I want to make pasta instead"
+    },
+    "expected": {
+      "shouldCallVoiceFunction": false,
+      "shouldPatch": false,
+      "notes": "Voice mode cannot generate new recipes or enter exploration mode. Model must respond verbally (no function call) telling the user to exit voice mode to start a new recipe. Calling propose_patch or any other function is wrong. Generating recipe content is also wrong. A correct response is a single spoken sentence like 'Exit voice mode and start a new recipe there.'"
+    }
   }
 ]

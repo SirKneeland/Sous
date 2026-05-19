@@ -32,6 +32,9 @@ public enum UIState: Equatable {
 
     /// Patch has been validated and is awaiting Accept or Reject from the user.
     case patchReview(recipe: Recipe, patchSet: PatchSet, validation: PatchValidationResult, hidden: HiddenContext)
+
+    /// Voice input is active. Canvas is visible; no chat sheet. Microphone is live.
+    case voiceActive(recipe: Recipe)
 }
 
 // MARK: - UIState helpers
@@ -44,6 +47,7 @@ extension UIState {
         case .chatOpen(let r, _, _):         return r
         case .patchProposed(let r, _, _, _): return r
         case .patchReview(let r, _, _, _):   return r
+        case .voiceActive(let r):            return r
         }
     }
 
@@ -59,6 +63,8 @@ extension UIState {
             return .patchProposed(recipe: newRecipe, patchSet: ps, validation: validation, hidden: hidden)
         case .patchReview(_, let ps, let validation, let hidden):
             return .patchReview(recipe: newRecipe, patchSet: ps, validation: validation, hidden: hidden)
+        case .voiceActive:
+            return .voiceActive(recipe: newRecipe)
         }
     }
 }
@@ -80,4 +86,8 @@ public enum UIEvent {
     /// User cancels a mid-drain animation by tapping the step's checkbox, reverting it to todo.
     /// Only valid during the drain-phase window before the step has fully collapsed.
     case markStepUndone(stepId: UUID)
+    /// Activates voice input mode. Valid only from .recipeOnly.
+    case openVoiceMode
+    /// Exits voice input mode and returns to .recipeOnly.
+    case closeVoiceMode
 }
