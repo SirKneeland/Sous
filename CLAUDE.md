@@ -24,6 +24,8 @@ Always read the relevant docs before starting work:
 - `PatchingRules.md` — the full patch contract
 - `StateModel.md` — authoritative state definitions
 - `UserStories.md` — acceptance criteria for every user-facing behavior
+- `DesignSpec.md` — visual design decisions, component specs, and UX rules. Read before touching any view or layout.
+- `PersonalityModes.md` — detailed behavioral spec for Minimal/Normal/Playful personality modes and their LLM prompt rules.
 - `CODEBASE.md` — repo structure, module map, test commands. Read before navigating the codebase.
 
 ---

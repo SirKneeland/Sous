@@ -20,7 +20,10 @@
 │   ├── ArchGuardrails.md
 │   ├── PatchingRules.md
 │   ├── StateModel.md
-│   └── UserStories.md
+│   ├── UserStories.md
+│   ├── DesignSpec.md
+│   ├── PersonalityModes.md
+│   └── Screenshots/       # App screenshots for reference
 ├── ios/
 │   ├── SousCore/          # Swift Package — core logic (no UI)
 │   │   ├── Package.swift
@@ -124,7 +127,7 @@
 
 ---
 
-## Current Milestone State (Milestone 21)
+## Current Milestone State (Milestone 21 — DONE; Milestone 22 next)
 
 **Milestone 21 — Recipe Import (DONE)**
 
@@ -139,6 +142,9 @@ What is built and wired up:
 - `ChatSheetView` blank state — "TALK TO A RECIPE" primary CTA + "OR CREATE ONE" secondary text button added above the composer bar
 - `ContentView` — wired `onOpenImport` closure and import sheet presentation
 - 5 new tests in `AppStoreTests.swift` (m21-a through m21-e) using `DynamicImportOrchestrator` mock that generates matching PatchSets from incoming request's recipeId/recipeVersion
+
+**Next up: Milestone 22 — Step Timers (PLANNED)**
+- Inline time detection in step text; up to 3 concurrent countdown timers; persistent across background/relaunch; local notification on expiry; step completion blocked while timer is running
 
 Previously completed (Milestone 20 — TestFlight Alpha — DONE):
 - TestFlight distribution, basic instrumentation, error logging
