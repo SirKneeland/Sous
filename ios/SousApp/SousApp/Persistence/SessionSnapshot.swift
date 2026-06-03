@@ -23,7 +23,7 @@ struct SessionSummaryCacheEntry: Codable, Sendable {
 ///   persist the canvas collapsed-section state across relaunch and recipe
 ///   switches (v3 added the first two; v4 added miseEnPlaceExpanded).
 struct SessionSnapshot: Codable, Sendable {
-    static let currentSchemaVersion = 5
+    static let currentSchemaVersion = 6
 
     let schemaVersion: Int
     /// Whether a recipe canvas exists in the session (false = blank/exploration state).
@@ -43,8 +43,11 @@ struct SessionSnapshot: Codable, Sendable {
     /// Persisted AI-generated summary for pre-canvas sessions.
     /// Nil for canvas sessions and for pre-canvas sessions where no summary has been generated yet.
     let cachedSummary: SessionSummaryCacheEntry?
+    /// Write-once snapshot of the recipe as first created (first accepted PatchSet).
+    /// Nil for legacy sessions created before v6. Used to power "Restore Original Recipe".
+    let originalRecipe: Recipe?
 
-    /// Memberwise initializer with new-recipe defaults for the v3/v4/v5 fields.
+    /// Memberwise initializer with new-recipe defaults for the v3/v4/v5/v6 fields.
     init(
         schemaVersion: Int,
         hasCanvas: Bool,
@@ -56,7 +59,8 @@ struct SessionSnapshot: Codable, Sendable {
         ingredientsExpanded: Bool = true,
         stepsCompletedExpanded: Bool = false,
         miseEnPlaceExpanded: Bool = false,
-        cachedSummary: SessionSummaryCacheEntry? = nil
+        cachedSummary: SessionSummaryCacheEntry? = nil,
+        originalRecipe: Recipe? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.hasCanvas = hasCanvas
@@ -69,11 +73,11 @@ struct SessionSnapshot: Codable, Sendable {
         self.stepsCompletedExpanded = stepsCompletedExpanded
         self.miseEnPlaceExpanded = miseEnPlaceExpanded
         self.cachedSummary = cachedSummary
+        self.originalRecipe = originalRecipe
     }
 
-    /// Custom decoder that migrates v2 sessions to v3 by supplying new-recipe
-    /// defaults for the two fields that didn't exist in v2.
-    /// Sessions older than v2 are rejected with a decoding error.
+    /// Custom decoder that migrates v2–v5 sessions by supplying defaults for fields
+    /// that didn't exist in older schema versions. Sessions older than v2 are rejected.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let rawVersion = try container.decode(Int.self, forKey: .schemaVersion)
@@ -98,5 +102,7 @@ struct SessionSnapshot: Codable, Sendable {
         miseEnPlaceExpanded = try container.decodeIfPresent(Bool.self, forKey: .miseEnPlaceExpanded) ?? false
         // v5 field — absent in v4 and older JSON; default to nil.
         cachedSummary = try container.decodeIfPresent(SessionSummaryCacheEntry.self, forKey: .cachedSummary)
+        // v6 field — absent in v5 and older JSON; nil means legacy session (no "Restore" button).
+        originalRecipe = try container.decodeIfPresent(Recipe.self, forKey: .originalRecipe)
     }
 }

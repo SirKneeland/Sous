@@ -92,6 +92,11 @@ struct ContentView: View {
                         store.resetRecipe()
                         timerManager.clearAll()
                     },
+                    onRestoreOriginalRecipe: {
+                        store.restoreOriginalRecipe()
+                        timerManager.clearAll()
+                    },
+                    originalRecipe: store.originalRecipe,
                     onUpdateTitle: { newTitle in store.updateTitle(newTitle) },
                     onEditingTitleChanged: { editing in isTitleEditing = editing },
                     onAskSousAbout: { type, text in

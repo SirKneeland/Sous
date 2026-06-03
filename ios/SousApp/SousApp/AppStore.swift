@@ -125,6 +125,9 @@ final class AppStore: ObservableObject {
     /// True while a recipe is being built via the streaming creation path.
     /// Drives a loading indicator on the canvas until the title arrives.
     @Published var isStreamingRecipe: Bool = false
+    /// Write-once snapshot of the recipe as it looked when the canvas was first created.
+    /// Nil for legacy sessions (loaded from disk before v6). Never updated after initial set.
+    @Published var originalRecipe: Recipe? = nil
 
     /// Tracks the most recently opened IngredientGroup during streaming recipe creation.
     private var streamingCurrentGroupId: UUID? = nil
@@ -228,6 +231,7 @@ final class AppStore: ObservableObject {
                 hasCanvas = snapshot.hasCanvas
                 chatTranscript = snapshot.chatMessages
                 nextLLMContext = snapshot.nextLLMContext
+                originalRecipe = snapshot.originalRecipe
                 ingredientsExpanded = snapshot.ingredientsExpanded
                 stepsCompletedExpanded = snapshot.stepsCompletedExpanded
                 miseEnPlaceExpanded = snapshot.miseEnPlaceExpanded
@@ -404,6 +408,7 @@ final class AppStore: ObservableObject {
         hasCanvas = false
         canGenerateRecipe = false
         isSessionPersistable = false
+        originalRecipe = nil
         uiState = .chatOpen(
             recipe: Recipe(id: UUID(), version: 1, title: "New Recipe"),
             draftUserText: "",
@@ -457,6 +462,43 @@ final class AppStore: ObservableObject {
         saveSession()
     }
 
+    // MARK: - Restore Original Recipe
+
+    /// Reverts recipe content to the first-ever accepted version and wipes the chat history.
+    /// `originalRecipe` is preserved so the user can restore again if they accept new patches.
+    func restoreOriginalRecipe() {
+        guard let original = originalRecipe else { return }
+        cancelLiveLLM()
+        let resetSteps = original.steps.map { Step(id: $0.id, text: $0.text, status: .todo) }
+        let resetMEP = original.miseEnPlace.map { entries in
+            entries.map { entry in
+                switch entry.content {
+                case .solo(let instruction, _):
+                    return MiseEnPlaceEntry(id: entry.id, content: .solo(instruction: instruction, isDone: false))
+                case .group(let vesselName, let components):
+                    let reset = components.map { MiseEnPlaceComponent(id: $0.id, text: $0.text, isDone: false) }
+                    return MiseEnPlaceEntry(id: entry.id, content: .group(vesselName: vesselName, components: reset))
+                }
+            }
+        }
+        let restored = Recipe(
+            id: original.id,
+            version: original.version + 1,
+            title: original.title,
+            ingredients: original.ingredients,
+            steps: resetSteps,
+            notes: original.notes,
+            miseEnPlace: resetMEP
+        )
+        uiState = .recipeOnly(recipe: restored)
+        chatTranscript = []
+        nextLLMContext = nil
+        ingredientsExpanded = true
+        stepsCompletedExpanded = false
+        miseEnPlaceExpanded = false
+        saveSession()
+    }
+
     // MARK: - Recent Recipes
 
     /// Returns all saved recipe sessions, most recent first (current recipe is always first slot).
@@ -498,7 +540,8 @@ final class AppStore: ObservableObject {
                 ingredientsExpanded: existing.ingredientsExpanded,
                 stepsCompletedExpanded: existing.stepsCompletedExpanded,
                 miseEnPlaceExpanded: existing.miseEnPlaceExpanded,
-                cachedSummary: entry
+                cachedSummary: entry,
+                originalRecipe: existing.originalRecipe
             )
             try? SessionPersistence.save(updated, to: url)
         }
@@ -536,6 +579,7 @@ final class AppStore: ObservableObject {
         canGenerateRecipe = false
         isSessionPersistable = true
         hasCanvas = snapshot.hasCanvas
+        originalRecipe = snapshot.originalRecipe
         chatTranscript = snapshot.chatMessages
         nextLLMContext = snapshot.nextLLMContext
         // uiState must be set before ingredientsExpanded / stepsCompletedExpanded so that
@@ -1199,6 +1243,10 @@ final class AppStore: ObservableObject {
             uiState = .recipeOnly(recipe: extracted)
             hasCanvas = true
             isSessionPersistable = true
+            // Capture the initial recipe state once, on first canvas creation.
+            if originalRecipe == nil {
+                originalRecipe = extracted
+            }
             chatTranscript = [ChatMessage(role: .assistant, text: assistantMessage)]
             nextLLMContext = nil
             llmDebugStatus = "succeeded"
@@ -1368,7 +1416,8 @@ final class AppStore: ObservableObject {
             ingredientsExpanded: overrideIngredients ?? ingredientsExpanded,
             stepsCompletedExpanded: overrideStepsCompleted ?? stepsCompletedExpanded,
             miseEnPlaceExpanded: overrideMiseEnPlace ?? miseEnPlaceExpanded,
-            cachedSummary: sessionSummaryCache[uiState.recipe.id]
+            cachedSummary: sessionSummaryCache[uiState.recipe.id],
+            originalRecipe: originalRecipe
         )
     }
 
@@ -1444,6 +1493,10 @@ final class AppStore: ObservableObject {
     func finalizeStreamedRecipe() {
         isStreamingRecipe = false
         streamingCurrentGroupId = nil
+        // Capture the initial recipe state once, on first canvas creation.
+        if originalRecipe == nil {
+            originalRecipe = uiState.recipe
+        }
         saveSession()
     }
 

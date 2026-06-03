@@ -23,6 +23,8 @@ struct RecipeCanvasView: View {
     /// Arguments: (rowType, rowText) where rowType is "ingredient" or "step".
     var onAskSousAbout: (String, String) -> Void = { _, _ in }
     var onMarkMiseEnPlaceUndone: (UUID) -> Void = { _ in }
+    var onRestoreOriginalRecipe: () -> Void = {}
+    var originalRecipe: Recipe? = nil
     var isStreamingRecipe: Bool = false
     var miseEnPlaceIsLoading: Bool = false
     var miseEnPlaceError: String? = nil
@@ -41,6 +43,7 @@ struct RecipeCanvasView: View {
     @State private var showingMiseEnPlaceModal: Bool = false
     @State private var modalDontShowAgain: Bool = false
     @State private var showingResetConfirmation: Bool = false
+    @State private var showingRestoreOriginalConfirmation: Bool = false
     @State private var resetButtonPressed: Bool = false
     @State private var isEditingTitle: Bool = false
     @State private var titleDraft: String = ""
@@ -62,6 +65,8 @@ struct RecipeCanvasView: View {
         onStartNew: @escaping () -> Void = {},
         onOpenRecents: @escaping () -> Void = {},
         onResetRecipe: @escaping () -> Void = {},
+        onRestoreOriginalRecipe: @escaping () -> Void = {},
+        originalRecipe: Recipe? = nil,
         onUpdateTitle: @escaping (String) -> Void = { _ in },
         onEditingTitleChanged: @escaping (Bool) -> Void = { _ in },
         onAskSousAbout: @escaping (String, String) -> Void = { _, _ in },
@@ -88,6 +93,8 @@ struct RecipeCanvasView: View {
         self.onStartNew = onStartNew
         self.onOpenRecents = onOpenRecents
         self.onResetRecipe = onResetRecipe
+        self.onRestoreOriginalRecipe = onRestoreOriginalRecipe
+        self.originalRecipe = originalRecipe
         self.onUpdateTitle = onUpdateTitle
         self.onEditingTitleChanged = onEditingTitleChanged
         self.onAskSousAbout = onAskSousAbout
@@ -452,7 +459,7 @@ struct RecipeCanvasView: View {
                     showingResetConfirmation = true
                 } label: {
                     HStack(spacing: 8) {
-                        Image(systemName: "repeat")
+                        Image(systemName: "arrowshape.turn.up.backward.fill")
                             .font(.system(size: 13, weight: .semibold))
                         Text("Reset Recipe")
                             .font(.sousButton)
@@ -472,10 +479,36 @@ struct RecipeCanvasView: View {
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
 
-                // Spacer so the Reset button has clearance above the home indicator.
-                // The remaining gap (BottomZoneView height) is handled by .safeAreaInset
-                // on the List, which accounts for the full visual coverage of the bar.
-                Color.clear.frame(height: 8)
+                // Restore Original Recipe button — only shown when original exists and recipe differs
+                if let original = originalRecipe, recipeContentDiffers(recipe, original) {
+                    Button {
+                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        showingRestoreOriginalConfirmation = true
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "arrowshape.turn.up.backward.2.fill")
+                                .font(.system(size: 13, weight: .semibold))
+                            Text("Restore Original Recipe")
+                                .font(.sousButton)
+                        }
+                        .foregroundStyle(Color.sousTerracotta)
+                        .frame(maxWidth: .infinity)
+                        .frame(minHeight: 44)
+                        .background(Color.clear)
+                        .overlay(Rectangle().stroke(Color.sousTerracotta, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .contentShape(Rectangle())
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 8)
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                }
+
+                // Bottom breathing room — sized to bottomZoneHeight so the Reset
+                // button scrolls fully clear of the BottomZoneView frame.
+                Color.clear.frame(height: bottomZoneHeight)
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
@@ -498,9 +531,6 @@ struct RecipeCanvasView: View {
             .animation(isStreamingRecipe ? .easeIn(duration: 0.3) : nil, value: recipe.ingredients.flatMap { $0.items }.count + flatStepItems.count)
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                Color.clear.frame(height: bottomZoneHeight)
-            }
             .background(Color.sousBackground.paperTexture())
             .onScrollGeometryChange(for: ScrollState.self) { geo in
                 ScrollState(
@@ -588,6 +618,38 @@ struct RecipeCanvasView: View {
             }
         } message: {
             Text("Your chat history will be kept.")
+        }
+        .alert("Restore original recipe?", isPresented: $showingRestoreOriginalConfirmation) {
+            Button("Restore Original", role: .destructive) {
+                checkedIngredients = []
+                onRestoreOriginalRecipe()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will remove all changes and substitutions made to this recipe and erase your chat history for this session.")
+        }
+    }
+
+    // MARK: - Content comparison
+
+    private func recipeContentDiffers(_ a: Recipe, _ b: Recipe) -> Bool {
+        if a.title != b.title { return true }
+        let aIngTexts = a.ingredients.flatMap { $0.items.map { $0.text } }
+        let bIngTexts = b.ingredients.flatMap { $0.items.map { $0.text } }
+        if aIngTexts != bIngTexts { return true }
+        let aStepTexts = collectStepTexts(a.steps)
+        let bStepTexts = collectStepTexts(b.steps)
+        if aStepTexts != bStepTexts { return true }
+        let aNotes = a.notes?.flatMap { $0.items } ?? []
+        let bNotes = b.notes?.flatMap { $0.items } ?? []
+        return aNotes != bNotes
+    }
+
+    private func collectStepTexts(_ steps: [Step]) -> [String] {
+        steps.flatMap { step -> [String] in
+            var texts = [step.text]
+            if let subs = step.subSteps { texts += collectStepTexts(subs) }
+            return texts
         }
     }
 
@@ -801,7 +863,7 @@ struct RecipeCanvasView: View {
                         .frame(width: 12, height: 12)
                 } else {
                     Image(systemName: "carrot")
-                        .font(.system(size: 11, weight: .regular))
+                        .font(.system(size: 11, weight: .regular, design: .monospaced))
                 }
                 Text("MISE EN PLACE")
                     .font(.sousSectionHeader)
