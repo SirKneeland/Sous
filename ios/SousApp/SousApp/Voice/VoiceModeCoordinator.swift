@@ -272,7 +272,9 @@
                 memories: memories,
                 preferences: preferences,
                 lastPatchDecision: lastPatchDecision,
-                personality: personality
+                personality: personality,
+                accent: preferences.voiceAccent,
+                gender: preferences.voiceGender
             )
 
             let proposePatch = RealtimeTool(
@@ -320,6 +322,12 @@
                     required: ["stepId"]
                 )
             )
+            // Voice model is derived from the user's voice gender preference.
+            let voiceString: String
+            switch preferences.voiceGender {
+            case .masculine: voiceString = "cedar"
+            default:         voiceString = "marin"
+            }
             let pcm16Format = AudioFormat(type: "audio/pcm", rate: 24000)
             let audioConfig = SessionAudioConfig(
                 input: SessionAudioInputConfig(
@@ -334,7 +342,7 @@
                 ),
                 output: SessionAudioOutputConfig(
                     format: pcm16Format,
-                    voice: "shimmer"
+                    voice: voiceString
                 )
             )
             let event = SessionUpdateEvent(session: SessionConfig(

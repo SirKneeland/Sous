@@ -1,12 +1,57 @@
 import Foundation
 import SousCore
 
+/// Builds the voice persona block (gender register + accent instructions).
+/// This block is always prepended as the first section of the voice system
+/// prompt. Accent instructions follow OpenAI's recommended bullet structure
+/// with explicit stability enforcement.
+func buildVoicePersonaBlock(
+    accent: VoiceAccent,
+    gender: VoiceGender
+) -> String {
+    let genderLine: String
+    switch gender {
+    case .feminine:
+        genderLine = "Speak in a warm, natural feminine register."
+    case .masculine:
+        genderLine = "Speak in a warm, natural masculine register."
+    }
+
+    let accentBlock: String
+    switch accent {
+    case .american:
+        accentBlock = "Speak in natural, clear American English."
+    case .british:
+        accentBlock = """
+        ## Accent
+        Speak English with a natural British accent (Received Pronunciation — clear, not exaggerated).
+        - Keep the accent stable from the first word to the last.
+        - Use natural British vowel shaping.
+        - Do not exaggerate the accent.
+        - Do not alter the content or language of responses.
+        """
+    case .australian:
+        accentBlock = """
+        ## Accent
+        Speak English with a light Australian accent.
+        - Keep the accent stable from the first word to the last.
+        - Use natural Australian vowel shaping.
+        - Do not exaggerate the accent.
+        - Do not alter the content or language of responses.
+        """
+    }
+
+    return genderLine + "\n\n" + accentBlock
+}
+
 func buildVoiceSystemPrompt(
     recipe: Recipe,
     memories: [MemoryItem],
     preferences: UserPreferences,
     lastPatchDecision: PatchDecision?,
-    personality: String
+    personality: String,
+    accent: VoiceAccent,
+    gender: VoiceGender
 ) -> String {
 
     // SECTION: core
@@ -205,8 +250,14 @@ func buildVoiceSystemPrompt(
         preferencesSection = "USER PREFERENCES:\n" + prefLines.joined(separator: "\n")
     }
 
+    // SECTION: persona — always the first section of the prompt.
+    let persona = buildVoicePersonaBlock(
+        accent: accent,
+        gender: gender
+    )
+
     // Assembly — omit patchDecision section when nil
-    var sections = [core, personalitySection, recipeSection, memoriesSection, preferencesSection]
+    var sections = [persona, core, personalitySection, recipeSection, memoriesSection, preferencesSection]
 
     if let decision = lastPatchDecision {
         let patchDecisionSection = "LAST PATCH DECISION: The user \(decision.decision.rawValue) the previous proposed change. Factor this in if relevant."

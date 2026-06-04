@@ -100,6 +100,41 @@ final class UserPreferencesTests: XCTestCase {
         XCTAssertNil(loaded.servingSize)
     }
 
+    // MARK: - Voice fields
+
+    func test_saveAndLoad_voiceFields_roundTrip() {
+        var prefs = UserPreferences()
+        prefs.voiceGender = .masculine
+        prefs.voiceAccent = .british
+
+        UserPreferencesPersistence.save(prefs, to: testDefaults)
+        let loaded = UserPreferencesPersistence.load(from: testDefaults)
+
+        XCTAssertEqual(loaded.voiceGender, .masculine)
+        XCTAssertEqual(loaded.voiceAccent, .british)
+    }
+
+    /// Existing saved data that predates the voice fields must still decode,
+    /// keeping all prior fields and filling voice fields with defaults.
+    func test_load_legacyJSON_withoutVoiceFields_decodesCleanly() throws {
+        // Simulate a previously-saved blob with no voiceAccent/voiceGender keys.
+        let legacyJSON = """
+        {"hardAvoids":["cilantro"],"equipment":["wok"],"customInstructions":"metric","personalityMode":"playful"}
+        """.data(using: .utf8)!
+        testDefaults.set(legacyJSON, forKey: UserPreferencesPersistence.userDefaultsKey)
+
+        let loaded = UserPreferencesPersistence.load(from: testDefaults)
+
+        // Prior fields preserved (not reset to defaults).
+        XCTAssertEqual(loaded.hardAvoids, ["cilantro"])
+        XCTAssertEqual(loaded.equipment, ["wok"])
+        XCTAssertEqual(loaded.customInstructions, "metric")
+        XCTAssertEqual(loaded.personalityMode, "playful")
+        // New voice fields fall back to defaults.
+        XCTAssertEqual(loaded.voiceGender, .feminine)
+        XCTAssertEqual(loaded.voiceAccent, UserPreferences.defaultAccent())
+    }
+
     // MARK: - toLLMUserPrefs conversion
 
     func test_toLLMUserPrefs_mapsAllFields() {

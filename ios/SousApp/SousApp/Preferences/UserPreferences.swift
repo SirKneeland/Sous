@@ -16,6 +16,21 @@ struct UserPreferences: Codable, Equatable, Sendable {
     var customInstructions: String = ""
     /// Personality mode controlling AI communication style. Valid values: "minimal", "normal", "playful", "unhinged".
     var personalityMode: String = "normal"
+    /// Accent used by the voice assistant. Defaults to the device locale's region.
+    var voiceAccent: VoiceAccent = UserPreferences.defaultAccent()
+    /// Voice register (Female/Male) used by the voice assistant.
+    var voiceGender: VoiceGender = .feminine
+
+    /// Picks a default voice accent from the device's current region.
+    static func defaultAccent() -> VoiceAccent {
+        let region = Locale.current.region?.identifier ?? ""
+        switch region {
+        case "US": return .american
+        case "GB": return .british
+        case "AU": return .australian
+        default:   return .american
+        }
+    }
 
     /// Converts to the SousCore value type used in LLMRequest.
     func toLLMUserPrefs() -> LLMUserPrefs {
@@ -26,6 +41,26 @@ struct UserPreferences: Codable, Equatable, Sendable {
             customInstructions: customInstructions,
             personalityMode: personalityMode
         )
+    }
+}
+
+// MARK: - UserPreferences backward-compatible decoding
+
+extension UserPreferences {
+    /// Custom decoder that supplies defaults for any field absent from older
+    /// saved JSON, so existing preferences deserialize cleanly without migration.
+    /// Declared in an extension so the synthesized memberwise/default initializers
+    /// remain available.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        hardAvoids = try c.decodeIfPresent([String].self, forKey: .hardAvoids) ?? []
+        servingSize = try c.decodeIfPresent(Int.self, forKey: .servingSize)
+        equipment = try c.decodeIfPresent([String].self, forKey: .equipment) ?? []
+        customInstructions = try c.decodeIfPresent(String.self, forKey: .customInstructions) ?? ""
+        personalityMode = try c.decodeIfPresent(String.self, forKey: .personalityMode) ?? "normal"
+        // New in this change — absent in older saved JSON; fall back to defaults.
+        voiceAccent = try c.decodeIfPresent(VoiceAccent.self, forKey: .voiceAccent) ?? UserPreferences.defaultAccent()
+        voiceGender = try c.decodeIfPresent(VoiceGender.self, forKey: .voiceGender) ?? .feminine
     }
 }
 
