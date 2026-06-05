@@ -11,16 +11,9 @@ struct SettingsView: View {
     @AppStorage("debugTextureIntensity") private var textureIntensity: Double = 0.6
     @State private var showingTexturePreview = false
 
-    // Voice Debug (debug-only persona configuration + one-shot test)
-    @StateObject private var voiceDebug = VoiceDebugSettings.shared
-    @StateObject private var voiceTest = VoiceTestSession()
-
     var body: some View {
         NavigationView {
             Form {
-                NavigationLink(destination: MemoriesView(store: store), isActive: $navigateToMemories) {
-                    EmptyView()
-                }
                 // MARK: Your Kitchen
                 Section {
                     NavigationLink {
@@ -218,55 +211,11 @@ struct SettingsView: View {
                 }
                 .listRowBackground(Color.sousBackground)
                 .listRowSeparatorTint(Color.sousSeparator)
-
-                // MARK: Voice Debug
-                Section {
-                    Picker("Voice", selection: $voiceDebug.voice) {
-                        ForEach(VoiceOption.allCases, id: \.self) { option in
-                            Text(option.displayName).tag(option)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-
-                    Button {
-                        let key = store.keyProvider.currentKey() ?? ""
-                        let prefs = store.userPreferences
-                        Task {
-                            await voiceTest.test(
-                                settings: voiceDebug,
-                                accent: prefs.voiceAccent,
-                                gender: prefs.voiceGender,
-                                apiKey: key
-                            )
-                        }
-                    } label: {
-                        HStack {
-                            Text(voiceTest.isTesting ? (voiceTest.status.isEmpty ? "Testing…" : voiceTest.status) : "Test Voice")
-                                .font(.sousBody)
-                                .foregroundStyle(Color.sousTerracotta)
-                            if voiceTest.isTesting {
-                                Spacer()
-                                ProgressView()
-                                    .tint(Color.sousTerracotta)
-                            }
-                        }
-                    }
-                    .disabled(voiceTest.isTesting)
-                } header: {
-                    Text("VOICE DEBUG")
-                        .font(.sousSectionHeader)
-                        .foregroundStyle(Color.sousTerracotta)
-                        .kerning(1.2)
-                        .textCase(nil)
-                } footer: {
-                    Text("Developer-only voice model override. Accent and gender come from the VOICE section above. Test Voice plays a short sample using the selected model and your voice preferences.")
-                        .font(.sousCaption)
-                        .foregroundStyle(Color.sousMuted)
-                }
-                .listRowBackground(Color.sousBackground)
-                .listRowSeparatorTint(Color.sousSeparator)
             }
             .scrollContentBackground(.hidden)
+            .background(
+                NavigationLink(destination: MemoriesView(store: store), isActive: $navigateToMemories) { EmptyView() }
+            )
             .background(Color.sousBackground)
             .navigationTitle("SETTINGS")
             .navigationBarTitleDisplayMode(.inline)

@@ -1,6 +1,21 @@
 import Foundation
 import SousCore
 
+// MARK: - Voice persona options
+
+/// Accent the voice assistant speaks with. Owned by `UserPreferences`.
+enum VoiceAccent: String, CaseIterable, Codable {
+    case american = "American"
+    case australian = "Australian"
+    case british = "British"
+}
+
+/// Voice register (Female/Male) the voice assistant uses. Owned by `UserPreferences`.
+enum VoiceGender: String, CaseIterable, Codable {
+    case feminine = "Female"
+    case masculine = "Male"
+}
+
 // MARK: - UserPreferences
 
 /// Persisted user preferences applied silently to every recipe.
