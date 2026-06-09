@@ -1489,6 +1489,8 @@ final class AppStoreTests: XCTestCase {
 
         XCTAssertEqual(store.uiState.recipe.title, "Pasta Carbonara",
                        "Recipe title must be set by .meta line")
+        XCTAssertEqual(store.uiState.recipe.servings, 4,
+                       "Recipe servings must be set by .meta line")
     }
 
     // MARK: (m23-c) applyStreamedLine(.step) with parentId nests correctly

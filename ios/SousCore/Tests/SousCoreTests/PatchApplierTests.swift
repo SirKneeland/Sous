@@ -449,4 +449,33 @@ struct PatchApplierTests {
         #expect(updated.steps == recipe.steps)
         #expect(updated.notes == recipe.notes)
     }
+
+    // MARK: - servings
+
+    @Test("apply preserves existing servings when patchSet carries none")
+    func applyPreservesServings() throws {
+        var recipe = SeedRecipes.sample()
+        recipe.servings = 4
+        let patchSet = PatchSet(
+            baseRecipeId: recipe.id,
+            baseRecipeVersion: 1,
+            patches: [.setTitle("Renamed")]
+        )
+        let updated = try PatchApplier.apply(patchSet: patchSet, to: recipe)
+        #expect(updated.servings == 4)
+    }
+
+    @Test("apply uses patchSet servings when present, overriding the recipe")
+    func applyOverridesServings() throws {
+        var recipe = SeedRecipes.sample()
+        recipe.servings = 4
+        let patchSet = PatchSet(
+            baseRecipeId: recipe.id,
+            baseRecipeVersion: 1,
+            patches: [.setTitle("Doubled")],
+            servings: 8
+        )
+        let updated = try PatchApplier.apply(patchSet: patchSet, to: recipe)
+        #expect(updated.servings == 8)
+    }
 }

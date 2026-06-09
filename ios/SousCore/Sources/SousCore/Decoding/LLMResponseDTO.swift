@@ -18,6 +18,9 @@ struct LLMResponseDTO: Equatable, Sendable {
     /// When true (exploration phase only), the model has enough information to generate an
     /// excellent recipe and is signalling readiness. Absence or false means not yet ready.
     let suggestGenerate: Bool?
+    /// Optional servings value the model reports for the recipe (e.g. when rescaling).
+    /// Nil when the field is absent. Carried onto the PatchSet so it applies on accept.
+    let servings: Int?
 }
 
 // MARK: - LLMPatchSetDTO

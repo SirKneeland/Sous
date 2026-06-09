@@ -14,6 +14,9 @@ public struct PatchSet: Equatable, Sendable, Codable {
     public var patches: [Patch]
     public var summary: String?
     public var baseRecipeSnapshot: Recipe?
+    /// New servings value the model reported alongside this patch (e.g. when rescaling).
+    /// Nil means "leave the recipe's existing servings untouched" when applied.
+    public var servings: Int?
 
     public init(
         patchSetId: UUID = UUID(),
@@ -22,7 +25,8 @@ public struct PatchSet: Equatable, Sendable, Codable {
         status: PatchSetStatus = .pending,
         patches: [Patch],
         summary: String? = nil,
-        baseRecipeSnapshot: Recipe? = nil
+        baseRecipeSnapshot: Recipe? = nil,
+        servings: Int? = nil
     ) {
         self.patchSetId = patchSetId
         self.baseRecipeId = baseRecipeId
@@ -31,5 +35,6 @@ public struct PatchSet: Equatable, Sendable, Codable {
         self.patches = patches
         self.summary = summary
         self.baseRecipeSnapshot = baseRecipeSnapshot
+        self.servings = servings
     }
 }

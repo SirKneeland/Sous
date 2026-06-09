@@ -501,7 +501,8 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                 baseRecipeId: baseRecipeId,
                 baseRecipeVersion: psDTO.baseRecipeVersion,
                 patches: patches,
-                summary: psDTO.summary.map { [$0.title, $0.bullets?.joined(separator: "; ")].compactMap { $0 }.joined(separator: " — ") }
+                summary: psDTO.summary.map { [$0.title, $0.bullets?.joined(separator: "; ")].compactMap { $0 }.joined(separator: " — ") },
+                servings: dto.servings
             )
 
             switch PatchValidator.validate(patchSet: patchSet, recipe: request.recipeSnapshotForPrompt, hardAvoids: request.userPrefs.hardAvoids) {
@@ -789,8 +790,13 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
 
                 Single adjectives, noun phrases, or sentence fragments with no verb ("soft", "slightly jammy", "crispy edges", "moderate heat") are never steps. Fold them into the nearest set_step_notes or note section.
 
-            Output shape (patchSetId must be a new UUID you generate):
-            {"assistant_message":"...","patchSet":{"patchSetId":"<new-uuid>","baseRecipeId":"<copy id from RECIPE CONTEXT>","baseRecipeVersion":<copy version from RECIPE CONTEXT>,"patches":[{"type":"set_title","title":"..."},{"type":"add_ingredient","text":"...","group_id":null,"after_id":null},{"type":"add_step","text":"...","parent_id":null,"after_id":null}]}}
+            15. If the source states a serving size (e.g. "serves 4", "makes 6 portions", "yield: 8"), emit a top-level "servings" integer in the response. If no serving size is stated, emit "servings": null.
+
+            Output shape — with serving size (patchSetId must be a new UUID you generate):
+            {"assistant_message":"...","servings":4,"patchSet":{"patchSetId":"<new-uuid>","baseRecipeId":"<copy id from RECIPE CONTEXT>","baseRecipeVersion":<copy version from RECIPE CONTEXT>,"patches":[{"type":"set_title","title":"..."},{"type":"add_ingredient","text":"...","group_id":null,"after_id":null},{"type":"add_step","text":"...","parent_id":null,"after_id":null}]}}
+
+            Output shape — no serving size stated:
+            {"assistant_message":"...","servings":null,"patchSet":{"patchSetId":"<new-uuid>","baseRecipeId":"<copy id from RECIPE CONTEXT>","baseRecipeVersion":<copy version from RECIPE CONTEXT>,"patches":[{"type":"set_title","title":"..."},{"type":"add_ingredient","text":"...","group_id":null,"after_id":null},{"type":"add_step","text":"...","parent_id":null,"after_id":null}]}}
 
             Patch operations (blank canvas — always null for after_id and after_group_id on add operations):
             {"type":"set_title","title":"..."}

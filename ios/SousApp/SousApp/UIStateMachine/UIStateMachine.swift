@@ -81,7 +81,8 @@ public enum UIStateMachine {
                 ingredients: recipe.ingredients,
                 steps: updatedSteps,
                 notes: recipe.notes,
-                miseEnPlace: recipe.miseEnPlace
+                miseEnPlace: recipe.miseEnPlace,
+                servings: recipe.servings
             )
             return state.replacingRecipe(updated)
 
@@ -103,7 +104,8 @@ public enum UIStateMachine {
                 ingredients: recipe.ingredients,
                 steps: updatedSteps,
                 notes: recipe.notes,
-                miseEnPlace: recipe.miseEnPlace
+                miseEnPlace: recipe.miseEnPlace,
+                servings: recipe.servings
             )
             return state.replacingRecipe(updated)
 

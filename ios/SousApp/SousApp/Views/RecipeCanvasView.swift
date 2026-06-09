@@ -207,9 +207,11 @@ struct RecipeCanvasView: View {
                                 }
                                 .transition(.opacity)
                         }
-                        Text("REV. \(recipe.version)")
-                            .font(.sousCaption)
-                            .foregroundStyle(Color.sousMuted)
+                        if let servings = recipe.servings {
+                            Text("SERVES \(servings)")
+                                .font(.sousCaption)
+                                .foregroundStyle(Color.sousMuted)
+                        }
                     }
                     .animation(.easeIn(duration: 0.3), value: recipe.title.isEmpty)
                     .frame(maxWidth: .infinity)

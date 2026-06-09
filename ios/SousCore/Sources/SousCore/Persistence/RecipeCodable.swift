@@ -40,7 +40,7 @@ extension StepStatus: Codable {
 
 extension Recipe: Codable {
     private enum CodingKeys: String, CodingKey {
-        case id, version, title, ingredients, steps, notes, miseEnPlace
+        case id, version, title, ingredients, steps, notes, miseEnPlace, servings
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -52,6 +52,7 @@ extension Recipe: Codable {
         try c.encode(steps, forKey: .steps)
         try c.encodeIfPresent(notes, forKey: .notes)
         try c.encodeIfPresent(miseEnPlace, forKey: .miseEnPlace)
+        try c.encodeIfPresent(servings, forKey: .servings)
     }
 
     public init(from decoder: Decoder) throws {
@@ -62,6 +63,8 @@ extension Recipe: Codable {
         self.ingredients = try c.decode([IngredientGroup].self, forKey: .ingredients)
         self.steps       = try c.decode([Step].self,            forKey: .steps)
         self.notes       = try c.decodeIfPresent([NoteSection].self, forKey: .notes)
+        // Absent in sessions saved before the servings field existed; defaults to nil.
+        self.servings    = try c.decodeIfPresent(Int.self, forKey: .servings)
 
         // Prefer the new [MiseEnPlaceEntry] format. If the key holds data in the
         // old [Step] format (sessions saved before this change), convert each old

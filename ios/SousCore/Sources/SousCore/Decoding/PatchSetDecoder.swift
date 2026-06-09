@@ -121,7 +121,7 @@ struct PatchSetDecoder: Sendable {
     }
 
     private func buildDTO(from root: [String: Any]) -> AttemptResult {
-        let knownTopKeys: Set<String> = ["assistant_message", "patchSet", "proposed_memory", "suggest_generate"]
+        let knownTopKeys: Set<String> = ["assistant_message", "patchSet", "proposed_memory", "suggest_generate", "servings"]
         let unknownTopKeys = root.keys.filter { !knownTopKeys.contains($0) }.sorted()
 
         // assistant_message: required, must be a String
@@ -154,7 +154,8 @@ struct PatchSetDecoder: Sendable {
 
         let proposedMemory = root["proposed_memory"] as? String
         let suggestGenerate = root["suggest_generate"] as? Bool
-        let dto = LLMResponseDTO(assistantMessage: assistantMessage, patchSet: patchSetDTO, proposedMemory: proposedMemory, suggestGenerate: suggestGenerate)
+        let servings = root["servings"] as? Int
+        let dto = LLMResponseDTO(assistantMessage: assistantMessage, patchSet: patchSetDTO, proposedMemory: proposedMemory, suggestGenerate: suggestGenerate, servings: servings)
         let merged = (unknownTopKeys + unknownPatchSetKeys).sorted()
         return .success(dto, unknownKeys: merged)
     }

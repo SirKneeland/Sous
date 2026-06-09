@@ -10,6 +10,9 @@ public struct Recipe: Equatable, Sendable {
     /// Prep entries extracted by the mise en place feature. Nil until the user triggers it.
     /// Rendered between INGREDIENTS and PROCEDURE. Does not affect "all steps done" logic.
     public var miseEnPlace: [MiseEnPlaceEntry]?
+    /// Number of servings the recipe yields, as reported by the model. Nil when unknown
+    /// (e.g. legacy recipes saved before this field existed, or recipes the model did not size).
+    public var servings: Int?
 
     public init(
         id: UUID = UUID(),
@@ -18,7 +21,8 @@ public struct Recipe: Equatable, Sendable {
         ingredients: [IngredientGroup] = [],
         steps: [Step] = [],
         notes: [NoteSection]? = nil,
-        miseEnPlace: [MiseEnPlaceEntry]? = nil
+        miseEnPlace: [MiseEnPlaceEntry]? = nil,
+        servings: Int? = nil
     ) {
         self.id = id
         self.version = version
@@ -27,5 +31,6 @@ public struct Recipe: Equatable, Sendable {
         self.steps = steps
         self.notes = notes
         self.miseEnPlace = miseEnPlace
+        self.servings = servings
     }
 }

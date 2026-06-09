@@ -157,7 +157,10 @@ public enum PatchApplier {
             ingredients: ingredients,
             steps: steps,
             notes: notes,
-            miseEnPlace: recipe.miseEnPlace
+            miseEnPlace: recipe.miseEnPlace,
+            // Prefer a servings value carried on the patchSet (e.g. the model rescaled the
+            // recipe); otherwise preserve whatever the recipe already had.
+            servings: patchSet.servings ?? recipe.servings
         )
     }
 }

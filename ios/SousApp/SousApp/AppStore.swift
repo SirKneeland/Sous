@@ -457,7 +457,8 @@ final class AppStore: ObservableObject {
             ingredients: recipe.ingredients,
             steps: resetSteps,
             notes: recipe.notes,
-            miseEnPlace: resetMEP
+            miseEnPlace: resetMEP,
+            servings: recipe.servings
         )
         uiState = .recipeOnly(recipe: reset)
         ingredientsExpanded = true
@@ -492,7 +493,8 @@ final class AppStore: ObservableObject {
             ingredients: original.ingredients,
             steps: resetSteps,
             notes: original.notes,
-            miseEnPlace: resetMEP
+            miseEnPlace: resetMEP,
+            servings: original.servings
         )
         uiState = .recipeOnly(recipe: restored)
         chatTranscript = []
@@ -1575,8 +1577,9 @@ final class AppStore: ObservableObject {
         case .chat(let text):
             append(ChatMessage(role: .assistant, text: text))
 
-        case .meta(let title, _):
+        case .meta(let title, let servings):
             recipe.title = title
+            recipe.servings = servings
             uiState = uiState.replacingRecipe(recipe)
 
         case .ingredientGroup(let header):

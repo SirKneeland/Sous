@@ -230,4 +230,28 @@ final class RecipeCodableTests: XCTestCase {
             XCTFail("Old step must become a .solo entry")
         }
     }
+
+    // MARK: - servings
+
+    func test_recipe_servings_roundTrip() throws {
+        let recipe = Recipe(title: "Soup", servings: 6)
+        XCTAssertEqual(try roundTrip(recipe).servings, 6)
+    }
+
+    func test_recipe_servings_absentDecodesToNil() throws {
+        // Sessions saved before the servings field existed have no "servings" key.
+        let recipeId = UUID(uuidString: "DDDDDDDD-0000-0000-0000-000000000001")!
+        let json = """
+        {
+          "id": "\(recipeId.uuidString)",
+          "version": 1,
+          "title": "Legacy Recipe",
+          "ingredients": [],
+          "steps": []
+        }
+        """.data(using: .utf8)!
+
+        let recipe = try JSONDecoder().decode(Recipe.self, from: json)
+        XCTAssertNil(recipe.servings, "Missing servings key must decode to nil")
+    }
 }
