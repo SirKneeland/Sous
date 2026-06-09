@@ -117,13 +117,12 @@ struct ContentView: View {
                     bottomZoneHeight: bottomZoneHeight
                 )
                 .disabled(!isCanvasEnabled)
+                // Extend the paper-texture background under the home indicator. The
+                // List's own .contentMargins(.bottom) reserves the scroll-content space
+                // for the Talk to Sous bar, so no .safeAreaInset is needed here (a second
+                // one double-counted the inset and contributed to the snap-back).
                 .ignoresSafeArea(edges: .bottom)
                 .offset(x: canvasOffset)
-                // Reserve space equal to the bottom zone height so the last scroll item
-                // is never hidden behind the bar.
-                .safeAreaInset(edge: .bottom, spacing: 0) {
-                    Color.clear.frame(height: shouldShowBottomZone ? bottomZoneHeight : 0)
-                }
 
                 // Scrim dims the canvas while chat is open. Hidden when camera is presented
                 // so it doesn't darken the overlay visible behind the camera sheet corners.

@@ -508,13 +508,6 @@ struct RecipeCanvasView: View {
                     .listRowSeparator(.hidden)
                 }
 
-                // Bottom breathing room — sized to bottomZoneHeight so the Reset
-                // button scrolls fully clear of the BottomZoneView frame.
-                Color.clear.frame(height: bottomZoneHeight)
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-
 #if DEBUG
                 if let status = llmDebugStatus {
                     Text(status)
@@ -530,6 +523,12 @@ struct RecipeCanvasView: View {
 #endif
 
             } // end List
+            // Reserve real scroll-content space below the last row so the Reset /
+            // Restore buttons settle above the Talk to Sous bar and stay there.
+            // contentMargins drives the List's internal bottom content inset directly;
+            // a .safeAreaInset here is overridden by the List, which is why the bottom
+            // rows snapped back under the bar after scrolling.
+            .contentMargins(.bottom, bottomZoneHeight, for: .scrollContent)
             .animation(isStreamingRecipe ? .easeIn(duration: 0.3) : nil, value: recipe.ingredients.flatMap { $0.items }.count + flatStepItems.count)
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
