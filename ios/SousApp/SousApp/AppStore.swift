@@ -1386,6 +1386,9 @@ final class AppStore: ObservableObject {
             }
             // Apply directly — no patch review, no chat bubble. Mirrors runImportLLM.
             uiState = .recipeOnly(recipe: converted)
+            // The converted recipe is the user's intended baseline — reset originalRecipe
+            // so "restore to original" doesn't revert to the pre-conversion units.
+            originalRecipe = converted
             saveSession()
             // Trigger the import loading screen's success dismissal animation.
             importSuccess = true
