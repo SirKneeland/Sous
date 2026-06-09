@@ -306,3 +306,46 @@
 - As a user in voice mode, when a patch is proposed I can say "accept" or "reject" to action it, as an alternative to tapping the buttons.
 - As a user in voice mode, I can exit by saying "done" or "exit", tapping the X button in the bar, or using a ThumbDrop gesture.
 - As a user, the recipe canvas remains visible and readable while voice mode is active, so I can glance at my current step without switching modes.
+
+---
+
+### US-43: Set Unit System Preference
+- Given the user opens Settings → Preferences
+- When they select Imperial or Metric under Unit System
+- Then the preference is saved and applied to all future recipe generation
+
+### US-44: Unit Preference Applied to Generated Recipes
+- Given the user has a unit system preference set
+- When a new recipe canvas is created
+- Then all measurements and temperatures use the preferred unit system
+- And the assistant does not explicitly mention applying the preference
+
+### US-45: Post-Import Unit Conversion Modal
+- Given the user has just imported a recipe
+- And the recipe's detected units differ from the user's preferred unit system
+- When the import completes
+- Then a modal appears asking if they would like to convert the recipe
+- And the "Convert" button is the primary (blue) action
+- And "Keep Original" is the secondary action
+
+### US-46: Convert Imported Recipe Units
+- Given the post-import conversion modal is visible
+- When the user taps Convert
+- Then a loading screen appears showing "Converting to [imperial/metric]…"
+- And the recipe is silently converted and applied to the canvas directly
+- And no patch review screen appears
+- And no conversion message appears in the chat transcript
+- And the converted recipe becomes the baseline for restore-to-original
+
+### US-47: Keep Original Units After Import
+- Given the post-import conversion modal is visible
+- When the user taps Keep Original
+- Then the modal dismisses
+- And the recipe remains in its original units
+- And the chat transcript is unchanged
+
+### US-48: No Modal for Unit-Ambiguous Recipes
+- Given the user has just imported a recipe with no detectable units
+  (e.g. "3 eggs, salt to taste, 1 clove garlic")
+- When the import completes
+- Then no conversion modal appears

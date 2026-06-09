@@ -294,6 +294,17 @@ Preferences are:
 - **Hard-avoid ingredients or food categories** — must never appear unless explicitly overridden
 - **Kitchen equipment** — tools and appliances available (e.g. cast iron, induction plate, air fryer, stand mixer). Treated as additive context, not an exhaustive inventory. If no equipment is listed, assume a standard home kitchen. If some equipment is listed, assume standard basics are also available.
 - **Custom instructions** — free-form persistent instructions applied to all recipes (e.g. "always give me stove settings for both gas and induction")
+- **Unit system** — imperial or metric. Defaults to imperial for US and UK locales; metric for all others. Applied to all recipe generation silently. Can be changed in Settings at any time.
+
+### Post-Import Unit Conversion
+
+- After a recipe is imported, Sous detects whether the recipe's units match the user's preferred unit system using on-device language model detection (with regex fallback).
+- If a mismatch is detected, a modal appears asking the user if they would like to convert the recipe to their preferred units.
+- "Convert" runs a silent background conversion and applies the result directly to the canvas — no patch review step.
+- "Keep Original" dismisses the modal and leaves the recipe unchanged.
+- The conversion does not appear in the chat transcript.
+- If no units are detected (e.g. "3 eggs, salt to taste"), no modal appears.
+- After conversion, the converted recipe becomes the baseline for restore-to-original.
 
 ### Preference Rules
 

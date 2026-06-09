@@ -340,6 +340,10 @@ Core capabilities:
 - Onboarding and blank state have personality
 - Dark mode support
 
+Also implemented as part of this milestone:
+- **Unit system preference** — users can choose imperial or metric in Settings; the preference is applied silently to all new recipe generation. Defaults to imperial for US and UK locales, metric elsewhere.
+- **Post-import unit conversion** — after importing a recipe, the app detects whether the recipe's units match the user's preference. If they differ, a modal offers to convert the whole recipe silently (no patch review). If no measurable units are detected, the modal is skipped entirely.
+
 Explicit non-goals:
 - Animations and transitions polish (can follow in a separate pass)
 - Marketing or App Store assets
