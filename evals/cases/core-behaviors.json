@@ -1468,5 +1468,58 @@
       "shouldPatch": true,
       "notes": "Response must contain a non-null patchSet converting grams/milliliters/°C to US customary units (cups, ounces, °F). assistant_message must be only a short confirmation like \"Converted to imperial.\" — no clarifying questions, no conversational filler."
     }
+  },
+  {
+    "name": "patch-rescales-servings",
+    "description": "Canvas exists serving 4. User asks to rescale to 8. Sous should propose a patchSet that scales ingredient quantities and time/vessel-dependent steps, and report servings=8.",
+    "promptType": "has_canvas",
+    "input": {
+      "recipeState": {
+        "version": 1,
+        "title": "Simple Roast Chicken",
+        "servings": 4,
+        "ingredients": [
+          {
+            "id": "i1",
+            "name": "whole chicken",
+            "quantity": "1",
+            "unit": "whole",
+            "checked": false
+          },
+          {
+            "id": "i2",
+            "name": "olive oil",
+            "quantity": "2",
+            "unit": "tbsp",
+            "checked": false
+          },
+          {
+            "id": "i3",
+            "name": "garlic",
+            "quantity": "4",
+            "unit": "cloves",
+            "checked": false
+          }
+        ],
+        "steps": [
+          {
+            "id": "s1",
+            "text": "Preheat oven to 425°F.",
+            "status": "todo"
+          },
+          {
+            "id": "s2",
+            "text": "Roast chicken for 60 minutes in a 9x13 inch pan.",
+            "status": "todo"
+          }
+        ]
+      },
+      "chatHistory": [],
+      "userMessage": "Please rescale this recipe to serve 8 people. Adjust ingredient quantities, cooking times, vessel sizes, and any procedure steps where scaling would affect the outcome (e.g. cooking times, pan sizes)."
+    },
+    "expected": {
+      "shouldPatch": true,
+      "notes": "User asked to rescale from 4 to 8. Should propose a patchSet that scales ingredient quantities (e.g. olive oil, garlic, and likely a second chicken or larger bird) and updates time/vessel-dependent steps (s2: larger or additional pan, adjusted roast time). Must report top-level servings=8. Must not modify any 'done' steps."
+    }
   }
 ]

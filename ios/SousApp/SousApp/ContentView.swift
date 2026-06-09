@@ -96,6 +96,10 @@ struct ContentView: View {
                         store.restoreOriginalRecipe()
                         timerManager.clearAll()
                     },
+                    onRescaleServings: { newServings in
+                        store.requestServingsRescale(to: newServings)
+                    },
+                    preferredServingSize: store.userPreferences.servingSize,
                     originalRecipe: store.originalRecipe,
                     onUpdateTitle: { newTitle in store.updateTitle(newTitle) },
                     onEditingTitleChanged: { editing in isTitleEditing = editing },

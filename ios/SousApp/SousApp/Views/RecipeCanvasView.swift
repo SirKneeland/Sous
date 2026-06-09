@@ -24,6 +24,10 @@ struct RecipeCanvasView: View {
     var onAskSousAbout: (String, String) -> Void = { _, _ in }
     var onMarkMiseEnPlaceUndone: (UUID) -> Void = { _ in }
     var onRestoreOriginalRecipe: () -> Void = {}
+    /// Called when the user confirms a new serving size in the picker sheet.
+    var onRescaleServings: (Int) -> Void = { _ in }
+    /// User's preferred default serving size, used to seed the picker when the recipe has none.
+    var preferredServingSize: Int? = nil
     var originalRecipe: Recipe? = nil
     var isStreamingRecipe: Bool = false
     var miseEnPlaceIsLoading: Bool = false
@@ -44,6 +48,7 @@ struct RecipeCanvasView: View {
     @State private var modalDontShowAgain: Bool = false
     @State private var showingResetConfirmation: Bool = false
     @State private var showingRestoreOriginalConfirmation: Bool = false
+    @State private var showingServingsPicker: Bool = false
     @State private var resetButtonPressed: Bool = false
     @State private var isEditingTitle: Bool = false
     @State private var titleDraft: String = ""
@@ -66,6 +71,8 @@ struct RecipeCanvasView: View {
         onOpenRecents: @escaping () -> Void = {},
         onResetRecipe: @escaping () -> Void = {},
         onRestoreOriginalRecipe: @escaping () -> Void = {},
+        onRescaleServings: @escaping (Int) -> Void = { _ in },
+        preferredServingSize: Int? = nil,
         originalRecipe: Recipe? = nil,
         onUpdateTitle: @escaping (String) -> Void = { _ in },
         onEditingTitleChanged: @escaping (Bool) -> Void = { _ in },
@@ -94,6 +101,8 @@ struct RecipeCanvasView: View {
         self.onOpenRecents = onOpenRecents
         self.onResetRecipe = onResetRecipe
         self.onRestoreOriginalRecipe = onRestoreOriginalRecipe
+        self.onRescaleServings = onRescaleServings
+        self.preferredServingSize = preferredServingSize
         self.originalRecipe = originalRecipe
         self.onUpdateTitle = onUpdateTitle
         self.onEditingTitleChanged = onEditingTitleChanged
@@ -207,17 +216,23 @@ struct RecipeCanvasView: View {
                                 }
                                 .transition(.opacity)
                         }
-                        if let servings = recipe.servings {
-                            Text("SERVES \(servings)")
-                                .font(.sousCaption)
-                                .foregroundStyle(Color.sousMuted)
-                        }
                     }
                     .animation(.easeIn(duration: 0.3), value: recipe.title.isEmpty)
                     .frame(maxWidth: .infinity)
                     .padding(.horizontal, titleInset)
                     .padding(.top, 20)
-                    .padding(.bottom, 16)
+                    .padding(.bottom, recipe.servings != nil ? 10 : 16)
+
+                    // Serving-size indicator, lower-right of the header. Tapping opens the picker.
+                    if recipe.servings != nil {
+                        HStack {
+                            Spacer()
+                            servingsIndicator
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 14)
+                    }
+
                     Divider()
                         .background(Color.sousSeparator)
                 }
@@ -579,6 +594,18 @@ struct RecipeCanvasView: View {
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.hidden)
             }
+            .sheet(isPresented: $showingServingsPicker) {
+                ServingsPickerSheet(
+                    currentServings: recipe.servings ?? preferredServingSize ?? 4,
+                    onCancel: { showingServingsPicker = false },
+                    onSet: { newServings in
+                        showingServingsPicker = false
+                        onRescaleServings(newServings)
+                    }
+                )
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.hidden)
+            }
         } // end ScrollViewReader
         .overlay(alignment: .top) {
             ZStack(alignment: .top) {
@@ -846,6 +873,27 @@ struct RecipeCanvasView: View {
                 if let override = tapOverride { override() }
                 else { handleMarkMEPDone(row.id) }
             }
+        }
+    }
+
+    // MARK: - Serving size indicator
+
+    @ViewBuilder
+    private var servingsIndicator: some View {
+        if let servings = recipe.servings {
+            Button {
+                showingServingsPicker = true
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "person.2")
+                        .font(.system(size: 11, weight: .regular, design: .monospaced))
+                    Text("SERVES \(servings)")
+                        .font(.sousSectionHeader)
+                        .kerning(1.2)
+                }
+                .foregroundStyle(Color.sousTerracotta)
+            }
+            .buttonStyle(.plain)
         }
     }
 

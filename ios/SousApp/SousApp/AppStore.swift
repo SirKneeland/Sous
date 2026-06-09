@@ -39,7 +39,7 @@ extension UIState {
 
 /// Tracks the active stage of the import pipeline. Used by the loading UI to show stage-aware copy.
 /// `converting` reuses the import loading screen for the post-import unit conversion flow.
-enum ImportLoadingStage { case ocr, llm, converting }
+enum ImportLoadingStage { case ocr, llm, converting, rescaling }
 
 // MARK: - AppStore
 
@@ -1398,6 +1398,102 @@ final class AppStore: ObservableObject {
 
         case .noPatches, .failure:
             // Dismiss the loading screen silently — the recipe stays in its original units.
+            importLoadingStage = .llm
+            isShowingImportSheet = false
+            llmDebugStatus = "failed"
+        }
+    }
+
+    // MARK: - Serving size rescale
+
+    /// Asks the LLM to rescale the recipe to `servings` people. Unlike unit conversion,
+    /// the resulting PatchSet goes through normal patch review — the user accepts or rejects.
+    /// Reuses the import loading screen (with rescaling copy) as the in-flight indicator.
+    func requestServingsRescale(to servings: Int) {
+        guard !hasPendingPatch else { return }
+        guard useLiveLLM else { return }
+        // Single-flight: skip silently if a live LLM call is already in flight.
+        if llmTask != nil {
+            llmDebugStatus = "blocked_inflight_llm"
+            return
+        }
+        importError = nil
+        importSuccess = false
+        importLoadingStage = .rescaling
+        isShowingImportSheet = true
+        llmGeneration += 1
+        let gen = llmGeneration
+        llmTask = Task { await self.runRescaleLLM(targetServings: servings, generation: gen) }
+    }
+
+    /// Builds the rescale request, runs the orchestrator, and routes a valid PatchSet into
+    /// the normal patch-review flow (unlike conversion, which applies directly). The requested
+    /// servings value is forced onto the PatchSet so that accepting carries it through to the
+    /// recipe (PatchApplier prefers patchSet.servings). Failures dismiss the loading screen
+    /// silently and leave the recipe unchanged.
+    private func runRescaleLLM(targetServings: Int, generation: Int) async {
+        defer {
+            if llmGeneration == generation {
+                llmTask = nil
+                isThinking = false
+            }
+        }
+        isThinking = true
+        llmDebugStatus = "calling"
+        let recipe = uiState.recipe
+
+        let request = LLMRequest(
+            recipeId: recipe.id.uuidString,
+            recipeVersion: recipe.version,
+            hasCanvas: true,
+            userMessage: "Please rescale this recipe to serve \(targetServings) people. Adjust ingredient quantities, cooking times, vessel sizes, and any procedure steps where scaling would affect the outcome (e.g. cooking times, pan sizes).",
+            recipeSnapshotForPrompt: recipe,
+            userPrefs: buildLLMUserPrefs(),
+            nextLLMContext: nextLLMContext,
+            conversationHistory: buildConversationHistory(dropLastEntry: false)
+        )
+
+        let llmClient = OpenAIClient(apiKey: resolvedAPIKey())
+        let orchestrator: any LLMOrchestrator = testOrchestrator ?? OpenAILLMOrchestrator(
+            client: llmClient,
+            streamingClient: llmClient,
+            model: liveLLMModel
+        )
+
+        let result = await orchestrator.run(request)
+
+        guard !Task.isCancelled else {
+            llmDebugStatus = "cancelled"
+            return
+        }
+
+        switch result {
+        case .valid(let patchSet, let assistantMessage, _, let debug, let proposedMemory):
+            lastDebugBundle = debug
+            // Receipt-time stale-state check against the CURRENT recipe.
+            let current = uiState.recipe
+            guard patchSet.baseRecipeId == current.id,
+                  patchSet.baseRecipeVersion == current.version else {
+                importLoadingStage = .llm
+                isShowingImportSheet = false
+                llmDebugStatus = "expired_recipeVersionMismatch"
+                return
+            }
+            // Force the requested servings so accepting the patch updates recipe.servings to N.
+            var finalPatchSet = patchSet
+            finalPatchSet.servings = targetServings
+            // Dismiss the loading screen and enter patch review.
+            importLoadingStage = .llm
+            isShowingImportSheet = false
+            nextLLMContext = nil
+            send(.patchReceived(finalPatchSet))
+            let safeMessage = sanitizedAssistantMessage(assistantMessage, hasCanvas: true)
+            append(ChatMessage(role: .assistant, text: safeMessage))
+            llmDebugStatus = "succeeded"
+            if let memory = proposedMemory { proposeMemory(text: memory) }
+
+        case .noPatches, .failure:
+            // Dismiss the loading screen silently — the recipe stays unchanged.
             importLoadingStage = .llm
             isShowingImportSheet = false
             llmDebugStatus = "failed"

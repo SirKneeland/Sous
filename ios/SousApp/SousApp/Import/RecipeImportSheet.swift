@@ -24,9 +24,10 @@ struct RecipeImportSheet: View {
     init(store: AppStore, onCancel: @escaping () -> Void) {
         _store = ObservedObject(wrappedValue: store)
         self.onCancel = onCancel
-        // When the sheet is (re)presented for a unit conversion, open straight into the
-        // loading screen instead of the chooser.
-        _mode = State(initialValue: store.importLoadingStage == .converting ? .loading : .chooser)
+        // When the sheet is (re)presented for a unit conversion or a serving-size rescale,
+        // open straight into the loading screen instead of the chooser.
+        let opensInLoading = store.importLoadingStage == .converting || store.importLoadingStage == .rescaling
+        _mode = State(initialValue: opensInLoading ? .loading : .chooser)
     }
 
     private enum Mode: Equatable {
@@ -300,6 +301,8 @@ struct RecipeImportSheet: View {
             return store.userPreferences.preferredUnitSystem == .metric
                 ? "CONVERTING TO METRIC..."
                 : "CONVERTING TO IMPERIAL..."
+        case .rescaling:
+            return "RESCALING RECIPE..."
         }
     }
 
