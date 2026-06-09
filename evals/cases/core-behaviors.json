@@ -51,18 +51,68 @@
         "version": 1,
         "title": "Simple Roast Chicken",
         "ingredients": [
-          { "id": "i1", "name": "whole chicken", "quantity": "1", "unit": "whole", "checked": false },
-          { "id": "i2", "name": "onions", "quantity": "2", "unit": "medium", "checked": false },
-          { "id": "i3", "name": "olive oil", "quantity": "2", "unit": "tbsp", "checked": false },
-          { "id": "i4", "name": "garlic", "quantity": "4", "unit": "cloves", "checked": false },
-          { "id": "i5", "name": "fresh thyme", "quantity": "4", "unit": "sprigs", "checked": false }
+          {
+            "id": "i1",
+            "name": "whole chicken",
+            "quantity": "1",
+            "unit": "whole",
+            "checked": false
+          },
+          {
+            "id": "i2",
+            "name": "onions",
+            "quantity": "2",
+            "unit": "medium",
+            "checked": false
+          },
+          {
+            "id": "i3",
+            "name": "olive oil",
+            "quantity": "2",
+            "unit": "tbsp",
+            "checked": false
+          },
+          {
+            "id": "i4",
+            "name": "garlic",
+            "quantity": "4",
+            "unit": "cloves",
+            "checked": false
+          },
+          {
+            "id": "i5",
+            "name": "fresh thyme",
+            "quantity": "4",
+            "unit": "sprigs",
+            "checked": false
+          }
         ],
         "steps": [
-          { "id": "s1", "text": "Preheat oven to 425°F.", "status": "todo" },
-          { "id": "s2", "text": "Pat chicken dry and season with salt and pepper.", "status": "todo" },
-          { "id": "s3", "text": "Quarter onions and place in roasting pan. Add garlic cloves.", "status": "todo" },
-          { "id": "s4", "text": "Rub chicken with olive oil and thyme, place on top of onions.", "status": "todo" },
-          { "id": "s5", "text": "Roast for 60–75 minutes until juices run clear.", "status": "todo" }
+          {
+            "id": "s1",
+            "text": "Preheat oven to 425°F.",
+            "status": "todo"
+          },
+          {
+            "id": "s2",
+            "text": "Pat chicken dry and season with salt and pepper.",
+            "status": "todo"
+          },
+          {
+            "id": "s3",
+            "text": "Quarter onions and place in roasting pan. Add garlic cloves.",
+            "status": "todo"
+          },
+          {
+            "id": "s4",
+            "text": "Rub chicken with olive oil and thyme, place on top of onions.",
+            "status": "todo"
+          },
+          {
+            "id": "s5",
+            "text": "Roast for 60–75 minutes until juices run clear.",
+            "status": "todo"
+          }
         ]
       },
       "chatHistory": [],
@@ -82,15 +132,49 @@
         "version": 2,
         "title": "Simple Roast Chicken",
         "ingredients": [
-          { "id": "i1", "name": "whole chicken", "quantity": "1", "unit": "whole", "checked": true },
-          { "id": "i2", "name": "onions", "quantity": "2", "unit": "medium", "checked": false },
-          { "id": "i3", "name": "olive oil", "quantity": "2", "unit": "tbsp", "checked": true }
+          {
+            "id": "i1",
+            "name": "whole chicken",
+            "quantity": "1",
+            "unit": "whole",
+            "checked": true
+          },
+          {
+            "id": "i2",
+            "name": "onions",
+            "quantity": "2",
+            "unit": "medium",
+            "checked": false
+          },
+          {
+            "id": "i3",
+            "name": "olive oil",
+            "quantity": "2",
+            "unit": "tbsp",
+            "checked": true
+          }
         ],
         "steps": [
-          { "id": "s1", "text": "Preheat oven to 425°F.", "status": "done" },
-          { "id": "s2", "text": "Pat chicken dry and season with salt and pepper.", "status": "done" },
-          { "id": "s3", "text": "Quarter onions and place in roasting pan.", "status": "todo" },
-          { "id": "s4", "text": "Roast for 60–75 minutes until juices run clear.", "status": "todo" }
+          {
+            "id": "s1",
+            "text": "Preheat oven to 425°F.",
+            "status": "done"
+          },
+          {
+            "id": "s2",
+            "text": "Pat chicken dry and season with salt and pepper.",
+            "status": "done"
+          },
+          {
+            "id": "s3",
+            "text": "Quarter onions and place in roasting pan.",
+            "status": "todo"
+          },
+          {
+            "id": "s4",
+            "text": "Roast for 60–75 minutes until juices run clear.",
+            "status": "todo"
+          }
         ]
       },
       "chatHistory": [],
@@ -110,16 +194,49 @@
         "version": 1,
         "title": "Garlic Pasta",
         "ingredients": [
-          { "id": "i1", "name": "spaghetti", "quantity": "200", "unit": "g", "checked": false },
-          { "id": "i2", "name": "garlic", "quantity": "4", "unit": "cloves", "checked": false },
-          { "id": "i3", "name": "olive oil", "quantity": "3", "unit": "tbsp", "checked": false }
+          {
+            "id": "i1",
+            "name": "spaghetti",
+            "quantity": "200",
+            "unit": "g",
+            "checked": false
+          },
+          {
+            "id": "i2",
+            "name": "garlic",
+            "quantity": "4",
+            "unit": "cloves",
+            "checked": false
+          },
+          {
+            "id": "i3",
+            "name": "olive oil",
+            "quantity": "3",
+            "unit": "tbsp",
+            "checked": false
+          }
         ],
         "steps": [
-          { "id": "s1", "text": "Cook pasta according to package directions.", "status": "todo" },
-          { "id": "s2", "text": "Sauté garlic in olive oil until golden.", "status": "todo" },
-          { "id": "s3", "text": "Toss pasta with garlic oil and season to taste.", "status": "todo" }
+          {
+            "id": "s1",
+            "text": "Cook pasta according to package directions.",
+            "status": "todo"
+          },
+          {
+            "id": "s2",
+            "text": "Sauté garlic in olive oil until golden.",
+            "status": "todo"
+          },
+          {
+            "id": "s3",
+            "text": "Toss pasta with garlic oil and season to taste.",
+            "status": "todo"
+          }
         ],
-        "userPreferences": ["no shellfish", "gluten-free optional"]
+        "userPreferences": [
+          "no shellfish",
+          "gluten-free optional"
+        ]
       },
       "chatHistory": [],
       "userMessage": "Can you add some shrimp to this?"
@@ -138,13 +255,37 @@
         "version": 1,
         "title": "Simple Roast Chicken",
         "ingredients": [
-          { "id": "i1", "name": "whole chicken", "quantity": "1", "unit": "whole", "checked": false },
-          { "id": "i2", "name": "garlic", "quantity": "4", "unit": "cloves", "checked": false }
+          {
+            "id": "i1",
+            "name": "whole chicken",
+            "quantity": "1",
+            "unit": "whole",
+            "checked": false
+          },
+          {
+            "id": "i2",
+            "name": "garlic",
+            "quantity": "4",
+            "unit": "cloves",
+            "checked": false
+          }
         ],
         "steps": [
-          { "id": "s1", "text": "Preheat oven to 425°F.", "status": "todo" },
-          { "id": "s2", "text": "Sauté garlic until golden, about 2 minutes.", "status": "todo" },
-          { "id": "s3", "text": "Place chicken in oven and roast for 60 minutes.", "status": "todo" }
+          {
+            "id": "s1",
+            "text": "Preheat oven to 425°F.",
+            "status": "todo"
+          },
+          {
+            "id": "s2",
+            "text": "Sauté garlic until golden, about 2 minutes.",
+            "status": "todo"
+          },
+          {
+            "id": "s3",
+            "text": "Place chicken in oven and roast for 60 minutes.",
+            "status": "todo"
+          }
         ]
       },
       "chatHistory": [],
@@ -164,16 +305,54 @@
         "version": 2,
         "title": "Simple Roast Chicken",
         "ingredients": [
-          { "id": "i1", "name": "whole chicken", "quantity": "1", "unit": "whole", "checked": true },
-          { "id": "i2", "name": "olive oil", "quantity": "2", "unit": "tbsp", "checked": true },
-          { "id": "i3", "name": "garlic", "quantity": "4", "unit": "cloves", "checked": true }
+          {
+            "id": "i1",
+            "name": "whole chicken",
+            "quantity": "1",
+            "unit": "whole",
+            "checked": true
+          },
+          {
+            "id": "i2",
+            "name": "olive oil",
+            "quantity": "2",
+            "unit": "tbsp",
+            "checked": true
+          },
+          {
+            "id": "i3",
+            "name": "garlic",
+            "quantity": "4",
+            "unit": "cloves",
+            "checked": true
+          }
         ],
         "steps": [
-          { "id": "s1", "text": "Preheat oven to 425°F.", "status": "done" },
-          { "id": "s2", "text": "Pat chicken dry and season with salt and pepper.", "status": "done" },
-          { "id": "s3", "text": "Toss garlic cloves in olive oil and place in roasting pan.", "status": "todo" },
-          { "id": "s4", "text": "Place chicken on top of garlic and roast for 60–75 minutes.", "status": "todo" },
-          { "id": "s5", "text": "Rest for 10 minutes before carving.", "status": "todo" }
+          {
+            "id": "s1",
+            "text": "Preheat oven to 425°F.",
+            "status": "done"
+          },
+          {
+            "id": "s2",
+            "text": "Pat chicken dry and season with salt and pepper.",
+            "status": "done"
+          },
+          {
+            "id": "s3",
+            "text": "Toss garlic cloves in olive oil and place in roasting pan.",
+            "status": "todo"
+          },
+          {
+            "id": "s4",
+            "text": "Place chicken on top of garlic and roast for 60–75 minutes.",
+            "status": "todo"
+          },
+          {
+            "id": "s5",
+            "text": "Rest for 10 minutes before carving.",
+            "status": "todo"
+          }
         ]
       },
       "chatHistory": [],
@@ -193,14 +372,44 @@
         "version": 1,
         "title": "Garlic Pasta",
         "ingredients": [
-          { "id": "i1", "name": "spaghetti", "quantity": "200", "unit": "g", "checked": false },
-          { "id": "i2", "name": "garlic", "quantity": "4", "unit": "cloves", "checked": false },
-          { "id": "i3", "name": "olive oil", "quantity": "3", "unit": "tbsp", "checked": false }
+          {
+            "id": "i1",
+            "name": "spaghetti",
+            "quantity": "200",
+            "unit": "g",
+            "checked": false
+          },
+          {
+            "id": "i2",
+            "name": "garlic",
+            "quantity": "4",
+            "unit": "cloves",
+            "checked": false
+          },
+          {
+            "id": "i3",
+            "name": "olive oil",
+            "quantity": "3",
+            "unit": "tbsp",
+            "checked": false
+          }
         ],
         "steps": [
-          { "id": "s1", "text": "Cook pasta according to package directions.", "status": "todo" },
-          { "id": "s2", "text": "Sauté garlic in olive oil until golden.", "status": "todo" },
-          { "id": "s3", "text": "Toss pasta with garlic oil and season to taste.", "status": "todo" }
+          {
+            "id": "s1",
+            "text": "Cook pasta according to package directions.",
+            "status": "todo"
+          },
+          {
+            "id": "s2",
+            "text": "Sauté garlic in olive oil until golden.",
+            "status": "todo"
+          },
+          {
+            "id": "s3",
+            "text": "Toss pasta with garlic oil and season to taste.",
+            "status": "todo"
+          }
         ]
       },
       "chatHistory": [],
@@ -220,14 +429,44 @@
         "version": 1,
         "title": "Garlic Pasta",
         "ingredients": [
-          { "id": "i1", "name": "spaghetti", "quantity": "200", "unit": "g", "checked": false },
-          { "id": "i2", "name": "garlic", "quantity": "4", "unit": "cloves", "checked": false },
-          { "id": "i3", "name": "olive oil", "quantity": "3", "unit": "tbsp", "checked": false }
+          {
+            "id": "i1",
+            "name": "spaghetti",
+            "quantity": "200",
+            "unit": "g",
+            "checked": false
+          },
+          {
+            "id": "i2",
+            "name": "garlic",
+            "quantity": "4",
+            "unit": "cloves",
+            "checked": false
+          },
+          {
+            "id": "i3",
+            "name": "olive oil",
+            "quantity": "3",
+            "unit": "tbsp",
+            "checked": false
+          }
         ],
         "steps": [
-          { "id": "s1", "text": "Cook pasta according to package directions.", "status": "todo" },
-          { "id": "s2", "text": "Sauté garlic in olive oil until golden.", "status": "todo" },
-          { "id": "s3", "text": "Toss pasta with garlic oil and season to taste.", "status": "todo" }
+          {
+            "id": "s1",
+            "text": "Cook pasta according to package directions.",
+            "status": "todo"
+          },
+          {
+            "id": "s2",
+            "text": "Sauté garlic in olive oil until golden.",
+            "status": "todo"
+          },
+          {
+            "id": "s3",
+            "text": "Toss pasta with garlic oil and season to taste.",
+            "status": "todo"
+          }
         ]
       },
       "chatHistory": [],
@@ -249,7 +488,10 @@
         "title": "",
         "ingredients": [],
         "steps": [],
-        "userPreferences": ["no nuts", "nut allergy"]
+        "userPreferences": [
+          "no nuts",
+          "nut allergy"
+        ]
       },
       "chatHistory": [],
       "userMessage": "Make me a Thai peanut noodle dish"
@@ -283,10 +525,22 @@
     "input": {
       "recipeState": null,
       "chatHistory": [
-        { "role": "assistant", "content": "What are you in the mood for tonight?" },
-        { "role": "user", "content": "Something with chicken, fairly quick" },
-        { "role": "assistant", "content": "How about a lemon garlic pan-seared chicken breast? About 25 minutes, just a skillet. Works for two?" },
-        { "role": "user", "content": "Yes, cooking for two, no dairy" }
+        {
+          "role": "assistant",
+          "content": "What are you in the mood for tonight?"
+        },
+        {
+          "role": "user",
+          "content": "Something with chicken, fairly quick"
+        },
+        {
+          "role": "assistant",
+          "content": "How about a lemon garlic pan-seared chicken breast? About 25 minutes, just a skillet. Works for two?"
+        },
+        {
+          "role": "user",
+          "content": "Yes, cooking for two, no dairy"
+        }
       ],
       "userMessage": "That sounds perfect"
     },
@@ -327,19 +581,75 @@
         "version": 2,
         "title": "Weeknight Stir-Fry",
         "ingredients": [
-          { "id": "i1", "name": "chicken breast", "quantity": "1", "unit": "lb", "checked": true },
-          { "id": "i2", "name": "soy sauce", "quantity": "3", "unit": "tbsp", "checked": false },
-          { "id": "i3", "name": "sesame oil", "quantity": "1", "unit": "tbsp", "checked": false },
-          { "id": "i4", "name": "garlic", "quantity": "3", "unit": "cloves", "checked": false },
-          { "id": "i5", "name": "fresh ginger", "quantity": "1", "unit": "tsp", "checked": false },
-          { "id": "i6", "name": "cornstarch", "quantity": "1", "unit": "tsp", "checked": false }
+          {
+            "id": "i1",
+            "name": "chicken breast",
+            "quantity": "1",
+            "unit": "lb",
+            "checked": true
+          },
+          {
+            "id": "i2",
+            "name": "soy sauce",
+            "quantity": "3",
+            "unit": "tbsp",
+            "checked": false
+          },
+          {
+            "id": "i3",
+            "name": "sesame oil",
+            "quantity": "1",
+            "unit": "tbsp",
+            "checked": false
+          },
+          {
+            "id": "i4",
+            "name": "garlic",
+            "quantity": "3",
+            "unit": "cloves",
+            "checked": false
+          },
+          {
+            "id": "i5",
+            "name": "fresh ginger",
+            "quantity": "1",
+            "unit": "tsp",
+            "checked": false
+          },
+          {
+            "id": "i6",
+            "name": "cornstarch",
+            "quantity": "1",
+            "unit": "tsp",
+            "checked": false
+          }
         ],
         "steps": [
-          { "id": "s1", "text": "Slice chicken breast into thin strips.", "status": "done" },
-          { "id": "s2", "text": "Heat wok over high heat until smoking.", "status": "done" },
-          { "id": "s3", "text": "Make the sauce: whisk together soy sauce, sesame oil, minced garlic, grated ginger, and cornstarch until smooth.", "status": "todo" },
-          { "id": "s4", "text": "Stir-fry chicken 3–4 minutes until cooked through.", "status": "todo" },
-          { "id": "s5", "text": "Pour sauce over chicken and toss to coat. Cook 1 minute more.", "status": "todo" }
+          {
+            "id": "s1",
+            "text": "Slice chicken breast into thin strips.",
+            "status": "done"
+          },
+          {
+            "id": "s2",
+            "text": "Heat wok over high heat until smoking.",
+            "status": "done"
+          },
+          {
+            "id": "s3",
+            "text": "Make the sauce: whisk together soy sauce, sesame oil, minced garlic, grated ginger, and cornstarch until smooth.",
+            "status": "todo"
+          },
+          {
+            "id": "s4",
+            "text": "Stir-fry chicken 3–4 minutes until cooked through.",
+            "status": "todo"
+          },
+          {
+            "id": "s5",
+            "text": "Pour sauce over chicken and toss to coat. Cook 1 minute more.",
+            "status": "todo"
+          }
         ]
       },
       "chatHistory": [],
@@ -359,22 +669,69 @@
         "version": 2,
         "title": "Simple Roast Chicken",
         "ingredients": [
-          { "id": "i1", "name": "whole chicken", "quantity": "1", "unit": "whole", "checked": false },
-          { "id": "i2", "name": "olive oil", "quantity": "2", "unit": "tbsp", "checked": false },
-          { "id": "i3", "name": "garlic", "quantity": "4", "unit": "cloves", "checked": false }
+          {
+            "id": "i1",
+            "name": "whole chicken",
+            "quantity": "1",
+            "unit": "whole",
+            "checked": false
+          },
+          {
+            "id": "i2",
+            "name": "olive oil",
+            "quantity": "2",
+            "unit": "tbsp",
+            "checked": false
+          },
+          {
+            "id": "i3",
+            "name": "garlic",
+            "quantity": "4",
+            "unit": "cloves",
+            "checked": false
+          }
         ],
         "steps": [
-          { "id": "s1", "text": "Preheat oven to 425°F.", "status": "todo" },
-          { "id": "s2", "text": "Pat chicken dry and season with salt and pepper.", "status": "todo" },
-          { "id": "s3", "text": "Rub chicken with olive oil and garlic.", "status": "todo" },
-          { "id": "s4", "text": "Roast for 60–75 minutes until juices run clear.", "status": "todo" },
-          { "id": "s5", "text": "Rest for 10 minutes before carving.", "status": "todo" }
+          {
+            "id": "s1",
+            "text": "Preheat oven to 425°F.",
+            "status": "todo"
+          },
+          {
+            "id": "s2",
+            "text": "Pat chicken dry and season with salt and pepper.",
+            "status": "todo"
+          },
+          {
+            "id": "s3",
+            "text": "Rub chicken with olive oil and garlic.",
+            "status": "todo"
+          },
+          {
+            "id": "s4",
+            "text": "Roast for 60–75 minutes until juices run clear.",
+            "status": "todo"
+          },
+          {
+            "id": "s5",
+            "text": "Rest for 10 minutes before carving.",
+            "status": "todo"
+          }
         ]
       },
       "chatHistory": [
-        { "role": "user", "content": "Can you add some rosemary to this?" },
-        { "role": "assistant", "content": "{\"assistant_message\":\"Sure! I'll add fresh rosemary to the ingredient list and work it into the rub.\",\"patchSet\":{\"patchSetId\":\"a1b2c3d4-0000-0000-0000-000000000001\",\"baseRecipeId\":\"00000000-0000-0000-0000-000000000000\",\"baseRecipeVersion\":1,\"patches\":[{\"type\":\"add_ingredient\",\"text\":\"2 sprigs fresh rosemary\",\"after_id\":null},{\"type\":\"update_step\",\"id\":\"s3\",\"text\":\"Rub chicken with olive oil, garlic, and rosemary.\"}]}}" },
-        { "role": "user", "content": "No thanks, skip the rosemary" }
+        {
+          "role": "user",
+          "content": "Can you add some rosemary to this?"
+        },
+        {
+          "role": "assistant",
+          "content": "{\"assistant_message\":\"Sure! I'll add fresh rosemary to the ingredient list and work it into the rub.\",\"patchSet\":{\"patchSetId\":\"a1b2c3d4-0000-0000-0000-000000000001\",\"baseRecipeId\":\"00000000-0000-0000-0000-000000000000\",\"baseRecipeVersion\":1,\"patches\":[{\"type\":\"add_ingredient\",\"text\":\"2 sprigs fresh rosemary\",\"after_id\":null},{\"type\":\"update_step\",\"id\":\"s3\",\"text\":\"Rub chicken with olive oil, garlic, and rosemary.\"}]}}"
+        },
+        {
+          "role": "user",
+          "content": "No thanks, skip the rosemary"
+        }
       ],
       "userMessage": "What should I do next?"
     },
@@ -392,21 +749,87 @@
         "version": 1,
         "title": "Sunday Sauce",
         "ingredients": [
-          { "id": "i1", "name": "Italian sausage links", "quantity": "1", "unit": "lb", "checked": false },
-          { "id": "i2", "name": "olive oil", "quantity": "2", "unit": "tbsp", "checked": false },
-          { "id": "i3", "name": "yellow onion", "quantity": "1", "unit": "large", "checked": false },
-          { "id": "i4", "name": "garlic", "quantity": "4", "unit": "cloves", "checked": false },
-          { "id": "i5", "name": "crushed tomatoes", "quantity": "28", "unit": "oz", "checked": false },
-          { "id": "i6", "name": "tomato paste", "quantity": "2", "unit": "tbsp", "checked": false },
-          { "id": "i7", "name": "dry red wine", "quantity": "0.5", "unit": "cup", "checked": false }
+          {
+            "id": "i1",
+            "name": "Italian sausage links",
+            "quantity": "1",
+            "unit": "lb",
+            "checked": false
+          },
+          {
+            "id": "i2",
+            "name": "olive oil",
+            "quantity": "2",
+            "unit": "tbsp",
+            "checked": false
+          },
+          {
+            "id": "i3",
+            "name": "yellow onion",
+            "quantity": "1",
+            "unit": "large",
+            "checked": false
+          },
+          {
+            "id": "i4",
+            "name": "garlic",
+            "quantity": "4",
+            "unit": "cloves",
+            "checked": false
+          },
+          {
+            "id": "i5",
+            "name": "crushed tomatoes",
+            "quantity": "28",
+            "unit": "oz",
+            "checked": false
+          },
+          {
+            "id": "i6",
+            "name": "tomato paste",
+            "quantity": "2",
+            "unit": "tbsp",
+            "checked": false
+          },
+          {
+            "id": "i7",
+            "name": "dry red wine",
+            "quantity": "0.5",
+            "unit": "cup",
+            "checked": false
+          }
         ],
         "steps": [
-          { "id": "s1", "text": "Heat olive oil in a large Dutch oven over medium heat.", "status": "todo" },
-          { "id": "s2", "text": "Sauté onion until softened, about 5 minutes. Add garlic and cook 1 minute more.", "status": "todo" },
-          { "id": "s3", "text": "Stir in tomato paste and cook 2 minutes until darkened.", "status": "todo" },
-          { "id": "s4", "text": "Brown the sausage in a separate skillet over medium-high heat, turning until golden on all sides, about 8 minutes.", "status": "todo" },
-          { "id": "s5", "text": "Pour in crushed tomatoes and red wine. Add browned sausage. Stir to combine.", "status": "todo" },
-          { "id": "s6", "text": "Reduce heat to low and simmer uncovered for 2 hours, stirring occasionally.", "status": "todo" }
+          {
+            "id": "s1",
+            "text": "Heat olive oil in a large Dutch oven over medium heat.",
+            "status": "todo"
+          },
+          {
+            "id": "s2",
+            "text": "Sauté onion until softened, about 5 minutes. Add garlic and cook 1 minute more.",
+            "status": "todo"
+          },
+          {
+            "id": "s3",
+            "text": "Stir in tomato paste and cook 2 minutes until darkened.",
+            "status": "todo"
+          },
+          {
+            "id": "s4",
+            "text": "Brown the sausage in a separate skillet over medium-high heat, turning until golden on all sides, about 8 minutes.",
+            "status": "todo"
+          },
+          {
+            "id": "s5",
+            "text": "Pour in crushed tomatoes and red wine. Add browned sausage. Stir to combine.",
+            "status": "todo"
+          },
+          {
+            "id": "s6",
+            "text": "Reduce heat to low and simmer uncovered for 2 hours, stirring occasionally.",
+            "status": "todo"
+          }
         ]
       },
       "chatHistory": [],
@@ -426,21 +849,87 @@
         "version": 1,
         "title": "Sunday Sauce",
         "ingredients": [
-          { "id": "i1", "name": "Italian sausage links", "quantity": "1", "unit": "lb", "checked": false },
-          { "id": "i2", "name": "olive oil", "quantity": "2", "unit": "tbsp", "checked": false },
-          { "id": "i3", "name": "yellow onion", "quantity": "1", "unit": "large", "checked": false },
-          { "id": "i4", "name": "garlic", "quantity": "4", "unit": "cloves", "checked": false },
-          { "id": "i5", "name": "crushed tomatoes", "quantity": "28", "unit": "oz", "checked": false },
-          { "id": "i6", "name": "tomato paste", "quantity": "2", "unit": "tbsp", "checked": false },
-          { "id": "i7", "name": "dry red wine", "quantity": "0.5", "unit": "cup", "checked": false }
+          {
+            "id": "i1",
+            "name": "Italian sausage links",
+            "quantity": "1",
+            "unit": "lb",
+            "checked": false
+          },
+          {
+            "id": "i2",
+            "name": "olive oil",
+            "quantity": "2",
+            "unit": "tbsp",
+            "checked": false
+          },
+          {
+            "id": "i3",
+            "name": "yellow onion",
+            "quantity": "1",
+            "unit": "large",
+            "checked": false
+          },
+          {
+            "id": "i4",
+            "name": "garlic",
+            "quantity": "4",
+            "unit": "cloves",
+            "checked": false
+          },
+          {
+            "id": "i5",
+            "name": "crushed tomatoes",
+            "quantity": "28",
+            "unit": "oz",
+            "checked": false
+          },
+          {
+            "id": "i6",
+            "name": "tomato paste",
+            "quantity": "2",
+            "unit": "tbsp",
+            "checked": false
+          },
+          {
+            "id": "i7",
+            "name": "dry red wine",
+            "quantity": "0.5",
+            "unit": "cup",
+            "checked": false
+          }
         ],
         "steps": [
-          { "id": "s1", "text": "Heat olive oil in a large Dutch oven over medium heat.", "status": "todo" },
-          { "id": "s2", "text": "Sauté onion until softened, about 5 minutes. Add garlic and cook 1 minute more.", "status": "todo" },
-          { "id": "s3", "text": "Stir in tomato paste and cook 2 minutes until darkened.", "status": "todo" },
-          { "id": "s4", "text": "Brown the sausage in a separate skillet over medium-high heat, turning until golden on all sides, about 8 minutes.", "status": "todo" },
-          { "id": "s5", "text": "Pour in crushed tomatoes and red wine. Add browned sausage. Stir to combine.", "status": "todo" },
-          { "id": "s6", "text": "Reduce heat to low and simmer uncovered for 2 hours, stirring occasionally.", "status": "todo" }
+          {
+            "id": "s1",
+            "text": "Heat olive oil in a large Dutch oven over medium heat.",
+            "status": "todo"
+          },
+          {
+            "id": "s2",
+            "text": "Sauté onion until softened, about 5 minutes. Add garlic and cook 1 minute more.",
+            "status": "todo"
+          },
+          {
+            "id": "s3",
+            "text": "Stir in tomato paste and cook 2 minutes until darkened.",
+            "status": "todo"
+          },
+          {
+            "id": "s4",
+            "text": "Brown the sausage in a separate skillet over medium-high heat, turning until golden on all sides, about 8 minutes.",
+            "status": "todo"
+          },
+          {
+            "id": "s5",
+            "text": "Pour in crushed tomatoes and red wine. Add browned sausage. Stir to combine.",
+            "status": "todo"
+          },
+          {
+            "id": "s6",
+            "text": "Reduce heat to low and simmer uncovered for 2 hours, stirring occasionally.",
+            "status": "todo"
+          }
         ]
       },
       "chatHistory": [],
@@ -460,13 +949,39 @@
         "version": 1,
         "title": "Simple Pasta",
         "ingredients": [
-          { "id": "i1", "name": "spaghetti", "quantity": "200", "unit": "g", "checked": false },
-          { "id": "i2", "name": "garlic", "quantity": "2", "unit": "cloves", "checked": false },
-          { "id": "i3", "name": "olive oil", "quantity": "3", "unit": "tbsp", "checked": false }
+          {
+            "id": "i1",
+            "name": "spaghetti",
+            "quantity": "200",
+            "unit": "g",
+            "checked": false
+          },
+          {
+            "id": "i2",
+            "name": "garlic",
+            "quantity": "2",
+            "unit": "cloves",
+            "checked": false
+          },
+          {
+            "id": "i3",
+            "name": "olive oil",
+            "quantity": "3",
+            "unit": "tbsp",
+            "checked": false
+          }
         ],
         "steps": [
-          { "id": "s1", "text": "Boil salted water.", "status": "todo" },
-          { "id": "s2", "text": "Cook pasta until al dente.", "status": "todo" }
+          {
+            "id": "s1",
+            "text": "Boil salted water.",
+            "status": "todo"
+          },
+          {
+            "id": "s2",
+            "text": "Cook pasta until al dente.",
+            "status": "todo"
+          }
         ]
       },
       "chatHistory": [],
@@ -484,10 +999,22 @@
     "input": {
       "recipeState": null,
       "chatHistory": [
-        { "role": "user", "content": "I want to make a classic herb roast chicken for Sunday dinner." },
-        { "role": "assistant", "content": "Great choice! A classic herb roast chicken is perfect for Sunday. Do you have a preferred roasting time or any dietary restrictions I should know about?" },
-        { "role": "user", "content": "About 1.5 hours total, no restrictions." },
-        { "role": "assistant", "content": "Perfect — I have everything I need. I'll make you a Classic Herb Roast Chicken: whole chicken roasted with fresh herbs, garlic, and lemon at high heat for crispy skin and juicy meat in about 1.5 hours." }
+        {
+          "role": "user",
+          "content": "I want to make a classic herb roast chicken for Sunday dinner."
+        },
+        {
+          "role": "assistant",
+          "content": "Great choice! A classic herb roast chicken is perfect for Sunday. Do you have a preferred roasting time or any dietary restrictions I should know about?"
+        },
+        {
+          "role": "user",
+          "content": "About 1.5 hours total, no restrictions."
+        },
+        {
+          "role": "assistant",
+          "content": "Perfect — I have everything I need. I'll make you a Classic Herb Roast Chicken: whole chicken roasted with fresh herbs, garlic, and lemon at high heat for crispy skin and juicy meat in about 1.5 hours."
+        }
       ],
       "userMessage": "Generate the recipe."
     },
@@ -506,13 +1033,30 @@
         "version": 1,
         "title": "Simple Pasta",
         "ingredients": [
-          { "id": "i1", "text": "200g spaghetti" },
-          { "id": "i2", "text": "2 cloves garlic" },
-          { "id": "i3", "text": "3 tbsp olive oil" }
+          {
+            "id": "i1",
+            "text": "200g spaghetti"
+          },
+          {
+            "id": "i2",
+            "text": "2 cloves garlic"
+          },
+          {
+            "id": "i3",
+            "text": "3 tbsp olive oil"
+          }
         ],
         "steps": [
-          { "id": "s1", "text": "Boil salted water.", "status": "todo" },
-          { "id": "s2", "text": "Cook pasta until al dente.", "status": "todo" }
+          {
+            "id": "s1",
+            "text": "Boil salted water.",
+            "status": "todo"
+          },
+          {
+            "id": "s2",
+            "text": "Cook pasta until al dente.",
+            "status": "todo"
+          }
         ]
       },
       "chatHistory": [],
@@ -549,8 +1093,14 @@
     "input": {
       "recipeState": null,
       "chatHistory": [
-        { "role": "assistant", "content": "{\"assistant_message\":\"A classic pasta carbonara sounds perfect. Ready to build it?\",\"patchSet\":null,\"suggest_generate\":true}" },
-        { "role": "user", "content": "Yes, let's do it" }
+        {
+          "role": "assistant",
+          "content": "{\"assistant_message\":\"A classic pasta carbonara sounds perfect. Ready to build it?\",\"patchSet\":null,\"suggest_generate\":true}"
+        },
+        {
+          "role": "user",
+          "content": "Yes, let's do it"
+        }
       ],
       "userMessage": "Make me a simple pasta carbonara"
     },
@@ -569,16 +1119,56 @@
         "version": 1,
         "title": "Simple Roast Chicken",
         "ingredients": [
-          { "id": "i1", "name": "whole chicken", "quantity": "1", "unit": "whole", "checked": false },
-          { "id": "i2", "name": "olive oil", "quantity": "2", "unit": "tbsp", "checked": false },
-          { "id": "i3", "name": "garlic", "quantity": "4", "unit": "cloves", "checked": false },
-          { "id": "i4", "name": "fresh thyme", "quantity": "4", "unit": "sprigs", "checked": false }
+          {
+            "id": "i1",
+            "name": "whole chicken",
+            "quantity": "1",
+            "unit": "whole",
+            "checked": false
+          },
+          {
+            "id": "i2",
+            "name": "olive oil",
+            "quantity": "2",
+            "unit": "tbsp",
+            "checked": false
+          },
+          {
+            "id": "i3",
+            "name": "garlic",
+            "quantity": "4",
+            "unit": "cloves",
+            "checked": false
+          },
+          {
+            "id": "i4",
+            "name": "fresh thyme",
+            "quantity": "4",
+            "unit": "sprigs",
+            "checked": false
+          }
         ],
         "steps": [
-          { "id": "s1", "text": "Preheat oven to 425°F.", "status": "todo" },
-          { "id": "s2", "text": "Pat chicken dry and season with salt and pepper.", "status": "todo" },
-          { "id": "s3", "text": "Rub chicken with olive oil, garlic, and thyme.", "status": "todo" },
-          { "id": "s4", "text": "Roast for 60–75 minutes until juices run clear.", "status": "todo" }
+          {
+            "id": "s1",
+            "text": "Preheat oven to 425°F.",
+            "status": "todo"
+          },
+          {
+            "id": "s2",
+            "text": "Pat chicken dry and season with salt and pepper.",
+            "status": "todo"
+          },
+          {
+            "id": "s3",
+            "text": "Rub chicken with olive oil, garlic, and thyme.",
+            "status": "todo"
+          },
+          {
+            "id": "s4",
+            "text": "Roast for 60–75 minutes until juices run clear.",
+            "status": "todo"
+          }
         ]
       },
       "chatHistory": [],
@@ -599,13 +1189,37 @@
         "version": 1,
         "title": "Simple Roast Chicken",
         "ingredients": [
-          { "id": "i1", "name": "whole chicken", "quantity": "1", "unit": "whole", "checked": false },
-          { "id": "i2", "name": "garlic", "quantity": "4", "unit": "cloves", "checked": false }
+          {
+            "id": "i1",
+            "name": "whole chicken",
+            "quantity": "1",
+            "unit": "whole",
+            "checked": false
+          },
+          {
+            "id": "i2",
+            "name": "garlic",
+            "quantity": "4",
+            "unit": "cloves",
+            "checked": false
+          }
         ],
         "steps": [
-          { "id": "s1", "text": "Preheat oven to 425°F.", "status": "done" },
-          { "id": "s2", "text": "Pat chicken dry and season with salt and pepper.", "status": "done" },
-          { "id": "s3", "text": "Roast for 60–75 minutes until juices run clear.", "status": "todo" }
+          {
+            "id": "s1",
+            "text": "Preheat oven to 425°F.",
+            "status": "done"
+          },
+          {
+            "id": "s2",
+            "text": "Pat chicken dry and season with salt and pepper.",
+            "status": "done"
+          },
+          {
+            "id": "s3",
+            "text": "Roast for 60–75 minutes until juices run clear.",
+            "status": "todo"
+          }
         ]
       },
       "chatHistory": [],
@@ -626,13 +1240,39 @@
         "version": 1,
         "title": "Simple Roast Chicken",
         "ingredients": [
-          { "id": "i1", "name": "whole chicken", "quantity": "1", "unit": "whole", "checked": false },
-          { "id": "i2", "name": "olive oil", "quantity": "2", "unit": "tbsp", "checked": false },
-          { "id": "i3", "name": "cayenne pepper", "quantity": "1", "unit": "pinch", "checked": false }
+          {
+            "id": "i1",
+            "name": "whole chicken",
+            "quantity": "1",
+            "unit": "whole",
+            "checked": false
+          },
+          {
+            "id": "i2",
+            "name": "olive oil",
+            "quantity": "2",
+            "unit": "tbsp",
+            "checked": false
+          },
+          {
+            "id": "i3",
+            "name": "cayenne pepper",
+            "quantity": "1",
+            "unit": "pinch",
+            "checked": false
+          }
         ],
         "steps": [
-          { "id": "s1", "text": "Preheat oven to 425°F.", "status": "todo" },
-          { "id": "s2", "text": "Rub chicken with olive oil and cayenne.", "status": "todo" }
+          {
+            "id": "s1",
+            "text": "Preheat oven to 425°F.",
+            "status": "todo"
+          },
+          {
+            "id": "s2",
+            "text": "Rub chicken with olive oil and cayenne.",
+            "status": "todo"
+          }
         ]
       },
       "chatHistory": [
@@ -657,12 +1297,32 @@
         "version": 1,
         "title": "Simple Roast Chicken",
         "ingredients": [
-          { "id": "i1", "name": "whole chicken", "quantity": "1", "unit": "whole", "checked": false },
-          { "id": "i2", "name": "olive oil", "quantity": "2", "unit": "tbsp", "checked": false }
+          {
+            "id": "i1",
+            "name": "whole chicken",
+            "quantity": "1",
+            "unit": "whole",
+            "checked": false
+          },
+          {
+            "id": "i2",
+            "name": "olive oil",
+            "quantity": "2",
+            "unit": "tbsp",
+            "checked": false
+          }
         ],
         "steps": [
-          { "id": "s1", "text": "Preheat oven to 425°F.", "status": "todo" },
-          { "id": "s2", "text": "Rub chicken with olive oil.", "status": "todo" }
+          {
+            "id": "s1",
+            "text": "Preheat oven to 425°F.",
+            "status": "todo"
+          },
+          {
+            "id": "s2",
+            "text": "Rub chicken with olive oil.",
+            "status": "todo"
+          }
         ]
       },
       "chatHistory": [
@@ -687,10 +1347,20 @@
         "version": 1,
         "title": "Simple Roast Chicken",
         "ingredients": [
-          { "id": "i1", "name": "whole chicken", "quantity": "1", "unit": "whole", "checked": false }
+          {
+            "id": "i1",
+            "name": "whole chicken",
+            "quantity": "1",
+            "unit": "whole",
+            "checked": false
+          }
         ],
         "steps": [
-          { "id": "s1", "text": "Preheat oven to 425°F.", "status": "todo" }
+          {
+            "id": "s1",
+            "text": "Preheat oven to 425°F.",
+            "status": "todo"
+          }
         ]
       },
       "chatHistory": [],
@@ -710,10 +1380,20 @@
         "version": 1,
         "title": "Simple Roast Chicken",
         "ingredients": [
-          { "id": "i1", "name": "whole chicken", "quantity": "1", "unit": "whole", "checked": false }
+          {
+            "id": "i1",
+            "name": "whole chicken",
+            "quantity": "1",
+            "unit": "whole",
+            "checked": false
+          }
         ],
         "steps": [
-          { "id": "s1", "text": "Preheat oven to 425°F.", "status": "todo" }
+          {
+            "id": "s1",
+            "text": "Preheat oven to 425°F.",
+            "status": "todo"
+          }
         ]
       },
       "chatHistory": [],
@@ -723,6 +1403,70 @@
       "shouldCallVoiceFunction": false,
       "shouldPatch": false,
       "notes": "Voice mode cannot generate new recipes or enter exploration mode. Model must respond verbally (no function call) telling the user to exit voice mode to start a new recipe. Calling propose_patch or any other function is wrong. Generating recipe content is also wrong. A correct response is a single spoken sentence like 'Exit voice mode and start a new recipe there.'"
+    }
+  },
+  {
+    "name": "unit-conversion-patch",
+    "description": "Post-import silent unit conversion: a canvas with metric ingredients and a unit_conversion request targeting imperial must return a non-null patchSet of unit updates with no conversational filler.",
+    "promptType": "unit_conversion",
+    "input": {
+      "recipeState": {
+        "version": 1,
+        "title": "Olive Oil Cake",
+        "ingredients": [
+          {
+            "id": "i1",
+            "name": "flour",
+            "quantity": "250",
+            "unit": "g",
+            "checked": false
+          },
+          {
+            "id": "i2",
+            "name": "milk",
+            "quantity": "200",
+            "unit": "ml",
+            "checked": false
+          },
+          {
+            "id": "i3",
+            "name": "olive oil",
+            "quantity": "120",
+            "unit": "ml",
+            "checked": false
+          },
+          {
+            "id": "i4",
+            "name": "sugar",
+            "quantity": "150",
+            "unit": "g",
+            "checked": false
+          }
+        ],
+        "steps": [
+          {
+            "id": "s1",
+            "text": "Preheat the oven to 180°C.",
+            "status": "todo"
+          },
+          {
+            "id": "s2",
+            "text": "Whisk the flour and sugar together, then stir in the milk and olive oil.",
+            "status": "todo"
+          },
+          {
+            "id": "s3",
+            "text": "Bake for 35 minutes until golden.",
+            "status": "todo"
+          }
+        ]
+      },
+      "chatHistory": [],
+      "userMessage": "Convert this recipe to imperial units."
+    },
+    "expected": {
+      "shouldPatch": true,
+      "notes": "Response must contain a non-null patchSet converting grams/milliliters/°C to US customary units (cups, ounces, °F). assistant_message must be only a short confirmation like \"Converted to imperial.\" — no clarifying questions, no conversational filler."
     }
   }
 ]

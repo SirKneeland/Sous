@@ -1,6 +1,21 @@
 import Foundation
 import SousCore
 
+// MARK: - Unit system preference
+
+/// The measurement system the user prefers for recipes.
+enum UnitSystem: String, CaseIterable, Codable, Sendable {
+    case imperial
+    case metric
+
+    /// Returns the default based on the device locale's measurement system.
+    static func defaultForLocale() -> UnitSystem {
+        let sys = Locale.current.measurementSystem
+        if sys == .us || sys == .uk { return .imperial }
+        return .metric
+    }
+}
+
 // MARK: - Voice persona options
 
 /// Accent the voice assistant speaks with. Owned by `UserPreferences`.
@@ -35,6 +50,8 @@ struct UserPreferences: Codable, Equatable, Sendable {
     var voiceAccent: VoiceAccent = UserPreferences.defaultAccent()
     /// Voice register (Female/Male) used by the voice assistant.
     var voiceGender: VoiceGender = .feminine
+    /// Preferred measurement system for recipes.
+    var preferredUnitSystem: UnitSystem = UnitSystem.defaultForLocale()
 
     /// Picks a default voice accent from the device's current region.
     static func defaultAccent() -> VoiceAccent {
@@ -54,7 +71,8 @@ struct UserPreferences: Codable, Equatable, Sendable {
             servingSize: servingSize,
             equipment: equipment,
             customInstructions: customInstructions,
-            personalityMode: personalityMode
+            personalityMode: personalityMode,
+            preferredUnitSystem: preferredUnitSystem.rawValue
         )
     }
 }
@@ -76,6 +94,7 @@ extension UserPreferences {
         // New in this change — absent in older saved JSON; fall back to defaults.
         voiceAccent = try c.decodeIfPresent(VoiceAccent.self, forKey: .voiceAccent) ?? UserPreferences.defaultAccent()
         voiceGender = try c.decodeIfPresent(VoiceGender.self, forKey: .voiceGender) ?? .feminine
+        preferredUnitSystem = try c.decodeIfPresent(UnitSystem.self, forKey: .preferredUnitSystem) ?? UnitSystem.defaultForLocale()
     }
 }
 

@@ -18,6 +18,11 @@ public enum UIStateMachine {
         case (.recipeOnly(let recipe), .openVoiceMode):
             return .voiceActive(recipe: recipe)
 
+        // Silent patch arrival with no chat/voice surface open (e.g. post-import
+        // unit conversion). Routes straight into patch review like any other patch.
+        case (.recipeOnly(let recipe), .patchReceived(let patchSet)):
+            return .patchProposed(recipe: recipe, patchSet: patchSet, validation: nil, hidden: HiddenContext())
+
         // MARK: voiceActive transitions
 
         case (.voiceActive(let recipe), .closeVoiceMode):

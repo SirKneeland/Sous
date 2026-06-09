@@ -27,6 +27,7 @@ Always read the relevant docs before starting work:
 - `DesignSpec.md` — visual design decisions, component specs, and UX rules. Read before touching any view or layout.
 - `PersonalityModes.md` — detailed behavioral spec for Minimal/Normal/Playful personality modes and their LLM prompt rules.
 - `CODEBASE.md` — repo structure, module map, test commands. Read before navigating the codebase.
+- `docs/KnownIssues.md` — running log of deferred bugs, flaky tests, and cleanup items. Read when working in an area that may be affected.
 
 ---
 

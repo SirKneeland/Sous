@@ -659,6 +659,7 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             LLMMessage(role: .system, content: systemPrompt(
                 hasCanvas: request.hasCanvas,
                 isImportExtraction: request.isImportExtraction,
+                isUnitConversion: request.isUnitConversion,
                 personalityMode: request.userPrefs.personalityMode
             )),
             LLMMessage(role: .system, content: recipeContextMessage(for: request)),
@@ -709,6 +710,7 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             LLMMessage(role: .system, content: systemPrompt(
                 hasCanvas: request.hasCanvas,
                 isImportExtraction: request.isImportExtraction,
+                isUnitConversion: request.isUnitConversion,
                 personalityMode: request.userPrefs.personalityMode
             )),
             LLMMessage(role: .system, content: recipeContextMessage(for: request)),
@@ -720,8 +722,29 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
 
     // MARK: - Prompt Text
 
-    private func systemPrompt(hasCanvas: Bool, isImportExtraction: Bool, personalityMode: String) -> String {
-        if isImportExtraction {
+    private func systemPrompt(hasCanvas: Bool, isImportExtraction: Bool, isUnitConversion: Bool, personalityMode: String) -> String {
+        if isUnitConversion {
+            return """
+            You are Sous performing a silent, mechanical unit conversion on the recipe in RECIPE CONTEXT. The target unit system is named in the user message ("imperial" or "metric"). Your only job is to convert every measurement and temperature in the recipe to that target system and emit a PatchSet. This is not a conversation.
+
+            RULES — never violate:
+            1. Output JSON only. No markdown. No code fences. No prose outside JSON.
+            2. Convert EVERY ingredient amount, every measurement in step text, and every temperature to the target unit system. Imperial target = US customary (cups, tablespoons, teaspoons, ounces, pounds, °F). Metric target = grams, milliliters, liters, °C; prefer weight over volume for dry ingredients where practical.
+            3. Use sensible, cook-friendly rounded conversions (e.g. 250 ml → 1 cup, 200°C → 400°F, 500 g → 1 lb 2 oz or ~1.1 lb), not raw decimal precision.
+            4. Convert ONLY units. Never add, remove, reorder, or substitute ingredients or steps. Never change wording except the numbers and unit labels being converted. Preserve all non-measurement text verbatim.
+            5. Emit update_ingredient for each ingredient whose amount changed, and update_step for each step whose text contains a converted measurement or temperature. Use the exact ids from RECIPE CONTEXT. Leave items with no measurements untouched (no patch).
+            6. Done-step immutability does NOT apply here — convert every ingredient and step regardless of status. This runs immediately after import.
+            7. Never ask a clarifying question. Never seek confirmation. Never reply conversationally. The response MUST contain a non-null patchSet.
+            8. assistant_message must be a single short confirmation only — exactly "Converted to imperial." or "Converted to metric." matching the target. Nothing else.
+
+            Output shape (patchSetId must be a new UUID you generate):
+            {"assistant_message":"Converted to imperial.","patchSet":{"patchSetId":"<new-uuid>","baseRecipeId":"<copy id from RECIPE CONTEXT>","baseRecipeVersion":<copy version from RECIPE CONTEXT>,"patches":[{"type":"update_ingredient","id":"<uuid>","text":"..."},{"type":"update_step","id":"<uuid>","text":"..."}]}}
+
+            Patch operations (use exact ids from RECIPE CONTEXT):
+            {"type":"update_ingredient","id":"<uuid>","text":"..."}
+            {"type":"update_step","id":"<uuid>","text":"..."}
+            """
+        } else if isImportExtraction {
             return """
             You are Sous. The user has provided recipe text extracted from a photo or pasted directly. Your only job is faithful extraction — structure this text into a recipe canvas with no interpretation, substitution, or editorializing.
 
@@ -973,6 +996,13 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             let formatted = prefs.memories.map { "• \($0)" }.joined(separator: "\n")
             lines.append("memories (user context for all sessions):\n\(formatted)")
         }
+        if !request.isImportExtraction {
+            if prefs.preferredUnitSystem == "imperial" {
+                lines.append("preferredUnits: imperial — use US customary units throughout all recipes (cups, tablespoons, teaspoons, ounces, pounds, °F)")
+            } else if prefs.preferredUnitSystem == "metric" {
+                lines.append("preferredUnits: metric — use metric units throughout all recipes (grams, milliliters, liters, °C); prefer weight over volume for dry ingredients where practical")
+            }
+        }
 
         if let decision = request.nextLLMContext?.lastPatchDecision {
             lines.append("last patch decision: id=\(decision.patchSetId) decision=\(decision.decision.rawValue)")
@@ -1185,7 +1215,7 @@ public extension OpenAILLMOrchestrator {
     /// the given request. Used by the debug diagnostic exporter only — not called in
     /// production code paths.
     func buildDebugPromptStrings(for request: LLMRequest) -> (system: String, context: String) {
-        (systemPrompt(hasCanvas: request.hasCanvas, isImportExtraction: request.isImportExtraction, personalityMode: request.userPrefs.personalityMode),
+        (systemPrompt(hasCanvas: request.hasCanvas, isImportExtraction: request.isImportExtraction, isUnitConversion: request.isUnitConversion, personalityMode: request.userPrefs.personalityMode),
          recipeContextMessage(for: request))
     }
 }

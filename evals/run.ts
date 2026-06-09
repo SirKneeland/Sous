@@ -56,7 +56,7 @@ interface TestExpected {
 interface TestCase {
   name: string;
   description: string;
-  promptType: "no_canvas" | "has_canvas" | "import" | "voice";
+  promptType: "no_canvas" | "has_canvas" | "import" | "voice" | "unit_conversion";
   input: TestInput;
   expected: TestExpected;
   /** When true, the case is excluded from the eval run (known capability gap or WIP). */
@@ -118,6 +118,26 @@ Patch operations (blank canvas — always null for after_id, after_step_id, and 
 {"type":"add_step","text":"...","after_step_id":null}                                    (add client_id:"<kebab-string>" when this step has numbered sub-steps)
 {"type":"add_substep","text":"...","parent_step_id":"<client_id>","after_substep_id":null}
 {"type":"add_note","text":"..."}`;
+
+// Mirrors the isUnitConversion branch of systemPrompt() in OpenAILLMOrchestrator.swift.
+const SYSTEM_PROMPT_UNIT_CONVERSION = `You are Sous performing a silent, mechanical unit conversion on the recipe in RECIPE CONTEXT. The target unit system is named in the user message ("imperial" or "metric"). Your only job is to convert every measurement and temperature in the recipe to that target system and emit a PatchSet. This is not a conversation.
+
+RULES — never violate:
+1. Output JSON only. No markdown. No code fences. No prose outside JSON.
+2. Convert EVERY ingredient amount, every measurement in step text, and every temperature to the target unit system. Imperial target = US customary (cups, tablespoons, teaspoons, ounces, pounds, °F). Metric target = grams, milliliters, liters, °C; prefer weight over volume for dry ingredients where practical.
+3. Use sensible, cook-friendly rounded conversions (e.g. 250 ml → 1 cup, 200°C → 400°F, 500 g → 1 lb 2 oz or ~1.1 lb), not raw decimal precision.
+4. Convert ONLY units. Never add, remove, reorder, or substitute ingredients or steps. Never change wording except the numbers and unit labels being converted. Preserve all non-measurement text verbatim.
+5. Emit update_ingredient for each ingredient whose amount changed, and update_step for each step whose text contains a converted measurement or temperature. Use the exact ids from RECIPE CONTEXT. Leave items with no measurements untouched (no patch).
+6. Done-step immutability does NOT apply here — convert every ingredient and step regardless of status. This runs immediately after import.
+7. Never ask a clarifying question. Never seek confirmation. Never reply conversationally. The response MUST contain a non-null patchSet.
+8. assistant_message must be a single short confirmation only — exactly "Converted to imperial." or "Converted to metric." matching the target. Nothing else.
+
+Output shape (patchSetId must be a new UUID you generate):
+{"assistant_message":"Converted to imperial.","patchSet":{"patchSetId":"<new-uuid>","baseRecipeId":"<copy id from RECIPE CONTEXT>","baseRecipeVersion":<copy version from RECIPE CONTEXT>,"patches":[{"type":"update_ingredient","id":"<uuid>","text":"..."},{"type":"update_step","id":"<uuid>","text":"..."}]}}
+
+Patch operations (use exact ids from RECIPE CONTEXT):
+{"type":"update_ingredient","id":"<uuid>","text":"..."}
+{"type":"update_step","id":"<uuid>","text":"..."}`;
 
 const SYSTEM_PROMPT_HAS_CANVAS = `You are Sous, a cooking companion who loves food and has strong opinions about it. A recipe is on the canvas and the user is working with it.
 
@@ -428,10 +448,11 @@ function buildRecipeContext(recipeState: RecipeState | null): string {
 
 function selectSystemPrompt(promptType: TestCase["promptType"]): string {
   switch (promptType) {
-    case "import":     return SYSTEM_PROMPT_IMPORT;
-    case "has_canvas": return SYSTEM_PROMPT_HAS_CANVAS;
-    case "no_canvas":  return SYSTEM_PROMPT_NO_CANVAS;
-    case "voice":      return ""; // voice uses buildVoiceSystemPromptForEval instead
+    case "import":          return SYSTEM_PROMPT_IMPORT;
+    case "unit_conversion": return SYSTEM_PROMPT_UNIT_CONVERSION;
+    case "has_canvas":      return SYSTEM_PROMPT_HAS_CANVAS;
+    case "no_canvas":       return SYSTEM_PROMPT_NO_CANVAS;
+    case "voice":           return ""; // voice uses buildVoiceSystemPromptForEval instead
   }
 }
 

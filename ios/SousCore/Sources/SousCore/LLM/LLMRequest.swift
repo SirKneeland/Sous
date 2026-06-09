@@ -17,6 +17,8 @@ public struct LLMUserPrefs: Equatable, Sendable {
     public let memories: [String]
     /// Personality mode controlling AI communication style. Valid values: "minimal", "normal", "playful".
     public let personalityMode: String
+    /// Preferred measurement system. Valid values: "imperial", "metric".
+    public let preferredUnitSystem: String
 
     public init(
         hardAvoids: [String],
@@ -24,7 +26,8 @@ public struct LLMUserPrefs: Equatable, Sendable {
         equipment: [String] = [],
         customInstructions: String = "",
         memories: [String] = [],
-        personalityMode: String = "normal"
+        personalityMode: String = "normal",
+        preferredUnitSystem: String = "imperial"
     ) {
         self.hardAvoids = hardAvoids
         self.servingSize = servingSize
@@ -32,6 +35,7 @@ public struct LLMUserPrefs: Equatable, Sendable {
         self.customInstructions = customInstructions
         self.memories = memories
         self.personalityMode = personalityMode
+        self.preferredUnitSystem = preferredUnitSystem
     }
 }
 
@@ -111,6 +115,11 @@ public struct LLMRequest: Sendable {
     /// instead of the exploration or editing prompts. Used exclusively by the
     /// Recipe Import flow. Defaults to false for all other requests.
     public let isImportExtraction: Bool
+    /// When true, the orchestrator uses a dedicated silent unit-conversion system
+    /// prompt that forces a PatchSet converting every measurement and temperature
+    /// to the target unit system. Used exclusively by the post-import unit
+    /// conversion flow. Defaults to false for all other requests.
+    public let isUnitConversion: Bool
     /// When the user taps "Ask Sous" on a specific row, this carries that item's
     /// text and type as structured context injected alongside the user message.
     public let referencedItem: ReferencedItem?
@@ -125,6 +134,7 @@ public struct LLMRequest: Sendable {
         nextLLMContext: NextLLMContext? = nil,
         conversationHistory: [LLMMessage] = [],
         isImportExtraction: Bool = false,
+        isUnitConversion: Bool = false,
         referencedItem: ReferencedItem? = nil
     ) {
         self.recipeId = recipeId
@@ -136,6 +146,7 @@ public struct LLMRequest: Sendable {
         self.nextLLMContext = nextLLMContext
         self.conversationHistory = conversationHistory
         self.isImportExtraction = isImportExtraction
+        self.isUnitConversion = isUnitConversion
         self.referencedItem = referencedItem
     }
 }

@@ -236,6 +236,14 @@ struct ContentView: View {
                 store.isShowingImportSheet = false
             })
         }
+        .alert("Convert Units?", isPresented: $store.showUnitConversionPrompt) {
+            Button("Convert") { store.convertImportedRecipeUnits() }
+            Button("Keep Original", role: .cancel) { store.showUnitConversionPrompt = false }
+        } message: {
+            let detected = store.userPreferences.preferredUnitSystem == .metric ? "imperial" : "metric"
+            let preferred = store.userPreferences.preferredUnitSystem == .metric ? "metric" : "imperial"
+            Text("This recipe uses \(detected) units. Would you like to convert it to \(preferred)?")
+        }
         .overlay(alignment: .bottom) {
             if let session = timerManager.doneQueue.first {
                 TimerDoneBanner(session: session) { stepId in

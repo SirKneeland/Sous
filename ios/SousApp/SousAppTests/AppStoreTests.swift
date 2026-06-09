@@ -918,6 +918,88 @@ final class AppStoreTests: XCTestCase {
         XCTAssertNotNil(store.importError, "importError must be set when LLM returns noPatches")
     }
 
+    // MARK: (m21-f) showUnitConversionPrompt set when imported units differ from preference
+    // DynamicImportOrchestrator always returns metric ingredients (200g, 100g).
+    // Setting preference to .imperial guarantees a mismatch.
+
+    func test_m21f_import_showsConversionPrompt_whenUnitsMismatch() async {
+        let capturer = DynamicImportOrchestrator()
+        let store = AppStore(testOrchestrator: capturer)
+        store.startNewSession()
+        // Imperial preference — orchestrator returns metric recipe → mismatch → modal shows.
+        var prefs = store.userPreferences
+        prefs.preferredUnitSystem = .imperial
+        store.updatePreferences(prefs)
+
+        store.sendImportRequest(text: "some recipe text")
+        await drainMain()
+
+        XCTAssertTrue(store.hasCanvas, "Pre-condition: canvas must be set")
+        XCTAssertTrue(store.showUnitConversionPrompt,
+                      "showUnitConversionPrompt must be true when imported units differ from preference")
+    }
+
+    // MARK: (m21-g) showUnitConversionPrompt NOT set when imported units match preference
+    // DynamicImportOrchestrator always returns metric ingredients (200g, 100g).
+    // Setting preference to .metric guarantees a match → no modal.
+
+    func test_m21g_import_noConversionPrompt_whenUnitsMatch() async {
+        let capturer = DynamicImportOrchestrator()
+        let store = AppStore(testOrchestrator: capturer)
+        store.startNewSession()
+        // Metric preference — orchestrator returns metric recipe → match → no modal.
+        var prefs = store.userPreferences
+        prefs.preferredUnitSystem = .metric
+        store.updatePreferences(prefs)
+
+        store.sendImportRequest(text: "some recipe text")
+        await drainMain()
+
+        XCTAssertTrue(store.hasCanvas, "Pre-condition: canvas must be set")
+        XCTAssertFalse(store.showUnitConversionPrompt,
+                       "showUnitConversionPrompt must be false when imported units match preference")
+    }
+
+    // MARK: (m22-a) unit conversion is silent — no conversion bubble in the transcript
+
+    func test_m22a_unitConversion_doesNotAppendChatMessage() async {
+        let capturer = DynamicImportOrchestrator()
+        let store = AppStore(testOrchestrator: capturer)
+        store.startNewSession()
+        // Imperial preference — orchestrator returns metric recipe → mismatch → modal shows.
+        var prefs = store.userPreferences
+        prefs.preferredUnitSystem = .imperial
+        store.updatePreferences(prefs)
+
+        store.sendImportRequest(text: "some recipe text")
+        await drainMain()
+        XCTAssertTrue(store.showUnitConversionPrompt, "Pre-condition: conversion prompt available")
+
+        let transcriptCountBeforeConversion = store.chatTranscript.count
+
+        // User taps "Convert".
+        store.convertImportedRecipeUnits()
+        await drainMain()
+
+        // The conversion instruction must never appear as a chat bubble.
+        XCTAssertFalse(
+            store.chatTranscript.contains { $0.text.lowercased().contains("convert") },
+            "Conversion instruction must not appear in chatTranscript"
+        )
+        XCTAssertEqual(
+            store.chatTranscript.count, transcriptCountBeforeConversion,
+            "Unit conversion must not append any message to chatTranscript"
+        )
+        // Conversion applies directly to the canvas — it must NOT enter patch review.
+        XCTAssertFalse(store.uiState.isPatchReview,
+                       "Conversion must apply directly, not enter patch review")
+        XCTAssertFalse(store.uiState.isPatchProposed,
+                       "Conversion must apply directly, not enter patchProposed")
+        guard case .recipeOnly = store.uiState else {
+            return XCTFail("Conversion must leave the canvas in recipeOnly, got \(store.uiState)")
+        }
+    }
+
     // MARK: (mep-a) triggerMiseEnPlace — applies transformation to recipe
 
     func test_mepa_triggerMiseEnPlace_populatesMiseEnPlaceAndUpdatesProcedure() async {

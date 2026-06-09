@@ -126,6 +126,12 @@ struct RecentRecipesView: View {
             sessions = store.loadRecentSessions()
             loadSummaries(for: sessions)
         }
+        .onChange(of: store.importSuccess) { _, succeeded in
+            if succeeded {
+                sessions = store.loadRecentSessions()
+                loadSummaries(for: sessions)
+            }
+        }
     }
 
     // MARK: - Title view

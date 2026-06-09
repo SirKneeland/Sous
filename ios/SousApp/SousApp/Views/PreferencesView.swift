@@ -62,6 +62,35 @@ struct PreferencesView: View {
             .listRowBackground(Color.sousBackground)
             .listRowSeparatorTint(Color.sousSeparator)
 
+            // MARK: Units
+            Section {
+                Picker("Units", selection: Binding(
+                    get: { store.userPreferences.preferredUnitSystem },
+                    set: { newValue in
+                        var prefs = store.userPreferences
+                        prefs.preferredUnitSystem = newValue
+                        store.updatePreferences(prefs)
+                    }
+                )) {
+                    Text("Imperial").tag(UnitSystem.imperial)
+                    Text("Metric").tag(UnitSystem.metric)
+                }
+                .pickerStyle(.segmented)
+                .font(.sousBody)
+            } header: {
+                Text("MEASUREMENT UNITS")
+                    .font(.sousSectionHeader)
+                    .foregroundStyle(Color.sousTerracotta)
+                    .kerning(1.2)
+                    .textCase(nil)
+            } footer: {
+                Text("Sous will use these units in all new recipes and edits.")
+                    .font(.sousCaption)
+                    .foregroundStyle(Color.sousMuted)
+            }
+            .listRowBackground(Color.sousBackground)
+            .listRowSeparatorTint(Color.sousSeparator)
+
             // MARK: Serving Size
             Section {
                 Toggle("Set a default", isOn: Binding(

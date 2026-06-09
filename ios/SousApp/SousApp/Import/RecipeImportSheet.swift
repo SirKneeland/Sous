@@ -21,6 +21,14 @@ struct RecipeImportSheet: View {
     @State private var clipboardHasText: Bool = false
     @State private var importProgress: Double = 0
 
+    init(store: AppStore, onCancel: @escaping () -> Void) {
+        _store = ObservedObject(wrappedValue: store)
+        self.onCancel = onCancel
+        // When the sheet is (re)presented for a unit conversion, open straight into the
+        // loading screen instead of the chooser.
+        _mode = State(initialValue: store.importLoadingStage == .converting ? .loading : .chooser)
+    }
+
     private enum Mode: Equatable {
         case chooser
         case camera
@@ -78,6 +86,8 @@ struct RecipeImportSheet: View {
                 // Only dismiss if the user hasn't already cancelled back to the chooser.
                 guard mode == .loading else { return }
                 store.isShowingImportSheet = false
+                // Reset stage so a later normal import open starts at the chooser.
+                store.importLoadingStage = .llm
             }
         }
     }
@@ -279,9 +289,23 @@ struct RecipeImportSheet: View {
 
     // MARK: - Loading
 
+    /// Stage-aware loading copy. Conversion reuses this screen with its own text.
+    private var loadingCopy: String {
+        switch store.importLoadingStage {
+        case .ocr:
+            return "ANALYZING IMAGE..."
+        case .llm:
+            return "SOUS-ING UP THE RECIPE..."
+        case .converting:
+            return store.userPreferences.preferredUnitSystem == .metric
+                ? "CONVERTING TO METRIC..."
+                : "CONVERTING TO IMPERIAL..."
+        }
+    }
+
     private var loadingView: some View {
         VStack(spacing: 28) {
-            Text(store.importLoadingStage == .ocr ? "ANALYZING IMAGE..." : "SOUS-ING UP THE RECIPE...")
+            Text(loadingCopy)
                 .font(.sousCaption)
                 .foregroundStyle(Color.sousMuted)
                 .kerning(1.2)
@@ -303,6 +327,7 @@ struct RecipeImportSheet: View {
             Button("CANCEL") {
                 store.cancelLiveLLM()
                 store.importError = nil
+                store.importLoadingStage = .llm
                 mode = .chooser
             }
             .font(.sousButton)

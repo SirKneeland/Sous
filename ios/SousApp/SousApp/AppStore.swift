@@ -38,7 +38,8 @@ extension UIState {
 }
 
 /// Tracks the active stage of the import pipeline. Used by the loading UI to show stage-aware copy.
-enum ImportLoadingStage { case ocr, llm }
+/// `converting` reuses the import loading screen for the post-import unit conversion flow.
+enum ImportLoadingStage { case ocr, llm, converting }
 
 // MARK: - AppStore
 
@@ -100,6 +101,9 @@ final class AppStore: ObservableObject {
     @Published var miseEnPlaceError: String? = nil
     /// Fires once when import succeeds, so the loading view can animate to 100% before the sheet dismisses.
     @Published var importSuccess: Bool = false
+    /// True when the imported recipe's unit system differs from the user's preference.
+    /// Cleared when the user taps Convert or Keep Original in the conversion prompt.
+    @Published var showUnitConversionPrompt: Bool = false
     /// Tracks the active stage of the import pipeline for stage-aware loading UI.
     @Published var importLoadingStage: ImportLoadingStage = .llm
     @Published var userPreferences: UserPreferences = UserPreferences()
@@ -713,7 +717,8 @@ final class AppStore: ObservableObject {
             equipment: userPreferences.equipment,
             customInstructions: userPreferences.customInstructions,
             memories: memories.map { $0.text },
-            personalityMode: userPreferences.personalityMode
+            personalityMode: userPreferences.personalityMode,
+            preferredUnitSystem: userPreferences.preferredUnitSystem.rawValue
         )
     }
 
@@ -1174,7 +1179,10 @@ final class AppStore: ObservableObject {
         }
 
         importLoadingStage = .llm
-        await runImportLLM(userText: ocrText, generation: generation, isTextImport: false)
+        let shouldConvert = await runImportLLM(userText: ocrText, generation: generation, isTextImport: false)
+        if shouldConvert {
+            Task { @MainActor [self] in self.showUnitConversionPrompt = true }
+        }
     }
 
     private func sendWithImportLLM(_ userText: String, generation: Int) async {
@@ -1186,12 +1194,16 @@ final class AppStore: ObservableObject {
         }
         isThinking = true
         llmDebugStatus = "calling"
-        await runImportLLM(userText: userText, generation: generation, isTextImport: true)
+        let shouldConvert = await runImportLLM(userText: userText, generation: generation, isTextImport: true)
+        if shouldConvert {
+            Task { @MainActor [self] in self.showUnitConversionPrompt = true }
+        }
     }
 
     /// Shared LLM call body for both image and text import paths.
     /// Applies the extracted PatchSet directly — no patch review.
-    private func runImportLLM(userText: String, generation: Int, isTextImport: Bool) async {
+    /// Returns true if the unit conversion prompt should be shown.
+    private func runImportLLM(userText: String, generation: Int, isTextImport: Bool) async -> Bool {
         let recipe = uiState.recipe
 
         let request = LLMRequest(
@@ -1221,7 +1233,7 @@ final class AppStore: ObservableObject {
 
         guard !Task.isCancelled else {
             llmDebugStatus = "cancelled"
-            return
+            return false
         }
 
         switch result {
@@ -1232,12 +1244,12 @@ final class AppStore: ObservableObject {
                   patchSet.baseRecipeVersion == current.version else {
                 importError = "Couldn't extract this recipe. Please try again."
                 llmDebugStatus = "fatal_recipeIdMismatch"
-                return
+                return false
             }
             guard let extracted = try? PatchApplier.apply(patchSet: patchSet, to: current) else {
                 importError = "Couldn't apply the extracted recipe. Please try again."
                 llmDebugStatus = "failed"
-                return
+                return false
             }
             // Apply directly — no patch review for import.
             uiState = .recipeOnly(recipe: extracted)
@@ -1252,7 +1264,17 @@ final class AppStore: ObservableObject {
             llmDebugStatus = "succeeded"
             saveSession()
             importSuccess = true
+            // Check whether the imported recipe's units differ from the user's preference.
+            // Return true to signal the caller to show the prompt after llmTask is cleared.
+            if let detected = await UnitSystemDetector.detect(recipe: extracted) {
+                let preferred = userPreferences.preferredUnitSystem
+                let detectedSystem: UnitSystem = detected == .imperial ? .imperial : .metric
+                if detectedSystem != preferred {
+                    return true
+                }
+            }
             // Sheet handles dismissal after animating progress to 100% — see RecipeImportSheet.
+            return false
 
         case .noPatches(_, _, let debug, _, _):
             lastDebugBundle = debug
@@ -1260,12 +1282,119 @@ final class AppStore: ObservableObject {
                 ? "Couldn't extract a recipe from this text — please check the text and try again."
                 : "Couldn't extract a recipe here. Try a clearer photo or paste the text instead."
             llmDebugStatus = "failed"
+            return false
 
         case .failure(_, _, _, let debug, _):
             lastDebugBundle = debug
             importError = isTextImport
                 ? "Couldn't extract a recipe from this text — please check the text and try again."
                 : "Couldn't extract this recipe — try a clearer photo, or paste the text instead."
+            llmDebugStatus = "failed"
+            return false
+        }
+    }
+
+    // MARK: - Unit Conversion
+
+    /// Fires a silent LLM request to convert the imported recipe's units to the user's
+    /// preferred system. The conversion instruction is NEVER added to chatTranscript —
+    /// the request is built directly and forced to a PatchSet response. The converted
+    /// recipe is applied directly to the canvas (no patch review), exactly like import.
+    func convertImportedRecipeUnits() {
+        showUnitConversionPrompt = false
+        sendConversionRequest(targetSystem: userPreferences.preferredUnitSystem)
+    }
+
+    /// Dispatches a unit-conversion LLM call without touching chatTranscript.
+    /// Reuses the import loading screen (re-presents the import sheet in `converting`
+    /// stage). Respects the single-flight guard and the pending-patch guard — skips
+    /// silently if a call is already in flight or a patch is already pending.
+    private func sendConversionRequest(targetSystem: UnitSystem) {
+        guard !hasPendingPatch else { return }
+        guard useLiveLLM else { return }
+        // Single-flight: skip silently if a live LLM call is already in flight.
+        if llmTask != nil {
+            llmDebugStatus = "blocked_inflight_llm"
+            return
+        }
+        // Reuse the import loading screen, with conversion-specific copy.
+        importError = nil
+        importSuccess = false
+        importLoadingStage = .converting
+        isShowingImportSheet = true
+        llmGeneration += 1
+        let gen = llmGeneration
+        llmTask = Task { await self.runConversionLLM(targetSystem: targetSystem, generation: gen) }
+    }
+
+    /// Builds the conversion request directly (the same way runImportLLM does), runs the
+    /// orchestrator, and applies a valid PatchSet directly to the canvas — no patch review.
+    /// Failures dismiss the loading screen silently; the recipe stays in its original units.
+    private func runConversionLLM(targetSystem: UnitSystem, generation: Int) async {
+        defer {
+            if llmGeneration == generation {
+                llmTask = nil
+                isThinking = false
+            }
+        }
+        isThinking = true
+        llmDebugStatus = "calling"
+        let recipe = uiState.recipe
+
+        let request = LLMRequest(
+            recipeId: recipe.id.uuidString,
+            recipeVersion: recipe.version,
+            hasCanvas: true,
+            userMessage: targetSystem == .metric
+                ? "Convert this recipe to metric units."
+                : "Convert this recipe to imperial units.",
+            recipeSnapshotForPrompt: recipe,
+            userPrefs: buildLLMUserPrefs(),
+            nextLLMContext: nil,
+            conversationHistory: [],
+            isImportExtraction: false,
+            isUnitConversion: true
+        )
+
+        let llmClient = OpenAIClient(apiKey: resolvedAPIKey())
+        let orchestrator: any LLMOrchestrator = testOrchestrator ?? OpenAILLMOrchestrator(
+            client: llmClient,
+            streamingClient: llmClient,
+            model: liveLLMModel
+        )
+
+        let result = await orchestrator.run(request)
+
+        guard !Task.isCancelled else {
+            llmDebugStatus = "cancelled"
+            return
+        }
+
+        switch result {
+        case .valid(let patchSet, _, _, let debug, _):
+            lastDebugBundle = debug
+            // Receipt-time stale-state check against the CURRENT recipe.
+            let current = uiState.recipe
+            guard patchSet.baseRecipeId == current.id,
+                  patchSet.baseRecipeVersion == current.version,
+                  let converted = try? PatchApplier.apply(patchSet: patchSet, to: current) else {
+                // Couldn't apply — dismiss the loading screen silently, keep original units.
+                importLoadingStage = .llm
+                isShowingImportSheet = false
+                llmDebugStatus = "failed"
+                return
+            }
+            // Apply directly — no patch review, no chat bubble. Mirrors runImportLLM.
+            uiState = .recipeOnly(recipe: converted)
+            saveSession()
+            // Trigger the import loading screen's success dismissal animation.
+            importSuccess = true
+            llmDebugStatus = "succeeded"
+
+        case .noPatches, .failure:
+            // Dismiss the loading screen silently — the recipe stays in its original units.
+            importLoadingStage = .llm
+            isShowingImportSheet = false
             llmDebugStatus = "failed"
         }
     }

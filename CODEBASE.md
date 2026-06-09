@@ -95,6 +95,7 @@
   - `Views/MemoriesView.swift` — List of saved memories with swipe-to-delete and tap-to-edit sheet
   - `Import/RecipeImportSheet.swift` — Full-screen import sheet; internal Mode enum (chooser | camera | library | paste | loading | error); observes `store.importError` via `.onChange`; success auto-dismisses via AppStore setting `isShowingImportSheet = false`
   - `Import/RecipeOCRService.swift` — Static `recognizeText(in:)` using `VNRecognizeTextRequest` at `.accurate` level; returns extracted lines joined by `\n`, or `nil` on empty/unreadable input; Vision framework (first-party, no package dependency)
+  - `Import/UnitSystemDetector.swift` — Pure function `UnitSystemDetector.detect(recipe:) -> DetectedUnitSystem?`; scans ingredient and step text via regex for imperial vs. metric indicators; returns dominant system or nil if ambiguous/absent
 
 ---
 

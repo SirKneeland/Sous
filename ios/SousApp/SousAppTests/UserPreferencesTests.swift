@@ -135,6 +135,32 @@ final class UserPreferencesTests: XCTestCase {
         XCTAssertEqual(loaded.voiceAccent, UserPreferences.defaultAccent())
     }
 
+    // MARK: - Unit system
+
+    func test_saveAndLoad_unitSystem_roundTrip() {
+        var prefs = UserPreferences()
+        prefs.preferredUnitSystem = .metric
+        UserPreferencesPersistence.save(prefs, to: testDefaults)
+        let loaded = UserPreferencesPersistence.load(from: testDefaults)
+        XCTAssertEqual(loaded.preferredUnitSystem, .metric)
+    }
+
+    func test_load_legacyJSON_withoutUnitSystem_decodesCleanly() throws {
+        let legacyJSON = """
+        {"hardAvoids":["cilantro"],"equipment":["wok"],"customInstructions":"metric","personalityMode":"playful"}
+        """.data(using: .utf8)!
+        testDefaults.set(legacyJSON, forKey: UserPreferencesPersistence.userDefaultsKey)
+
+        let loaded = UserPreferencesPersistence.load(from: testDefaults)
+
+        XCTAssertEqual(loaded.hardAvoids, ["cilantro"])
+        XCTAssertEqual(loaded.equipment, ["wok"])
+        XCTAssertEqual(loaded.customInstructions, "metric")
+        XCTAssertEqual(loaded.personalityMode, "playful")
+        // preferredUnitSystem falls back to the locale-based default — just check it doesn't crash.
+        XCTAssertNotNil(loaded.preferredUnitSystem)
+    }
+
     // MARK: - toLLMUserPrefs conversion
 
     func test_toLLMUserPrefs_mapsAllFields() {
