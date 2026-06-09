@@ -238,6 +238,7 @@ struct ContentView: View {
         }
         .alert("Convert Units?", isPresented: $store.showUnitConversionPrompt) {
             Button("Convert") { store.convertImportedRecipeUnits() }
+                .keyboardShortcut(.defaultAction)
             Button("Keep Original", role: .cancel) { store.showUnitConversionPrompt = false }
         } message: {
             let detected = store.userPreferences.preferredUnitSystem == .metric ? "imperial" : "metric"
