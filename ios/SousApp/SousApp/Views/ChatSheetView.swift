@@ -216,20 +216,6 @@ struct ChatSheetView: View {
         }
         .background((showPhotoSheet ? Color(red: 117/255, green: 116/255, blue: 113/255) : Color.sousSurface).ignoresSafeArea(isFullscreen ? .all : .keyboard))
         .animation(.easeOut(duration: 0.25), value: store.canGenerateRecipe)
-        .overlay(alignment: .top) {
-            if let proposal = store.pendingMemoryProposal {
-                MemoryProposalToast(
-                    text: proposal,
-                    onSave: { text, firstPersonText in Task { await store.saveMemoryOnly(text: text, firstPersonText: firstPersonText) } },
-                    onComplete: { store.dismissMemoryProposal() },
-                    onDismiss: { store.dismissMemoryProposal() },
-                    onNavigateToMemories: { onNavigateToMemories() }
-                )
-                .padding(.top, 4)
-                .transition(.move(edge: .top).combined(with: .opacity))
-            }
-        }
-        .animation(.easeInOut(duration: 0.25), value: store.pendingMemoryProposal != nil)
     }
 
     // MARK: - Header
@@ -341,6 +327,20 @@ struct ChatSheetView: View {
                 .ignoresSafeArea(edges: isFullscreen ? .top : [])
             }
         }
+        .overlay(alignment: .top) {
+            if let proposal = store.pendingMemoryProposal {
+                MemoryProposalToast(
+                    text: proposal,
+                    onSave: { text, firstPersonText in Task { await store.saveMemoryOnly(text: text, firstPersonText: firstPersonText) } },
+                    onComplete: { store.dismissMemoryProposal() },
+                    onDismiss: { store.dismissMemoryProposal() },
+                    onNavigateToMemories: { onNavigateToMemories() }
+                )
+                .padding(.top, 4)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.easeInOut(duration: 0.25), value: store.pendingMemoryProposal != nil)
     }
 
     // MARK: - Attachment Strip

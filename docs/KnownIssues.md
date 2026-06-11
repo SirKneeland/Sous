@@ -44,6 +44,18 @@ Two `// TODO: Prompt 5` comments mark hardcoded stubs: `userPrefs` is always an 
 
 ---
 
+## Memory proposal toast z-order vs. scroll-reveal nav bar (regressed twice)
+
+- **Area:** `ios/SousApp/SousApp/Views/ChatSheetView.swift` — `transcript` / `mainChatView`
+- **Type:** Recurring visual bug — check manually after any chat sheet view hierarchy refactor
+- **Flagged:** 2026-06-11
+
+The memory proposal toast has clipped behind the scroll-reveal nav bar gradient twice. Root cause each time: declaration order in the overlay chain. The fix is that the toast overlay must be declared **after** the nav bar overlay, and both must be in the same stacking context. Currently, the nav gradient overlay sits on the `ScrollViewReader` returned by `transcript`, and the toast overlay follows it on the same view — ensuring the toast renders on top. If the chat sheet view hierarchy is ever restructured, verify this order is preserved.
+
+No UI test coverage exists for this. After any refactor of `ChatSheetView`, manually trigger a memory proposal and confirm the "REMEMBERING THIS" header is fully visible with no clipping from the gradient.
+
+---
+
 ## OpenAIClient: json_schema response format not wired
 
 - **Area:** `ios/SousApp/SousApp/Networking/OpenAIClient.swift:76`
