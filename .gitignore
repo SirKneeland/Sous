@@ -43,3 +43,4 @@ dev_memory/
 
 # Local PRDs / planning docs
 BillingPRD.md
+docs/BackendEngineeringPlan.md
