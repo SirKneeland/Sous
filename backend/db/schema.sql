@@ -197,3 +197,13 @@ begin
     );
   end loop;
 end $$;
+
+-- ===========================================================================
+-- Grants
+--
+-- service_role bypasses RLS, but PostgreSQL table-level privileges still apply.
+-- Without these, the API gets "permission denied for table X" even with the
+-- service role key.
+-- ===========================================================================
+grant all on all tables    in schema public to service_role;
+grant all on all sequences in schema public to service_role;

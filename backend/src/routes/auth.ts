@@ -67,10 +67,22 @@ export function authRoutes(): Hono<HonoEnv> {
       return c.json({ error: 'invalid_apple_token', message: (err as Error).message }, 401);
     }
 
-    const rawConfig = await deps.repo.getConfigAll();
+    let rawConfig: Record<string, string>;
+    try {
+      rawConfig = await deps.repo.getConfigAll();
+    } catch (err) {
+      console.error('[auth/apple] getConfigAll failed:', err);
+      throw err;
+    }
 
     // Existing (non-deleted) user → just fetch + issue a new session.
-    const existing = await deps.repo.getUserByAppleSub(identity.sub);
+    let existing: UserRow | null;
+    try {
+      existing = await deps.repo.getUserByAppleSub(identity.sub);
+    } catch (err) {
+      console.error('[auth/apple] getUserByAppleSub failed:', err);
+      throw err;
+    }
     if (existing && !existing.is_deleted) {
       const subscription = await deps.repo.getSubscriptionByUserId(existing.id);
       const token = await issueSession(deps, existing.id);
