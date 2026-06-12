@@ -33,6 +33,11 @@
 │       ├── SousApp/       # App source
 │       ├── SousAppTests/
 │       └── SousAppUITests/
+├── backend/              # Node.js + Hono API (accounts, entitlement, proxy)
+│   ├── db/schema.sql     # Full Supabase/Postgres schema migration
+│   ├── src/              # TypeScript source (see Backend section below)
+│   ├── package.json
+│   └── .env.example
 ```
 
 ---
@@ -99,6 +104,52 @@
 
 ---
 
+## Backend (Node.js + Hono — Project 1: Backend Foundation)
+
+The `backend/` directory is the accounts/entitlement/usage/proxy API. It is fully
+independent of the iOS code. Authoritative spec: `docs/BackendEngineeringPlan.md`.
+
+**Stack:** Node.js + Hono (web framework), Supabase (managed Postgres) via
+`@supabase/supabase-js`, `jose` (JWT session tokens), `zod` (request validation).
+Hosted on Railway. Run with `tsx` (no build step).
+
+**Module map (`backend/src/`):**
+
+| File | Responsibility |
+|---|---|
+| `index.ts` | Production entry point: loads env, builds real deps, serves on `PORT` |
+| `app.ts` | `createApp(deps)` — builds the Hono app; mounts `/health` + `/api/v1/*` |
+| `types.ts` | `AppDeps` (injected dependencies) and Hono context typing |
+| `routes/auth.ts` | `/auth/apple` (Sign in with Apple → session), `/auth/signout`, `DELETE /auth/account` — **fully implemented** |
+| `routes/config.ts` | `GET /config` — config map + entitlement — **fully implemented** |
+| `routes/subscription.ts` | `GET /subscription/status` implemented; `validate`/`notify` stubbed (Project 4) |
+| `routes/usage.ts`, `proxy.ts`, `sync.ts`, `referral.ts` | Stubbed endpoints (501) for Projects 2–4 |
+| `routes/stubs.ts` | `notImplemented(endpoint, project)` → 501 helper |
+| `middleware/auth.ts` | Bearer-token auth: JWT verify + sessions-table check (revoked/expired) → 401 |
+| `lib/tokens.ts` | Sign/verify Sous session JWTs (HS256, 30-day expiry) |
+| `lib/entitlement.ts` | `computeEntitlement(user, sub, config)` → byok/subscriber/trialing/grace/soft_wall |
+| `lib/apple.ts` | Apple identity-token verification (+ dev bypass, disabled in prod) |
+| `lib/referral.ts` | Referral code generation (`SOUS-XXXX`) |
+| `lib/config.ts` | Parse `config` table JSON values; entitlement config extraction |
+| `db/client.ts` | Supabase client (service-role key, bypasses RLS) |
+| `db/repo.ts` | `Repo` interface — the data-access boundary handlers depend on |
+| `db/supabaseRepo.ts` | Supabase-backed `Repo` implementation |
+| `db/types.ts` | Row + insert types mirroring the SQL schema |
+| `test/fakeRepo.ts`, `test/harness.ts` | In-memory `Repo` + app builder for integration tests |
+
+**Auth model:** Sign in with Apple → backend verifies the Apple identity token →
+issues a signed Sous session JWT (also persisted in `sessions` for revocation).
+All `/api/v1/*` routes except `/auth/apple` require `Authorization: Bearer <token>`.
+
+**Entitlement** is computed server-side only and returned by `/config` and
+`/subscription/status`. The iOS client treats it as read-only.
+
+**Schema note (flagged):** the engineering plan lists `subscriptions.status` as
+`trialing/active/lapsed/cancelled`; the schema additionally permits `soft_wall`
+so re-registered (previously-deleted) users can be stored without a trial.
+
+---
+
 ## State Ownership
 
 | Concern | Owner | File |
@@ -125,6 +176,12 @@
   - Run with: `xcodebuild test -scheme SousApp -destination 'platform=iOS Simulator,name=iPhone 17'`
 
 - **UI tests:** `SousAppUITests` — Minimal coverage, launch tests only
+
+- **Backend tests:** Node.js built-in test runner (`node:test`) via `tsx`
+  - Location: `backend/src/**/*.test.ts`
+  - Key files: `lib/entitlement.test.ts` (all 5 entitlement states), `lib/tokens.test.ts`, `routes/auth.test.ts` (account creation, returning user, re-registration, referral, middleware), `routes/config.test.ts` (config/status/health/stubs)
+  - Tests use an in-memory fake repo (no Supabase, no network)
+  - Run with: `cd backend && npm test`
 
 ---
 

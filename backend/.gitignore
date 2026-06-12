@@ -1,0 +1,5 @@
+# Backend-local ignores (root .gitignore also covers .env and node_modules/)
+node_modules/
+.env
+dist/
+*.log
