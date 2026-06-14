@@ -146,7 +146,12 @@ create table if not exists public.preferences (
   serving_size        integer,
   equipment           text[] not null default '{}',
   custom_instructions text,
-  personality_mode    text check (personality_mode in ('minimal','normal','playful')),
+  -- 'unhinged' was added to the iOS app after Project 1; included here so
+  -- preferences sync (Project 2) can persist it. Existing deployments must run:
+  --   alter table public.preferences drop constraint preferences_personality_mode_check;
+  --   alter table public.preferences add constraint preferences_personality_mode_check
+  --     check (personality_mode in ('minimal','normal','playful','unhinged'));
+  personality_mode    text check (personality_mode in ('minimal','normal','playful','unhinged')),
   updated_at          timestamptz not null default now()
 );
 
@@ -157,6 +162,59 @@ create table if not exists public.deleted_accounts (
   apple_sub  text primary key,
   deleted_at timestamptz not null default now()
 );
+
+-- ===========================================================================
+-- Atomic counters (Project 3: API Proxy + Instrumentation)
+--
+-- These functions perform the read-modify-write of a usage counter inside a
+-- single statement so concurrent proxied requests cannot lose an increment
+-- (a plain SELECT-then-UPDATE in the API layer would race). Each returns the
+-- new value so the caller can enforce caps without a second round-trip.
+-- ===========================================================================
+
+-- Increment recipe_cap_counters for (user, billing_period), creating the row on
+-- first use. Returns the post-increment count.
+create or replace function public.increment_recipe_cap_counter(
+  p_user_id uuid,
+  p_billing_period text
+) returns integer
+language plpgsql
+as $$
+declare
+  new_count integer;
+begin
+  insert into public.recipe_cap_counters (user_id, billing_period, recipes_used)
+    values (p_user_id, p_billing_period, 1)
+  on conflict (user_id, billing_period)
+    do update set recipes_used = public.recipe_cap_counters.recipes_used + 1
+  returning recipes_used into new_count;
+  return new_count;
+end;
+$$;
+
+-- Increment subscriptions.trial_recipes_used for a user. Returns the new value,
+-- or null if the user has no subscription row.
+create or replace function public.increment_trial_recipes_used(
+  p_user_id uuid
+) returns integer
+language plpgsql
+as $$
+declare
+  new_count integer;
+begin
+  update public.subscriptions
+    set trial_recipes_used = trial_recipes_used + 1
+    where user_id = p_user_id
+  returning trial_recipes_used into new_count;
+  return new_count;
+end;
+$$;
+
+-- Index to make per-recipe abuse counts and daily windows cheap.
+create index if not exists usage_events_user_recipe_idx
+  on public.usage_events (user_id, recipe_id);
+create index if not exists usage_events_user_ts_idx
+  on public.usage_events (user_id, timestamp);
 
 -- ===========================================================================
 -- Row Level Security
@@ -207,3 +265,4 @@ end $$;
 -- ===========================================================================
 grant all on all tables    in schema public to service_role;
 grant all on all sequences in schema public to service_role;
+grant execute on all functions in schema public to service_role;

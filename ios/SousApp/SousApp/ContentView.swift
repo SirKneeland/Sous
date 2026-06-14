@@ -3,6 +3,7 @@ import SousCore
 import UIKit
 
 struct ContentView: View {
+    @EnvironmentObject private var authState: AuthState
     @StateObject private var store = AppStore()
     @StateObject private var voiceCoordinator = VoiceModeCoordinator()
     @State private var showSettings = false
@@ -53,6 +54,39 @@ struct ContentView: View {
     }
 
     var body: some View {
+        Group {
+            switch authState.status {
+            case .unknown:
+                // Neutral loading state — not the sign-in screen, not the main app.
+                ZStack {
+                    Color.sousBackground.ignoresSafeArea()
+                    Text("SOUS")
+                        .font(.sousLogotype)
+                        .kerning(2)
+                        .foregroundStyle(Color.sousMuted)
+                }
+            case .signedOut:
+                SignInView()
+            case .signedIn:
+                appContent
+            }
+        }
+        // Wire the backend once, regardless of auth status, so the sign-in
+        // hydrate hook and 401 handler are in place before sign-in completes.
+        .task {
+            store.attachBackend(SousAPIClient.shared)
+            // Lets AppStore fork BYOK (direct OpenAI) vs. non-BYOK (Sous proxy) per call.
+            store.entitlementProvider = { [weak authState] in authState?.entitlement }
+            SousAPIClient.shared.onUnauthorized = { [weak authState] in
+                authState?.handleUnauthorized()
+            }
+            authState.onSignInHydrate = { [weak store] in
+                await store?.hydrateFromBackend()
+            }
+        }
+    }
+
+    private var appContent: some View {
         ZStack {
             Color.sousBackground.ignoresSafeArea()
 
@@ -221,7 +255,7 @@ struct ContentView: View {
             if hasCanvas { navBarVisible = true }
         }
         .sheet(isPresented: $showSettings) {
-            SettingsView(store: store, navigateToMemories: $navigateToMemoriesInSettings)
+            SettingsView(store: store, authState: authState, navigateToMemories: $navigateToMemoriesInSettings)
         }
         .overlay {
             HistoryDrawer(
@@ -264,4 +298,5 @@ struct ContentView: View {
 
 #Preview {
     ContentView()
+        .environmentObject(AuthState())
 }

@@ -79,6 +79,32 @@ Violating any of these is a critical bug, not a style issue.
 
 ---
 
+## Networking Boundaries
+
+There are two distinct network clients — never conflate them:
+
+- `OpenAIClient` (`Networking/OpenAIClient.swift`) — direct OpenAI calls. Used today
+  for every user. BYOK-eligible users (`entitlement == .byok`) will keep using this
+  forever.
+- `SousAPIClient` (`Networking/SousAPIClient.swift`) — the **Sous backend boundary**
+  (accounts, entitlement, preferences/memories sync, usage summary). Attaches the
+  Sous session token and clears it on 401. Entitlement is server-computed and
+  read-only on the client — never compute it locally.
+- `ProxyOpenAIClient` (`Networking/ProxyOpenAIClient.swift`) — as of **Project 3**,
+  every **non-BYOK** user's OpenAI chat call routes through the Sous backend proxy
+  (`POST /api/v1/proxy/chat`) via this `StreamingLLMClient`. BYOK users
+  (`entitlement == .byok`) keep calling OpenAI directly via `OpenAIClient`. The
+  fork lives in `AppStore.makeLLMClient(isNewRecipe:recipeId:)`; it sets
+  `X-Sous-Is-New-Recipe` so the backend can meter recipe-cap usage. The proxy
+  relays OpenAI's response shape verbatim, so the orchestrator is transport-agnostic.
+
+**Backend env vars** (`backend/.env.example`): in addition to Supabase / JWT /
+Apple keys, Project 3 adds `OPENAI_API_KEY` (server-side key the proxy forwards
+with) and `ADMIN_API_KEY` (guards `GET /api/v1/admin/dashboard`, sent in the
+`X-Admin-Key` header — never a user session token).
+
+---
+
 ## Testing Rules
 
 - Core state logic is test-first

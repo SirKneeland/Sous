@@ -11,6 +11,13 @@ import type {
   NewUser,
   NewSubscription,
   NewSession,
+  PreferencesRow,
+  PreferencesInput,
+  MemoryRow,
+  MemoryInput,
+  UsageEventInput,
+  UsageEventRow,
+  RecipeCapCounterRow,
 } from './types.js';
 
 export interface Repo {
@@ -20,6 +27,7 @@ export interface Repo {
   getUserByReferralCode(code: string): Promise<UserRow | null>;
   createUser(input: NewUser): Promise<UserRow>;
   softDeleteUser(userId: string, deletedAt: string): Promise<void>;
+  updateDisplayName(userId: string, displayName: string | null): Promise<void>;
 
   // tombstone
   getDeletedAccount(appleSub: string): Promise<{ apple_sub: string } | null>;
@@ -37,4 +45,34 @@ export interface Repo {
 
   // config
   getConfigAll(): Promise<Record<string, string>>;
+
+  // sync: preferences (one row per user)
+  getPreferences(userId: string): Promise<PreferencesRow | null>;
+  upsertPreferences(userId: string, input: PreferencesInput): Promise<PreferencesRow>;
+
+  // sync: memories (full-list replace)
+  getMemories(userId: string): Promise<MemoryRow[]>;
+  replaceMemories(userId: string, items: MemoryInput[]): Promise<MemoryRow[]>;
+
+  // usage + instrumentation (Project 3)
+  insertUsageEvent(input: UsageEventInput): Promise<void>;
+  /** Atomically +1 the recipe_cap_counters row for (user, period); returns new count. */
+  incrementRecipeCapCounter(userId: string, billingPeriod: string): Promise<number>;
+  /** Current recipe_cap_counters value for (user, period); 0 if no row yet. */
+  getRecipeCapCount(userId: string, billingPeriod: string): Promise<number>;
+  /** Atomically +1 subscriptions.trial_recipes_used; returns new value or null if no sub. */
+  incrementTrialRecipesUsed(userId: string): Promise<number | null>;
+
+  // abuse detection
+  setAbuseFlag(userId: string, reason: string): Promise<void>;
+  /** New-recipe usage events for a user at/after the given ISO timestamp. */
+  countNewRecipesSince(userId: string, sinceIso: string): Promise<number>;
+  /** Total usage events recorded against one recipe for a user. */
+  countEventsForRecipe(userId: string, recipeId: string): Promise<number>;
+
+  // admin dashboard aggregates
+  listAllUsers(): Promise<UserRow[]>;
+  listAllSubscriptions(): Promise<SubscriptionRow[]>;
+  getUsageEventsForPeriod(billingPeriod: string): Promise<UsageEventRow[]>;
+  getRecipeCapCountersForPeriod(billingPeriod: string): Promise<RecipeCapCounterRow[]>;
 }

@@ -483,15 +483,22 @@ Explicit non-goals:
 ---
 
 ## Milestone 24 — Accounts + Sync
-**Status:** PLANNED
+**Status:** IN PROGRESS (delivered as the 4-project backend plan — see `docs/BackendEngineeringPlan.md`)
 
 **Goal:** Establish durable user accounts so preferences, memories, and recipes persist across devices and reinstalls.
 
+Project tracking:
+- **Project 1 — Backend Foundation — ✅ Code complete** (Supabase schema, Hono API, auth/config/entitlement endpoints).
+- **Project 2 — iOS Auth Integration — ✅ Code complete.** Sign in with Apple gates the app; session token in Keychain; Account section in Settings; preferences + memories sync to the backend on change and hydrate (server-wins) on sign-in; BYOK users keep direct OpenAI routing with an OG badge. Backend sync endpoints (`/sync/preferences`, `/sync/memories`, `/sync/profile`) implemented.
+- **Project 3 — API Proxy + Instrumentation — ✅ Code complete.** Non-BYOK users' OpenAI calls route through the Sous backend proxy (`/proxy/chat`), which records `usage_events`, enforces the recipe cap (402 when reached), and runs conservative off-topic + abuse detection. Settings shows live usage counts. BYOK users are unaffected (direct OpenAI). Operator-only admin dashboard (`/admin/dashboard`) surfaces cost, active users, cap-hit rate, and flagged accounts. Operator setup pending: set `OPENAI_API_KEY` + `ADMIN_API_KEY` on Railway and re-run `db/schema.sql`.
+- **Project 4 — Billing + Paywall — ⬜ Not started.**
+
 Core capabilities:
-- User accounts
-- Preferences and memories synced to account
-- Recipe history synced to account
-- First-run account setup flow
+- User accounts ✅
+- Preferences and memories synced to account ✅
+- Usage instrumentation + recipe-cap metering ✅ (Project 3)
+- Recipe history synced to account ⬜ (deferred — `/sync/recipes` still a stub)
+- First-run account setup flow ✅ (sign-in gate)
 
 Explicit non-goals:
 - Social features

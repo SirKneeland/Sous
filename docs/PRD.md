@@ -574,6 +574,38 @@ This reuses the existing LLM orchestration, patch validation, and patch review f
 
 ---
 
+## Accounts & Sync
+
+Sous requires an account. On first launch the user signs in with Apple before any
+recipe content is shown; the session is restored silently on subsequent launches.
+
+- **Identity:** Sign in with Apple only (V1). The device holds a Sous session token
+  in the Keychain, separate from any OpenAI key.
+- **Account section (Settings):** editable display name, read-only email, plan in
+  plain English, Manage Subscription, referral code + share, Sign Out, Delete
+  Account. BYOK ("OG") users see a badge and "Using your own API key".
+- **Sync:** preferences and memories persist locally and sync to the account in the
+  background on every change. On sign-in they are fetched and merged with the
+  server winning on conflicts; device-only settings (voice, unit system) are
+  preserved. Recipe-history sync arrives in a later project.
+- **Sign Out** clears the session only; local recipes remain. **Delete Account**
+  permanently removes the account and wipes all local data, returning to sign-in.
+- **Entitlement** (BYOK / subscriber / trialing / grace / soft-wall) is computed by
+  the backend and treated as read-only by the client.
+- **BYOK users** continue to call OpenAI directly from the device exactly as before
+  — accounts add identity and sync, nothing changes about their request routing.
+- **Non-BYOK users' AI calls are proxied** through the Sous backend (Project 3). The
+  proxy is invisible to the user — responses are identical to a direct call — but it
+  meters usage, enforces the recipe cap (a clear error when the limit is reached), and
+  conservatively declines clearly off-topic, non-cooking requests. Settings shows the
+  user their recipe usage for the current period ("X of N recipes …"); BYOK users see
+  "Using your own API key · No limits apply".
+
+Billing, trials, paywalls, and the *enforcement* of usage caps as a paywall are
+defined separately and are not part of current behavior (see
+`docs/BackendEngineeringPlan.md`, Project 4). Project 3 establishes the metering and
+soft cap-reached responses that Project 4 will build the paywall UX on top of.
+
 ## Non-Goals (current)
 
 Out of scope until explicitly added to the roadmap:

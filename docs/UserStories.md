@@ -349,3 +349,111 @@
   (e.g. "3 eggs, salt to taste, 1 clove garlic")
 - When the import completes
 - Then no conversion modal appears
+---
+
+## Accounts & Sync (Project 2)
+
+### US-49: Sign-In Gate on First Launch
+- Given the user has never signed in
+- When they open the app
+- Then a full-screen Sign in with Apple screen appears before any recipe content
+- And the Sous wordmark and a one-line value proposition are shown
+- And a neutral loading state (not the sign-in screen) is shown briefly while the
+  app checks for an existing session
+
+### US-50: Sign in with Apple Creates an Account
+- Given the sign-in screen is visible
+- When the user completes Sign in with Apple
+- Then a Sous account is created (or matched) on the backend
+- And a session token is stored in the device Keychain
+- And the app proceeds to the main recipe experience
+- And on a failed or canceled attempt, an inline error appears and the user stays
+  on the sign-in screen
+
+### US-51: Silent Session Restore on Relaunch
+- Given the user signed in previously and the session is still valid
+- When they relaunch the app
+- Then they are taken straight to the main experience without signing in again
+- And if the stored session is rejected, they are returned to the sign-in screen
+
+### US-52: Account Section in Settings
+- Given the user is signed in
+- When they open Settings
+- Then an Account section appears above Preferences showing their name (editable),
+  email (read-only), and plan in plain English
+- And BYOK users see an "OG" badge and "Using your own API key"
+- And rows for Manage Subscription, Share Sous (with referral code), Sign Out, and
+  Delete Account are present
+
+### US-53: Edit Display Name
+- Given the user is in the Account section
+- When they edit their name and submit
+- Then the new name is shown immediately and synced to the backend in the background
+
+### US-54: Sign Out
+- Given the user taps Sign Out
+- Then a confirmation appears ("You'll need to sign in again to use Sous.")
+- And on confirm, the session is cleared and the app returns to the sign-in screen
+- And local recipes and data are NOT wiped
+
+### US-55: Delete Account
+- Given the user taps Delete Account
+- Then a confirmation modal warns that account, recipes, memories, and preferences
+  will be permanently deleted and this cannot be undone
+- And on confirm, the account is deleted on the backend, all local data
+  (session token, preferences, memories, recipe sessions) is wiped, and the app
+  returns to the sign-in screen
+- And on cancel, nothing changes
+
+### US-56: Preferences and Memories Sync
+- Given the user is signed in
+- When they change a preference or add/edit/delete a memory
+- Then the change persists locally immediately
+- And the full current state is synced to the backend in the background
+- And a sync failure never blocks or disrupts the current session
+
+### US-57: Server-Wins Hydrate on Sign-In
+- Given the user signs in on a device
+- When sign-in completes
+- Then preferences and memories are fetched from the backend and merged with local
+  state, with the server winning on conflicts
+- And device-only settings (voice, unit system) and any local-only items created
+  before sign-in are preserved
+
+### US-58: BYOK Routing Unchanged
+- Given a BYOK-eligible (OG) user is signed in
+- When they make any recipe request
+- Then their OpenAI calls still go directly from the device using their own key,
+  exactly as before accounts existed
+
+### US-59: Non-BYOK Requests Are Proxied (Project 3)
+- Given a non-BYOK user (trialing / subscriber / grace) is signed in
+- When they chat, generate, import, convert, rescale, or send a photo
+- Then the AI call is routed through the Sous backend proxy instead of OpenAI
+  directly, and the experience is identical — same responses, same streaming
+- And the user never sees or needs an OpenAI API key
+
+### US-60: Usage Shown in Settings (Project 3)
+- Given a signed-in user opens Settings → Account
+- When the screen appears
+- Then a non-BYOK user sees their recipe usage for the period:
+  - Trial: "X of 14 recipes used · N days left in trial"
+  - Subscriber: "X of 100 recipes this month · Resets in N days"
+- And a BYOK user sees "Using your own API key · No limits apply"
+- And while loading the line shows "Loading usage…", and on a failed fetch it shows "--"
+
+### US-61: Recipe Cap Reached (Project 3)
+- Given a non-BYOK user has reached their recipe limit for the period
+- When they try to create a new recipe (commit "Make this recipe", or import)
+- Then the request is declined before any AI call is made (no tokens spent)
+- And the user is told the limit was reached
+  - (Full paywall / upgrade UX is Project 4; Project 3 returns the cap-reached signal)
+
+### US-62: Off-Topic Request Declined (Project 3)
+- Given a non-BYOK user sends a clearly non-cooking message (e.g. "write me a
+  Python function", "who is the president")
+- When the message is sent
+- Then the backend declines it with a friendly "let's keep it in the kitchen" message
+  and does not spend AI tokens on it
+- And borderline or cooking-adjacent messages are always allowed (the detector is
+  intentionally conservative)

@@ -12,6 +12,13 @@ import type {
   NewUser,
   NewSubscription,
   NewSession,
+  PreferencesRow,
+  PreferencesInput,
+  MemoryRow,
+  MemoryInput,
+  UsageEventInput,
+  UsageEventRow,
+  RecipeCapCounterRow,
 } from '../db/types.js';
 
 export interface FakeRepoState {
@@ -20,6 +27,10 @@ export interface FakeRepoState {
   sessions: SessionRow[];
   deletedAccounts: { apple_sub: string; deleted_at: string }[];
   config: Record<string, string>;
+  preferences: PreferencesRow[];
+  memories: MemoryRow[];
+  usageEvents: UsageEventRow[];
+  recipeCapCounters: RecipeCapCounterRow[];
 }
 
 const DEFAULT_CONFIG: Record<string, string> = {
@@ -28,6 +39,11 @@ const DEFAULT_CONFIG: Record<string, string> = {
   paid_recipe_cap: '100',
   byok_cutoff_enabled: 'false',
   byok_cutoff_date: 'null',
+  abuse_recipes_per_day: '20',
+  abuse_recipes_per_period: '150',
+  abuse_chat_per_recipe: '200',
+  abuse_off_topic_rate: '0.30',
+  off_topic_threshold: '0.8',
 };
 
 export function createFakeRepo(
@@ -39,6 +55,10 @@ export function createFakeRepo(
     sessions: overrides.sessions ?? [],
     deletedAccounts: overrides.deletedAccounts ?? [],
     config: overrides.config ?? { ...DEFAULT_CONFIG },
+    preferences: overrides.preferences ?? [],
+    memories: overrides.memories ?? [],
+    usageEvents: overrides.usageEvents ?? [],
+    recipeCapCounters: overrides.recipeCapCounters ?? [],
   };
 
   const repo: Repo = {
@@ -76,6 +96,10 @@ export function createFakeRepo(
         u.is_deleted = true;
         u.deleted_at = deletedAt;
       }
+    },
+    async updateDisplayName(userId, displayName) {
+      const u = state.users.find((x) => x.id === userId);
+      if (u) u.display_name = displayName;
     },
     async getDeletedAccount(appleSub) {
       const row = state.deletedAccounts.find((d) => d.apple_sub === appleSub);
@@ -129,6 +153,133 @@ export function createFakeRepo(
     },
     async getConfigAll() {
       return { ...state.config };
+    },
+    async getPreferences(userId) {
+      return state.preferences.find((p) => p.user_id === userId) ?? null;
+    },
+    async upsertPreferences(userId, input) {
+      const now = new Date().toISOString();
+      const existing = state.preferences.find((p) => p.user_id === userId);
+      const row: PreferencesRow = {
+        user_id: userId,
+        hard_avoids: input.hardAvoids,
+        serving_size: input.servingSize,
+        equipment: input.equipment,
+        custom_instructions: input.customInstructions,
+        personality_mode: input.personalityMode,
+        updated_at: now,
+      };
+      if (existing) Object.assign(existing, row);
+      else state.preferences.push(row);
+      return row;
+    },
+    async getMemories(userId) {
+      return state.memories
+        .filter((m) => m.user_id === userId)
+        .sort((a, b) => a.created_at.localeCompare(b.created_at));
+    },
+    async replaceMemories(userId, items) {
+      // Full replace: drop this user's rows, then insert the supplied list.
+      state.memories = state.memories.filter((m) => m.user_id !== userId);
+      const now = new Date().toISOString();
+      const inserted: MemoryRow[] = items.map((item) => ({
+        id: item.id ?? randomUUID(),
+        user_id: userId,
+        text: item.text,
+        created_at: item.createdAt ?? now,
+        updated_at: now,
+      }));
+      state.memories.push(...inserted);
+      return inserted;
+    },
+
+    // ---- usage + instrumentation ----
+
+    async insertUsageEvent(input: UsageEventInput) {
+      state.usageEvents.push({
+        id: randomUUID(),
+        user_id: input.userId,
+        recipe_id: input.recipeId,
+        request_type: input.requestType,
+        is_new_recipe: input.isNewRecipe,
+        input_tokens: input.inputTokens,
+        output_tokens: input.outputTokens,
+        model: input.model,
+        estimated_cost_usd: input.estimatedCostUsd,
+        request_outcome: input.requestOutcome,
+        voice_duration_seconds: input.voiceDurationSeconds ?? null,
+        voice_tts_characters: input.voiceTtsCharacters ?? null,
+        off_topic_flagged: input.offTopicFlagged,
+        billing_period: input.billingPeriod,
+        timestamp: new Date().toISOString(),
+      });
+    },
+
+    async incrementRecipeCapCounter(userId, billingPeriod) {
+      const existing = state.recipeCapCounters.find(
+        (r) => r.user_id === userId && r.billing_period === billingPeriod,
+      );
+      if (existing) {
+        existing.recipes_used += 1;
+        return existing.recipes_used;
+      }
+      state.recipeCapCounters.push({
+        user_id: userId,
+        billing_period: billingPeriod,
+        recipes_used: 1,
+      });
+      return 1;
+    },
+
+    async getRecipeCapCount(userId, billingPeriod) {
+      const existing = state.recipeCapCounters.find(
+        (r) => r.user_id === userId && r.billing_period === billingPeriod,
+      );
+      return existing?.recipes_used ?? 0;
+    },
+
+    async incrementTrialRecipesUsed(userId) {
+      const sub = state.subscriptions.find((s) => s.user_id === userId);
+      if (!sub) return null;
+      sub.trial_recipes_used += 1;
+      return sub.trial_recipes_used;
+    },
+
+    // ---- abuse detection ----
+
+    async setAbuseFlag(userId, reason) {
+      const u = state.users.find((x) => x.id === userId);
+      if (u) {
+        u.abuse_flag = true;
+        u.abuse_flag_reason = reason;
+      }
+    },
+
+    async countNewRecipesSince(userId, sinceIso) {
+      return state.usageEvents.filter(
+        (e) => e.user_id === userId && e.is_new_recipe && e.timestamp >= sinceIso,
+      ).length;
+    },
+
+    async countEventsForRecipe(userId, recipeId) {
+      return state.usageEvents.filter(
+        (e) => e.user_id === userId && e.recipe_id === recipeId,
+      ).length;
+    },
+
+    // ---- admin dashboard aggregates ----
+
+    async listAllUsers() {
+      return [...state.users];
+    },
+    async listAllSubscriptions() {
+      return [...state.subscriptions];
+    },
+    async getUsageEventsForPeriod(billingPeriod) {
+      return state.usageEvents.filter((e) => e.billing_period === billingPeriod);
+    },
+    async getRecipeCapCountersForPeriod(billingPeriod) {
+      return state.recipeCapCounters.filter((r) => r.billing_period === billingPeriod);
     },
   };
 

@@ -3,6 +3,8 @@ import UIKit
 
 @main
 struct SousAppApp: App {
+    @StateObject private var authState = AuthState()
+
     init() {
         configureNavigationBar()
     }
@@ -10,6 +12,8 @@ struct SousAppApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(authState)
+                .task { await authState.bootstrap() }
         }
     }
 

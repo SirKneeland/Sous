@@ -142,6 +142,20 @@ final class AppStore: ObservableObject {
     private let proposer: any PatchProposer = MockPatchProposer()
     private var nextLLMContext: NextLLMContext? = nil
 
+    /// Backend sync surface (preferences/memories/profile). Nil in unit tests that
+    /// don't exercise sync; the live app attaches `SousAPIClient.shared` at launch
+    /// via `attachBackend(_:)`. All sync calls are best-effort and fail silently —
+    /// local state is always the source of truth for the current session.
+    private var backend: (any SousSyncBackend)?
+
+    /// Resolves the current server-computed entitlement, used by `makeLLMClient`
+    /// to fork BYOK (direct OpenAI) vs. non-BYOK (Sous backend proxy). Set by the
+    /// app at launch (`ContentView`); nil in unit tests, which inject a
+    /// `testOrchestrator` and never construct a live transport.
+    var entitlementProvider: (() -> Entitlement?)?
+    /// Supplies the Sous session token for proxied calls (defaults to the keychain).
+    private let sessionProvider: any SousSessionProviding
+
     // MARK: - In-flight tracking
 
     /// Injected at init for testing; nil means use the live OpenAI orchestrator.
@@ -183,6 +197,20 @@ final class AppStore: ObservableObject {
         return nil
     }
 
+    /// Builds the LLM transport for a single call. BYOK-eligible users call OpenAI
+    /// directly (unchanged); all other entitlements route through the Sous backend
+    /// proxy (`ProxyOpenAIClient`), which records usage and enforces the recipe cap.
+    /// `isNewRecipe` is forwarded to the proxy so it can decide whether to count the
+    /// request against the recipe cap; `recipeId` enables per-recipe abuse accounting.
+    /// Internal (not private) so routing can be unit-tested.
+    func makeLLMClient(isNewRecipe: Bool, recipeId: String) -> any StreamingLLMClient {
+        if entitlementProvider?() != .byok,
+           let token = sessionProvider.load(), !token.isEmpty {
+            return ProxyOpenAIClient(sessionToken: token, isNewRecipe: isNewRecipe, recipeId: recipeId)
+        }
+        return OpenAIClient(apiKey: resolvedAPIKey())
+    }
+
     static let recipeId            = UUID(uuidString: "00000000-0000-0000-FFFF-000000000001")!
     static let ingredientGroupId   = UUID(uuidString: "00000000-0000-0000-0000-000000000010")!
     static let ingredientFlourId   = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
@@ -197,10 +225,16 @@ final class AppStore: ObservableObject {
          sessionsDirectory: URL? = nil,
          photosBaseDirectory: URL? = nil,
          preferencesDefaults: UserDefaults? = nil,
-         keyProvider: any OpenAIKeyProviding = KeychainOpenAIKeyProvider()) {
+         keyProvider: any OpenAIKeyProviding = KeychainOpenAIKeyProvider(),
+         backend: (any SousSyncBackend)? = nil,
+         sessionProvider: any SousSessionProviding = KeychainSousSessionProvider(),
+         entitlementProvider: (() -> Entitlement?)? = nil) {
         self.testOrchestrator = testOrchestrator
         self.testMiseEnPlaceService = testMiseEnPlaceService
         self.keyProvider = keyProvider
+        self.backend = backend
+        self.sessionProvider = sessionProvider
+        self.entitlementProvider = entitlementProvider
         self.sessionsDirectory = sessionsDirectory
         self.photosBaseDirectory = photosBaseDirectory
         self.preferencesDefaults = preferencesDefaults
@@ -326,11 +360,22 @@ final class AppStore: ObservableObject {
 
     // MARK: - Preferences
 
-    /// Updates in-memory preferences and persists them to UserDefaults.
+    /// Updates in-memory preferences, persists them locally, and syncs to the
+    /// backend in the background. Sync failures are silent.
     func updatePreferences(_ prefs: UserPreferences) {
         userPreferences = prefs
-        guard isPersistenceEnabled else { return }
-        UserPreferencesPersistence.save(prefs, to: preferencesDefaults ?? .standard)
+        if isPersistenceEnabled {
+            UserPreferencesPersistence.save(prefs, to: preferencesDefaults ?? .standard)
+        }
+        syncPreferencesToBackend()
+    }
+
+    /// Fire-and-forget preference sync. No-op when no backend is attached or no
+    /// session token is stored; never surfaces errors to the user.
+    private func syncPreferencesToBackend() {
+        guard let backend else { return }
+        let snapshot = userPreferences
+        Task { try? await backend.syncPreferences(snapshot) }
     }
 
     // MARK: - Memories
@@ -399,8 +444,115 @@ final class AppStore: ObservableObject {
     }
 
     private func saveMemories() {
-        guard isPersistenceEnabled else { return }
-        MemoriesPersistence.save(memories, to: preferencesDefaults ?? .standard)
+        if isPersistenceEnabled {
+            MemoriesPersistence.save(memories, to: preferencesDefaults ?? .standard)
+        }
+        syncMemoriesToBackend()
+    }
+
+    /// Fire-and-forget memory sync (full-list replace). No-op without a backend
+    /// or session token; never surfaces errors.
+    private func syncMemoriesToBackend() {
+        guard let backend else { return }
+        let snapshot = memories
+        Task { try? await backend.syncMemories(snapshot) }
+    }
+
+    // MARK: - Backend sync
+
+    /// Attaches the backend client. Called once at launch by the live app.
+    func attachBackend(_ backend: any SousSyncBackend) {
+        self.backend = backend
+    }
+
+    /// Fetches the current billing-period usage summary for the Account screen.
+    /// Returns nil when no backend is attached or the request fails — the Settings
+    /// view shows a "--" placeholder on nil.
+    func fetchUsageSummary() async -> UsageSummary? {
+        guard let backend else { return nil }
+        return try? await backend.fetchUsageSummary()
+    }
+
+    /// BYOK users bypass the proxy, so their new recipes are not counted server-side.
+    /// Record the recipe explicitly (display-only telemetry; fire-and-forget, never
+    /// blocks). No-op for non-BYOK users — the proxy already counted the recipe via
+    /// the `X-Sous-Is-New-Recipe` header.
+    private func recordByokRecipeUsage() {
+        guard entitlementProvider?() == .byok, let backend else { return }
+        Task { try? await backend.recordRecipeUsage() }
+    }
+
+    /// Best-effort sync of the editable display name to the backend.
+    func updateDisplayName(_ name: String?) {
+        guard let backend else { return }
+        let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let value = (trimmed?.isEmpty == false) ? trimmed : nil
+        Task { try? await backend.updateDisplayName(value) }
+    }
+
+    /// Hydrates preferences and memories from the backend after a fresh sign-in.
+    /// Server wins on conflict; device-local fields (voice, unit system) and any
+    /// local-only items created before sign-in are preserved and pushed up.
+    func hydrateFromBackend() async {
+        guard let backend else { return }
+
+        // Preferences: overlay only the fields the server owns. If the server has
+        // nothing yet (first sign-in), keep local and push it up.
+        if let serverPrefs = try? await backend.fetchPreferences() {
+            if Self.hasServerPreferences(serverPrefs) {
+                var merged = userPreferences
+                merged.hardAvoids = serverPrefs.hardAvoids
+                merged.servingSize = serverPrefs.servingSize
+                merged.equipment = serverPrefs.equipment
+                merged.customInstructions = serverPrefs.customInstructions
+                merged.personalityMode = serverPrefs.personalityMode
+                userPreferences = merged
+                if isPersistenceEnabled {
+                    UserPreferencesPersistence.save(merged, to: preferencesDefaults ?? .standard)
+                }
+            } else {
+                syncPreferencesToBackend()
+            }
+        }
+
+        // Memories: union by id, server winning on conflicts. Empty server → push
+        // local up so the account starts with the device's existing memories.
+        if let serverMemories = try? await backend.fetchMemories() {
+            if serverMemories.isEmpty {
+                if !memories.isEmpty { syncMemoriesToBackend() }
+            } else {
+                let serverIds = Set(serverMemories.map { $0.id })
+                let localOnly = memories.filter { !serverIds.contains($0.id) }
+                memories = serverMemories + localOnly
+                if isPersistenceEnabled {
+                    MemoriesPersistence.save(memories, to: preferencesDefaults ?? .standard)
+                }
+                if !localOnly.isEmpty { syncMemoriesToBackend() }
+            }
+        }
+    }
+
+    /// True when the server actually holds preference data (vs. empty defaults
+    /// returned for a user who has never synced).
+    private static func hasServerPreferences(_ p: UserPreferences) -> Bool {
+        !p.hardAvoids.isEmpty
+            || p.servingSize != nil
+            || !p.equipment.isEmpty
+            || !p.customInstructions.isEmpty
+    }
+
+    /// Wipes all device-local user data: preferences, memories, and every saved
+    /// recipe session. Used on account deletion. Returns to the blank state.
+    func clearAllLocalData() {
+        memories = []
+        userPreferences = UserPreferences()
+        if isPersistenceEnabled {
+            MemoriesPersistence.clear(from: preferencesDefaults ?? .standard)
+            UserPreferencesPersistence.clear(from: preferencesDefaults ?? .standard)
+        }
+        SessionPersistence.clearAll(in: sessionsDirectory)
+        nextLLMContext = nil
+        startNewSession()
     }
 
     // MARK: - New Session
@@ -724,7 +876,7 @@ final class AppStore: ObservableObject {
         )
     }
 
-    private func sendWithLLM(_ userText: String, referencedItem: ReferencedItem? = nil, dropConversationHistoryTail: Bool = true, generation: Int) async {
+    private func sendWithLLM(_ userText: String, referencedItem: ReferencedItem? = nil, dropConversationHistoryTail: Bool = true, isNewRecipe: Bool = false, generation: Int) async {
         // Clear llmTask when this generation's call ends (natural or cancelled).
         // The generation guard prevents an old cancelled task from clearing a newer task's ref.
         defer {
@@ -756,7 +908,13 @@ final class AppStore: ObservableObject {
         lastDebugLLMRequest = request
 #endif
 
-        let llmClient = OpenAIClient(apiKey: resolvedAPIKey())
+        // ── BYOK vs. PROXY ROUTING FORK (Project 3) ──────────────────────────
+        // BYOK-eligible users keep calling OpenAI directly via `OpenAIClient`; all
+        // other entitlements route through the Sous backend proxy
+        // (`ProxyOpenAIClient` → /proxy/chat), which records usage and enforces the
+        // recipe cap. The fork lives in `makeLLMClient`; the rest of this method is
+        // transport-agnostic.
+        let llmClient = makeLLMClient(isNewRecipe: isNewRecipe, recipeId: recipe.id.uuidString)
 
         // Creation streaming path: bypass the standard orchestrator decode+validate pipeline.
         // Only active when there is no canvas yet, not an import call, and no test orchestrator.
@@ -856,7 +1014,7 @@ final class AppStore: ObservableObject {
         if useLiveLLM {
             llmGeneration += 1
             let gen = llmGeneration
-            llmTask = Task { await self.sendWithLLM("Generate the recipe.", dropConversationHistoryTail: false, generation: gen) }
+            llmTask = Task { await self.sendWithLLM("Generate the recipe.", dropConversationHistoryTail: false, isNewRecipe: true, generation: gen) }
         }
     }
 
@@ -942,7 +1100,7 @@ final class AppStore: ObservableObject {
         let request = MultimodalLLMRequest(base: base, image: multimodalReq.image)
 
         let orchestrator: any LLMOrchestrator = testOrchestrator ?? OpenAILLMOrchestrator(
-            client: OpenAIClient(apiKey: resolvedAPIKey()),
+            client: makeLLMClient(isNewRecipe: false, recipeId: recipe.id.uuidString),
             model: multimodalLLMModel
         )
         let result = await orchestrator.run(request)
@@ -1078,7 +1236,13 @@ final class AppStore: ObservableObject {
         if let testService = testMiseEnPlaceService {
             service = testService
             apiKey = "__test__"
+        } else if entitlementProvider?() != .byok, let token = sessionProvider.load(), !token.isEmpty {
+            // Non-BYOK: route mise en place through the Sous proxy (server holds the
+            // OpenAI key). The session token is the Bearer credential.
+            service = MiseEnPlaceService(endpoint: SousBackendConfig.proxyChatURL)
+            apiKey = token
         } else {
+            // BYOK (or unauthenticated dev): call OpenAI directly with the local key.
             guard let key = resolvedAPIKey() else {
                 miseEnPlaceError = "Couldn't generate mise en place — try again"
                 return
@@ -1220,7 +1384,8 @@ final class AppStore: ObservableObject {
             isImportExtraction: true
         )
 
-        let llmClient = OpenAIClient(apiKey: resolvedAPIKey())
+        // Import extraction produces a new recipe → counts against the recipe cap.
+        let llmClient = makeLLMClient(isNewRecipe: true, recipeId: recipe.id.uuidString)
         let orchestrator: any LLMOrchestrator = testOrchestrator ?? OpenAILLMOrchestrator(
             client: llmClient,
             streamingClient: llmClient,
@@ -1260,6 +1425,8 @@ final class AppStore: ObservableObject {
             // Capture the initial recipe state once, on first canvas creation.
             if originalRecipe == nil {
                 originalRecipe = extracted
+                // Imported recipe creation → record BYOK telemetry (no-op otherwise).
+                recordByokRecipeUsage()
             }
             chatTranscript = [ChatMessage(role: .assistant, text: assistantMessage)]
             nextLLMContext = nil
@@ -1358,7 +1525,8 @@ final class AppStore: ObservableObject {
             isUnitConversion: true
         )
 
-        let llmClient = OpenAIClient(apiKey: resolvedAPIKey())
+        // Editing an existing recipe → not a new recipe.
+        let llmClient = makeLLMClient(isNewRecipe: false, recipeId: recipe.id.uuidString)
         let orchestrator: any LLMOrchestrator = testOrchestrator ?? OpenAILLMOrchestrator(
             client: llmClient,
             streamingClient: llmClient,
@@ -1453,7 +1621,8 @@ final class AppStore: ObservableObject {
             conversationHistory: buildConversationHistory(dropLastEntry: false)
         )
 
-        let llmClient = OpenAIClient(apiKey: resolvedAPIKey())
+        // Editing an existing recipe (rescale) → not a new recipe.
+        let llmClient = makeLLMClient(isNewRecipe: false, recipeId: recipe.id.uuidString)
         let orchestrator: any LLMOrchestrator = testOrchestrator ?? OpenAILLMOrchestrator(
             client: llmClient,
             streamingClient: llmClient,
@@ -1725,8 +1894,11 @@ final class AppStore: ObservableObject {
         isStreamingRecipe = false
         streamingCurrentGroupId = nil
         // Capture the initial recipe state once, on first canvas creation.
-        if originalRecipe == nil {
+        let isFirstCanvas = originalRecipe == nil
+        if isFirstCanvas {
             originalRecipe = uiState.recipe
+            // First-time recipe creation → record BYOK telemetry (no-op otherwise).
+            recordByokRecipeUsage()
         }
         saveSession()
     }

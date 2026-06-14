@@ -44,7 +44,7 @@ test('subscription/status: returns entitlement and the subscription row', async 
   assert.equal(data.subscription.status, 'trialing');
 });
 
-test('stubs: usage/recipe returns 501 (auth still required)', async () => {
+test('usage/recipe: requires auth and increments the period counter', async () => {
   const { app } = buildTestApp();
   const { body } = await signInWithApple(app, 'apple-sub-stub');
   const token = body.token as string;
@@ -53,26 +53,27 @@ test('stubs: usage/recipe returns 501 (auth still required)', async () => {
   const noAuth = await app.request('/api/v1/usage/recipe', { method: 'POST' });
   assert.equal(noAuth.status, 401);
 
-  // With auth → 501 Not Implemented.
+  // With auth → 200 with updated count (implemented in Project 3).
   const res = await app.request('/api/v1/usage/recipe', {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
   });
-  assert.equal(res.status, 501);
+  assert.equal(res.status, 200);
   const data = await readJson(res);
-  assert.equal(data.error, 'not_implemented');
-  assert.equal(data.project, 3);
+  assert.equal(data.recipesUsed, 1);
 });
 
-test('stubs: proxy/chat and sync/preferences return 501', async () => {
+test('stubs: sync/recipes remains a Project 3 stub (501)', async () => {
   const { app } = buildTestApp();
   const { body } = await signInWithApple(app, 'apple-sub-stub2');
   const token = body.token as string;
   const auth = { Authorization: `Bearer ${token}` };
 
-  const chat = await app.request('/api/v1/proxy/chat', { method: 'POST', headers: auth });
-  assert.equal(chat.status, 501);
+  // proxy/chat is implemented in Project 3; auth is still required.
+  const chatNoAuth = await app.request('/api/v1/proxy/chat', { method: 'POST' });
+  assert.equal(chatNoAuth.status, 401);
 
-  const prefs = await app.request('/api/v1/sync/preferences', { headers: auth });
-  assert.equal(prefs.status, 501);
+  // Recipe-session sync was not in scope for Project 3 — still a stub.
+  const recipes = await app.request('/api/v1/sync/recipes', { headers: auth });
+  assert.equal(recipes.status, 501);
 });

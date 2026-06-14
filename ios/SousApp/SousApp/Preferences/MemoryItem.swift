@@ -15,6 +15,15 @@ struct MemoryItem: Codable, Equatable, Identifiable, Sendable {
         self.firstPersonText = firstPersonText
         self.createdAt = createdAt
     }
+
+    /// Builds a memory with an explicit id — used when hydrating from the backend
+    /// so the server-preserved identifier round-trips instead of being regenerated.
+    init(id: UUID, text: String, firstPersonText: String = "", createdAt: Date = Date()) {
+        self.id = id
+        self.text = text
+        self.firstPersonText = firstPersonText
+        self.createdAt = createdAt
+    }
 }
 
 // MARK: - MemoriesPersistence

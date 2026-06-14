@@ -46,6 +46,17 @@ async function entitlementFor(
   );
 }
 
+/** Read-only user profile surfaced to the iOS Account section. */
+function profileFor(user: UserRow) {
+  return {
+    userId: user.id,
+    email: user.email,
+    displayName: user.display_name,
+    referralCode: user.referral_code,
+    isByokEligible: user.is_byok_eligible,
+  };
+}
+
 export function authRoutes(): Hono<HonoEnv> {
   const app = new Hono<HonoEnv>();
 
@@ -91,6 +102,7 @@ export function authRoutes(): Hono<HonoEnv> {
         token,
         userId: existing.id,
         entitlement,
+        profile: profileFor(existing),
         config: parseConfig(rawConfig),
       });
     }
@@ -141,6 +153,7 @@ export function authRoutes(): Hono<HonoEnv> {
       token,
       userId: user.id,
       entitlement,
+      profile: profileFor(user),
       config: parseConfig(rawConfig),
     });
   });

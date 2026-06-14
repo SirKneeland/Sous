@@ -1,7 +1,9 @@
 import SwiftUI
+import UIKit
 
 struct SettingsView: View {
     @ObservedObject var store: AppStore
+    @ObservedObject var authState: AuthState
     @Binding var navigateToMemories: Bool
 
     @State private var keyInput = ""
@@ -10,6 +12,17 @@ struct SettingsView: View {
     // TEMP: remove once texture intensity is finalized
     @AppStorage("debugTextureIntensity") private var textureIntensity: Double = 0.6
     @State private var showingTexturePreview = false
+
+    // Account section state
+    @State private var displayNameDraft: String = ""
+    @FocusState private var nameFieldFocused: Bool
+    @State private var showSignOutConfirm = false
+    @State private var showDeleteConfirm = false
+    @State private var isDeleting = false
+    @State private var deleteError: String?
+    // Usage display state (fetched on appear).
+    @State private var usageSummary: UsageSummary?
+    @State private var usageLoading = false
 
     var body: some View {
         NavigationView {
@@ -117,6 +130,9 @@ struct SettingsView: View {
                 .listRowBackground(Color.sousBackground)
                 .listRowSeparatorTint(Color.sousSeparator)
 
+                // MARK: Account
+                accountSection
+
                 // MARK: API Key
                 Section {
                     HStack {
@@ -221,14 +237,250 @@ struct SettingsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("DONE") { dismiss() }
-                        .font(.sousButton)
-                        .foregroundStyle(Color.sousText)
+                    Button("DONE") {
+                        commitDisplayName()
+                        dismiss()
+                    }
+                    .font(.sousButton)
+                    .foregroundStyle(Color.sousText)
                 }
             }
             .onAppear {
                 keyIsPresent = store.keyProvider.currentKey() != nil
+                displayNameDraft = authState.profile?.displayName ?? ""
             }
+            .onChange(of: authState.profile?.displayName) { _, newValue in
+                displayNameDraft = newValue ?? ""
+            }
+            .alert("Sign Out?", isPresented: $showSignOutConfirm) {
+                Button("Cancel", role: .cancel) {}
+                Button("Sign Out", role: .destructive) {
+                    Task { await authState.signOut() }
+                }
+            } message: {
+                Text("You'll need to sign in again to use Sous.")
+            }
+            .alert("Delete Account?", isPresented: $showDeleteConfirm) {
+                Button("Cancel", role: .cancel) {}
+                Button("Delete", role: .destructive) {
+                    Task { await performDeleteAccount() }
+                }
+            } message: {
+                Text("This will permanently delete your account, recipes, memories, and preferences. This cannot be undone.")
+            }
+            .alert("Couldn't Delete Account", isPresented: Binding(
+                get: { deleteError != nil },
+                set: { if !$0 { deleteError = nil } }
+            )) {
+                Button("OK", role: .cancel) { deleteError = nil }
+            } message: {
+                Text(deleteError ?? "")
+            }
+            .task { await loadUsage() }
+        }
+    }
+
+    // MARK: - Account section
+
+    @ViewBuilder
+    private var accountSection: some View {
+        Section {
+            // Display name — editable inline, synced to backend on commit.
+            HStack {
+                Text("Name")
+                    .font(.sousBody)
+                    .foregroundStyle(Color.sousText)
+                Spacer()
+                TextField("Add your name", text: $displayNameDraft)
+                    .font(.sousBody)
+                    .foregroundStyle(Color.sousText)
+                    .multilineTextAlignment(.trailing)
+                    .submitLabel(.done)
+                    .focused($nameFieldFocused)
+                    .onSubmit { commitDisplayName() }
+                    // Commit when the field loses focus (e.g. tapping elsewhere or
+                    // dismissing Settings), not only on the keyboard return key.
+                    .onChange(of: nameFieldFocused) { _, focused in
+                        if !focused { commitDisplayName() }
+                    }
+            }
+
+            // Email — read-only.
+            HStack {
+                Text("Email")
+                    .font(.sousBody)
+                    .foregroundStyle(Color.sousText)
+                Spacer()
+                Text(authState.profile?.email ?? "—")
+                    .font(.sousBody)
+                    .foregroundStyle(Color.sousMuted)
+            }
+
+            // Subscription status — plain English.
+            HStack {
+                Text("Plan")
+                    .font(.sousBody)
+                    .foregroundStyle(Color.sousText)
+                Spacer()
+                if isBYOK {
+                    Text("OG")
+                        .font(.sousCaption)
+                        .foregroundStyle(Color.sousBackground)
+                        .kerning(0.5)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.sousTerracotta)
+                }
+                Text(subscriptionStatusText)
+                    .font(.sousBody)
+                    .foregroundStyle(Color.sousMuted)
+            }
+
+            // Usage — recipes used this billing period (or BYOK note).
+            usageDisplayRow
+
+            // Manage Subscription — deep link to iOS subscription settings.
+            Button {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            } label: {
+                Text("Manage Subscription")
+                    .font(.sousBody)
+                    .foregroundStyle(Color.sousText)
+            }
+
+            // Refer a friend — referral code + share sheet.
+            if let code = authState.profile?.referralCode, !code.isEmpty {
+                ShareLink(item: referralShareText(code: code)) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Share Sous")
+                                .font(.sousBody)
+                                .foregroundStyle(Color.sousText)
+                            Text("Your code: \(code)")
+                                .font(.sousCaption)
+                                .foregroundStyle(Color.sousMuted)
+                        }
+                        Spacer()
+                        Image(systemName: "square.and.arrow.up")
+                            .foregroundStyle(Color.sousTerracotta)
+                    }
+                }
+            }
+
+            // Sign Out.
+            Button {
+                showSignOutConfirm = true
+            } label: {
+                Text("Sign Out")
+                    .font(.sousBody)
+                    .foregroundStyle(Color.sousText)
+            }
+
+            // Delete Account — destructive.
+            Button(role: .destructive) {
+                showDeleteConfirm = true
+            } label: {
+                HStack {
+                    Text("Delete Account")
+                        .font(.sousBody)
+                        .foregroundStyle(Color.sousTerracotta)
+                    if isDeleting {
+                        Spacer()
+                        ProgressView()
+                    }
+                }
+            }
+            .disabled(isDeleting)
+        } header: {
+            Text("ACCOUNT")
+                .font(.sousSectionHeader)
+                .foregroundStyle(Color.sousTerracotta)
+                .kerning(1.2)
+                .textCase(nil)
+        }
+        .listRowBackground(Color.sousBackground)
+        .listRowSeparatorTint(Color.sousSeparator)
+    }
+
+    // MARK: - Usage display
+
+    /// One line summarizing recipe usage this period. BYOK users see a no-limits
+    /// note; everyone else sees "X of N recipes …", a loading state, or "--" on
+    /// fetch failure.
+    @ViewBuilder
+    private var usageDisplayRow: some View {
+        Group {
+            if isBYOK {
+                Text("Using your own API key · No limits apply")
+            } else if let summary = usageSummary {
+                Text(usageText(summary))
+            } else if usageLoading {
+                Text("Loading usage…")
+            } else {
+                Text("--")
+            }
+        }
+        .font(.sousCaption)
+        .foregroundStyle(Color.sousMuted)
+    }
+
+    private func usageText(_ s: UsageSummary) -> String {
+        if s.entitlement == "trialing",
+           let used = s.trialRecipesUsed, let cap = s.trialRecipeCap {
+            let days = s.trialDaysRemaining ?? 0
+            return "\(used) of \(cap) recipes used · \(days) day\(days == 1 ? "" : "s") left in trial"
+        }
+        return "\(s.recipesUsed) of \(s.recipeCap) recipes this month · Resets in \(s.resetsInDays) day\(s.resetsInDays == 1 ? "" : "s")"
+    }
+
+    private func loadUsage() async {
+        guard !isBYOK else { return }
+        usageLoading = true
+        usageSummary = await store.fetchUsageSummary()
+        usageLoading = false
+    }
+
+    // MARK: - Account helpers
+
+    private var isBYOK: Bool {
+        authState.entitlement == .byok || authState.profile?.isByokEligible == true
+    }
+
+    private var subscriptionStatusText: String {
+        switch authState.entitlement {
+        case .byok:       return "Bring Your Own Key"
+        case .subscriber: return "Active Subscriber"
+        case .trialing:   return "Free Trial"
+        case .grace:      return "Payment Issue"
+        case .softWall:   return "Trial Ended"
+        case .none:       return "—"
+        }
+    }
+
+    private func referralShareText(code: String) -> String {
+        "Join me on Sous! Use my code \(code) to sign up"
+    }
+
+    private func commitDisplayName() {
+        let trimmed = displayNameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let value: String? = trimmed.isEmpty ? nil : trimmed
+        // No-op when unchanged so closing Settings doesn't fire redundant syncs.
+        let current = authState.profile?.displayName
+        guard value != (current?.isEmpty == true ? nil : current) else { return }
+        authState.setDisplayName(value)
+        store.updateDisplayName(value)
+    }
+
+    private func performDeleteAccount() async {
+        isDeleting = true
+        defer { isDeleting = false }
+        do {
+            try await authState.deleteAccount()
+            store.clearAllLocalData()
+        } catch {
+            deleteError = "Something went wrong. Please check your connection and try again."
         }
     }
 }

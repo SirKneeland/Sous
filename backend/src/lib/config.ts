@@ -33,6 +33,10 @@ export function trialRecipeCap(raw: Record<string, string>): number {
   return numberFrom(raw, 'trial_recipe_cap', 14);
 }
 
+export function paidRecipeCap(raw: Record<string, string>): number {
+  return numberFrom(raw, 'paid_recipe_cap', 100);
+}
+
 export function entitlementConfigFrom(raw: Record<string, string>): EntitlementConfig {
   return { trialRecipeCap: trialRecipeCap(raw) };
 }

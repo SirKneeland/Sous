@@ -30,7 +30,17 @@ export function subscriptionRoutes(): Hono<HonoEnv> {
       entitlementConfigFrom(rawConfig),
     );
 
-    return c.json({ entitlement, subscription });
+    // Read-only user profile surfaced for the iOS Account section (email,
+    // editable display name, referral code, OG/BYOK badge).
+    const profile = {
+      userId: user.id,
+      email: user.email,
+      displayName: user.display_name,
+      referralCode: user.referral_code,
+      isByokEligible: user.is_byok_eligible,
+    };
+
+    return c.json({ entitlement, subscription, profile });
   });
 
   // Stubs — implemented in Project 4 (Billing + Paywall).

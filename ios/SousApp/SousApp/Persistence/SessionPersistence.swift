@@ -84,4 +84,18 @@ enum SessionPersistence {
     static func delete(recipeId: UUID, in directory: URL? = nil) {
         try? FileManager.default.removeItem(at: fileURL(for: recipeId, in: directory))
     }
+
+    /// Removes every persisted session file (per-recipe + legacy). Used when
+    /// wiping all local data on account deletion.
+    static func clearAll(in directory: URL? = nil) {
+        let dir = directory ?? sessionsDirectory
+        if let files = try? FileManager.default.contentsOfDirectory(
+            at: dir, includingPropertiesForKeys: nil
+        ) {
+            for url in files where url.lastPathComponent.hasPrefix("sous_session")
+                && url.pathExtension == "json" {
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
+    }
 }

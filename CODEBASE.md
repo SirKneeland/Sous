@@ -81,7 +81,8 @@
   - `UIEvent.swift` — Enum: openChat, closeChat, userDraftChanged, patchReceived, validatePatch, acceptPatch, rejectPatch
   - `ChatModels.swift` — ChatMessage (UUID id, role, text, timestamp); MessageRole enum
   - `UIStateMachine/LLMContextComposer.swift` — Builds userMessage by appending HiddenContext silently
-  - `Networking/OpenAIClient.swift` — Concrete LLMClient; hits `api.openai.com/v1/chat/completions`; maps HTTP errors to LLMError cases; also conforms to `StreamingLLMClient` via an extension that uses `URLSession.bytes(for:)` to parse SSE lines and yield raw delta tokens (~350 lines)
+  - `Networking/OpenAIClient.swift` — Concrete LLMClient; hits `api.openai.com/v1/chat/completions`; maps HTTP errors to LLMError cases; also conforms to `StreamingLLMClient` via an extension that uses `URLSession.bytes(for:)` to parse SSE lines and yield raw delta tokens (~350 lines). **Used directly only by BYOK users** as of Project 3.
+  - `Networking/ProxyOpenAIClient.swift` — **(Project 3)** `StreamingLLMClient` that routes non-BYOK users' chat calls through the Sous backend proxy (`POST /api/v1/proxy/chat`). Same OpenAI body/parse logic as `OpenAIClient`, but Bearer = Sous session token and sets `X-Sous-Is-New-Recipe` / `X-Sous-Recipe-Id`. Constructed per-call by `AppStore.makeLLMClient(isNewRecipe:recipeId:)`
   - `Views/ContentView.swift` — Root view composition
   - `Views/RecipeCanvasView.swift` — Recipe display (ingredients + steps)
   - `Views/ChatSheetView.swift` — Chat interface overlay
@@ -92,6 +93,11 @@
   - `Acquisition/ImageAcquisitionState.swift` — Enum: idle | loading | success(UIImage) | failure(Error)
   - `Attachment/PhotoSendCoordinator.swift` — Orchestrates image prep → send
   - `Keychain/OpenAIKeyProvider.swift` — Keychain storage for API key
+  - `Keychain/SousSessionProvider.swift` — Keychain storage for the Sous backend session token (distinct account from the OpenAI key); `SousSessionProviding` protocol + `KeychainSousSessionProvider`
+  - `Networking/SousAPIClient.swift` — **the Sous backend networking boundary** (distinct from `OpenAIClient`). `@MainActor` client implementing all nine endpoints (`signInWithApple`, `signOut`, `deleteAccount`, `fetchConfig`, `fetchSubscriptionStatus`, `syncPreferences`/`fetchPreferences`, `syncMemories`/`fetchMemories`, `updateDisplayName`); Bearer-token auth; 401 → clear session + `onUnauthorized`. `SousAuthBackend` / `SousSyncBackend` / `SousBackend` protocols; injectable `HTTPTransport`; `SousBackendConfig` resolves the base URL from Info.plist `SousBackendBaseURL`
+  - `Networking/SousAPIModels.swift` — Codable wire types: `AuthResponse`, `AppConfig`, `SubscriptionStatus`, `EntitlementInfo`, `Entitlement` enum (`byok/subscriber/trialing/grace/softWall`), `UserProfile`, `PreferencesDTO`, `MemoryDTO`
+  - `Auth/AuthState.swift` — `@MainActor ObservableObject`; `AuthStatus` (`unknown/signedOut/signedIn`) state machine, launch validation against `/subscription/status`, offline cache fallback, Apple full-name capture, `onSignInHydrate` hook
+  - `Auth/SignInView.swift` — full-screen Sign in with Apple gate (`ASAuthorizationAppleIDButton` via `SignInWithAppleButton`)
   - `Debug/LLMDebugExport.swift` — Exports LLMDebugBundle for analysis
   - `Persistence/SessionSnapshot.swift` — Codable struct; schemaVersion, recipe, pendingPatchSet, chatMessages[], nextLLMContext, savedAt
   - `Persistence/SessionPersistence.swift` — Static helpers: save (atomic), load (nil on absent/corrupt), clear; all accept optional URL for test injection
@@ -123,9 +129,16 @@ Hosted on Railway. Run with `tsx` (no build step).
 | `routes/auth.ts` | `/auth/apple` (Sign in with Apple → session), `/auth/signout`, `DELETE /auth/account` — **fully implemented** |
 | `routes/config.ts` | `GET /config` — config map + entitlement — **fully implemented** |
 | `routes/subscription.ts` | `GET /subscription/status` implemented; `validate`/`notify` stubbed (Project 4) |
-| `routes/usage.ts`, `proxy.ts`, `sync.ts`, `referral.ts` | Stubbed endpoints (501) for Projects 2–4 |
+| `routes/proxy.ts` | **(Project 3)** `POST /proxy/chat` + `/proxy/tts`: off-topic check, recipe-cap enforcement (402), forward to OpenAI with server key, stream back verbatim, record `usage_events`, async abuse check |
+| `routes/usage.ts` | **(Project 3)** `POST /usage/recipe` (BYOK telemetry), `POST /usage/request` (ack), `GET /usage/summary` (period usage + trial fields) |
+| `routes/admin.ts` | **(Project 3)** `GET /admin/dashboard` — operator-only aggregate; guarded by `ADMIN_API_KEY` via `X-Admin-Key` (constant-time, fail-closed) |
+| `routes/sync.ts`, `referral.ts` | `sync/recipes` + referral endpoints stubbed (501) for Projects 3–4 |
 | `routes/stubs.ts` | `notImplemented(endpoint, project)` → 501 helper |
 | `middleware/auth.ts` | Bearer-token auth: JWT verify + sessions-table check (revoked/expired) → 401 |
+| `lib/offTopicDetector.ts` | **(Project 3)** Lexical, injection-safe cooking-vs-not classifier; threshold from `config.off_topic_threshold` |
+| `lib/abuseDetector.ts` | **(Project 3)** Post-request threshold checks → set `users.abuse_flag` (never blocks) |
+| `lib/openai.ts` | **(Project 3)** Injectable OpenAI forwarder (`forwardChat`/`forwardTTS`) + usage parsing (JSON + SSE) |
+| `lib/cost.ts`, `billingPeriod.ts`, `access.ts` | **(Project 3)** Cost estimation, ISO-month helpers, shared entitlement resolution |
 | `lib/tokens.ts` | Sign/verify Sous session JWTs (HS256, 30-day expiry) |
 | `lib/entitlement.ts` | `computeEntitlement(user, sub, config)` → byok/subscriber/trialing/grace/soft_wall |
 | `lib/apple.ts` | Apple identity-token verification (+ dev bypass, disabled in prod) |
@@ -179,8 +192,8 @@ so re-registered (previously-deleted) users can be stored without a trial.
 
 - **Backend tests:** Node.js built-in test runner (`node:test`) via `tsx`
   - Location: `backend/src/**/*.test.ts`
-  - Key files: `lib/entitlement.test.ts` (all 5 entitlement states), `lib/tokens.test.ts`, `routes/auth.test.ts` (account creation, returning user, re-registration, referral, middleware), `routes/config.test.ts` (config/status/health/stubs)
-  - Tests use an in-memory fake repo (no Supabase, no network)
+  - Key files: `lib/entitlement.test.ts` (all 5 entitlement states), `lib/tokens.test.ts`, `routes/auth.test.ts`, `routes/config.test.ts`, `routes/sync.test.ts`, and **(Project 3)** `routes/proxy.test.ts` (forward+record, cap 402, off-topic 400, streaming usage), `routes/usage.test.ts` (summary trial/paid, recipe increment), `routes/admin.test.ts` (dashboard + key gate), `lib/offTopicDetector.test.ts` (10+ cases both directions + injection), `lib/abuseDetector.test.ts`
+  - Tests use an in-memory fake repo + injected fake OpenAI forwarder (no Supabase, no network, no real key). 75 tests.
   - Run with: `cd backend && npm test`
 
 ---
@@ -252,6 +265,7 @@ Previously completed (Milestone 19 — Personality Modes — DONE):
 - **Seed recipe** in AppStore is hardcoded: "Simple Bread" with 3 ingredients, 3 steps (1 marked done), 1 note. The done step is intentional — it tests immutability in the live app.
 - **Multimodal wiring is complete (M9):** `OpenAILLMOrchestrator` now has `run(MultimodalLLMRequest)` which attaches the image to the client request and uses `gpt-4o`. The `LLMOrchestrator` protocol carries a default extension that falls back to `run(request.base)` so test mocks require no changes.
 - **No external Swift dependencies** — pure stdlib + Foundation + SousCore SPM. Adding a dependency requires operator approval per CLAUDE.md.
+- **Backend sync (Project 2)** — `AppStore` holds an optional `backend: any SousSyncBackend` (attached at launch via `attachBackend(SousAPIClient.shared)`; nil in unit tests unless a mock is injected). Preferences and memories sync to the backend on every local save, fire-and-forget and silent on failure. `hydrateFromBackend()` runs once after a fresh sign-in: server wins on the preference fields it owns (voice/unit-system are device-local and preserved), and memories are merged by id (server wins on conflict; local-only items are kept and pushed up). `clearAllLocalData()` wipes preferences, memories, and all recipe sessions on account deletion. The BYOK-vs-proxy routing fork for Project 3 is commented in `sendWithLLM`.
 - **`xcodebuild test` requires a simulator to be available.** If CI doesn't have one, tests may fail at launch, not in logic.
 
 ---

@@ -32,13 +32,21 @@ enum MiseEnPlaceServiceError: Error, Sendable {
 
 struct MiseEnPlaceService: MiseEnPlaceServiceProtocol {
 
-    private static let endpoint = URL(string: "https://api.openai.com/v1/chat/completions")!
+    static let openAIEndpoint = URL(string: "https://api.openai.com/v1/chat/completions")!
     private let model: String
     private let session: URLSession
+    /// Where the chat-completions request is sent. Defaults to OpenAI directly
+    /// (BYOK users); non-BYOK users pass the Sous backend proxy URL so the call is
+    /// metered and the server's key is used. The `apiKey` argument supplies the
+    /// Bearer credential either way (OpenAI key vs. Sous session token).
+    private let endpoint: URL
 
-    init(model: String = "gpt-5.4-mini", session: URLSession = .shared) {
+    init(model: String = "gpt-5.4-mini",
+         session: URLSession = .shared,
+         endpoint: URL = MiseEnPlaceService.openAIEndpoint) {
         self.model = model
         self.session = session
+        self.endpoint = endpoint
     }
 
     func run(recipe: Recipe, apiKey: String) async throws -> MiseEnPlaceResponse {
@@ -84,7 +92,7 @@ struct MiseEnPlaceService: MiseEnPlaceServiceProtocol {
             ]
         ]
 
-        var request = URLRequest(url: Self.endpoint)
+        var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
