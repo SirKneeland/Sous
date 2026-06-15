@@ -18,6 +18,33 @@ private actor NoopOrchestrator: LLMOrchestrator {
     }
 }
 
+/// Returns a valid import PatchSet matching the request's recipe id/version so the
+/// import flow creates a canvas (which is a recipe-creation event).
+private actor ImportCreatingOrchestrator: LLMOrchestrator {
+    func run(_ request: LLMRequest) async -> LLMResult {
+        let recipeId = UUID(uuidString: request.recipeId) ?? UUID()
+        let patchSet = PatchSet(
+            baseRecipeId: recipeId,
+            baseRecipeVersion: request.recipeVersion,
+            patches: [
+                .setTitle("Imported Dish"),
+                .addIngredient(groupId: nil, afterId: nil, text: "1 cup flour"),
+                .addStep(parentId: nil, afterId: nil, text: "Mix and bake", preassignedId: nil),
+            ]
+        )
+        return .valid(
+            patchSet: patchSet,
+            assistantMessage: "Imported!",
+            raw: nil,
+            debug: LLMDebugBundle(
+                status: .succeeded, attemptCount: 1, maxAttempts: 2,
+                requestId: "t", extractionUsed: false, repairUsed: false, timingTotalMs: 0
+            ),
+            proposedMemory: nil
+        )
+    }
+}
+
 @MainActor
 final class AppStoreProxyRoutingTests: XCTestCase {
 
@@ -84,5 +111,46 @@ final class AppStoreProxyRoutingTests: XCTestCase {
         let store = makeStore(entitlement: .trialing, token: "tok", backend: nil)
         let summary = await store.fetchUsageSummary()
         XCTAssertNil(summary)
+    }
+
+    // MARK: - Recipe-creation counting
+
+    private func drainMain() async {
+        for _ in 0..<10 { await Task.yield() }
+    }
+
+    func testRecipeCreationRecordsUsageForNonByok() async {
+        let backend = MockBackend()
+        let store = AppStore(
+            testOrchestrator: ImportCreatingOrchestrator(),
+            backend: backend,
+            sessionProvider: InMemorySessionProvider(token: "tok"),
+            entitlementProvider: { .trialing }
+        )
+        store.startNewSession()
+        store.isShowingImportSheet = true
+        store.sendImportRequest(text: "Imported Dish\n1 cup flour\nMix and bake")
+        await drainMain()
+
+        XCTAssertTrue(store.hasCanvas, "Import should create a canvas")
+        XCTAssertEqual(backend.recordRecipeUsageCallCount, 1,
+                       "Creating a recipe must record it with the backend exactly once")
+    }
+
+    func testRecipeCreationRecordsUsageForByokToo() async {
+        let backend = MockBackend()
+        let store = AppStore(
+            testOrchestrator: ImportCreatingOrchestrator(),
+            backend: backend,
+            sessionProvider: InMemorySessionProvider(token: "tok"),
+            entitlementProvider: { .byok }
+        )
+        store.startNewSession()
+        store.isShowingImportSheet = true
+        store.sendImportRequest(text: "Imported Dish\n1 cup flour\nMix and bake")
+        await drainMain()
+
+        XCTAssertEqual(backend.recordRecipeUsageCallCount, 1,
+                       "BYOK recipes are also counted (telemetry) via the same path")
     }
 }

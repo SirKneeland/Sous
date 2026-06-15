@@ -56,11 +56,19 @@ struct ProxyOpenAIClient: LLMClient {
         return req
     }
 
+    /// Logs request routing for device debugging. Never logs the session token.
+    private func debugLog(_ transport: String) {
+#if DEBUG
+        print("[ProxyOpenAIClient] \(transport) → \(endpoint.absoluteString) X-Sous-Is-New-Recipe=\(isNewRecipe) recipeId=\(recipeId ?? "-")")
+#endif
+    }
+
     // MARK: - LLMClient
 
     func send(_ request: LLMClientRequest) async throws -> LLMRawResponse {
         let resolvedId = request.requestId ?? UUID().uuidString
         guard !sessionToken.isEmpty else { throw LLMError.auth }
+        debugLog("send")
 
         var urlRequest = makeRequest(timeout: request.timeout)
         var body: [String: Any] = [
@@ -164,6 +172,7 @@ extension ProxyOpenAIClient: StreamingLLMClient {
         let capturedSession = streamSession
         let capturedRequest = request
         let baseRequest = makeRequest(timeout: request.timeout)
+        debugLog("stream")
 
         return AsyncThrowingStream { continuation in
             let task = Task {

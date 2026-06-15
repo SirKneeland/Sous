@@ -48,7 +48,9 @@ test('proxy/chat: forwards to OpenAI and records a usage event', async () => {
   assert.ok((ev.estimated_cost_usd ?? 0) > 0);
 });
 
-test('proxy/chat: new-recipe request increments counters', async () => {
+test('proxy/chat: new-recipe request is allowed but does NOT increment counters', async () => {
+  // Counting is deferred to POST /usage/recipe (fired when the client confirms a
+  // recipe was actually created). The proxy only enforces the cap read-only.
   const harness = buildTestApp();
   const { app, state } = harness;
   const token = await authedToken(app, 'apple-proxy-2');
@@ -64,9 +66,10 @@ test('proxy/chat: new-recipe request increments counters', async () => {
   });
 
   assert.equal(res.status, 200);
-  // Trial user: both the trial counter and the period counter advance.
-  assert.equal(state.subscriptions[0]!.trial_recipes_used, 1);
-  assert.equal(state.recipeCapCounters[0]!.recipes_used, 1);
+  // Proxy must not mutate counters — that is /usage/recipe's job.
+  assert.equal(state.subscriptions[0]!.trial_recipes_used, 0);
+  assert.equal(state.recipeCapCounters.length, 0);
+  // But the call is still recorded as a usage event flagged new-recipe.
   assert.equal(state.usageEvents[0]!.is_new_recipe, true);
 });
 

@@ -132,6 +132,15 @@ struct RecentRecipesView: View {
                 loadSummaries(for: sessions)
             }
         }
+        // The drawer keeps this view mounted (offset off-screen), so `.onAppear`
+        // only fires once at launch. Reload whenever the drawer opens so a recipe
+        // generated since the last open shows up without a relaunch.
+        .onChange(of: store.showRecentRecipes) { _, isOpen in
+            if isOpen {
+                sessions = store.loadRecentSessions()
+                loadSummaries(for: sessions)
+            }
+        }
     }
 
     // MARK: - Title view

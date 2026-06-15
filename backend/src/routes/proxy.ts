@@ -142,6 +142,12 @@ export function proxyRoutes(): Hono<HonoEnv> {
     const access = await resolveAccess(deps, userId);
     if (!access) return c.json({ error: 'not_found', message: 'User not found' }, 404);
 
+    if (deps.env.nodeEnv !== 'production') {
+      console.log(
+        `[proxy/chat] user=${userId} isNewRecipe=${isNewRecipe} entitlement=${access.entitlement.status} recipeId=${recipeId ?? '-'}`,
+      );
+    }
+
     const threshold = offTopicThresholdFrom(access.rawConfig);
     const offTopic = detectOffTopic(lastUserText(body.messages), threshold);
     if (offTopic.isOffTopic) {
@@ -160,8 +166,12 @@ export function proxyRoutes(): Hono<HonoEnv> {
     }
 
     // 2. New-recipe cap enforcement (before forwarding / spending tokens).
+    //    This is READ-ONLY — the counter is incremented by POST /usage/recipe at
+    //    the moment a recipe is actually created on the client, which is the only
+    //    reliable signal (a request-time header can't know whether this call will
+    //    produce a recipe). The proxy only decides whether to allow the attempt.
     if (isNewRecipe) {
-      const decision = await enforceNewRecipeCap(access, deps, period);
+      const decision = await checkNewRecipeCap(access, deps, period);
       if (!decision.allowed) {
         await recordUsage({
           deps, userId, recipeId, requestType, isNewRecipe: true,
@@ -307,13 +317,13 @@ interface CapDecision {
 }
 
 /**
- * Decide whether a new-recipe request may proceed and, if so, increment the
- * relevant counter(s). Trial users are bound by the trial recipe cap
+ * READ-ONLY check of whether a new-recipe request may proceed. Does NOT mutate any
+ * counter — incrementing happens in POST /usage/recipe when the client confirms a
+ * recipe was actually created. Trial users are bound by the trial recipe cap
  * (subscriptions.trial_recipes_used); subscribers/grace by the monthly paid cap
- * (recipe_cap_counters). recipe_cap_counters is always incremented for
- * monitoring. BYOK never reaches the proxy but is treated as unlimited if it does.
+ * (recipe_cap_counters). BYOK never reaches the proxy but is treated as unlimited.
  */
-async function enforceNewRecipeCap(
+async function checkNewRecipeCap(
   access: NonNullable<Awaited<ReturnType<typeof resolveAccess>>>,
   deps: AppDeps,
   period: string,
@@ -322,7 +332,6 @@ async function enforceNewRecipeCap(
   const status = access.entitlement.status;
 
   if (status === 'byok') {
-    await deps.repo.incrementRecipeCapCounter(userId, period);
     return { allowed: true, message: '' };
   }
 
@@ -332,8 +341,6 @@ async function enforceNewRecipeCap(
     if (used >= cap) {
       return { allowed: false, message: `Trial recipe limit reached (${cap}).` };
     }
-    await deps.repo.incrementTrialRecipesUsed(userId);
-    await deps.repo.incrementRecipeCapCounter(userId, period);
     return { allowed: true, message: '' };
   }
 
@@ -343,7 +350,6 @@ async function enforceNewRecipeCap(
     if (used >= cap) {
       return { allowed: false, message: `Monthly recipe limit reached (${cap}).` };
     }
-    await deps.repo.incrementRecipeCapCounter(userId, period);
     return { allowed: true, message: '' };
   }
 

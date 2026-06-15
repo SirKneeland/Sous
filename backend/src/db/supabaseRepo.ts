@@ -264,12 +264,22 @@ export function createSupabaseRepo(db: SupabaseClient): Repo {
     },
 
     async incrementRecipeCapCounter(userId, billingPeriod) {
-      const { data, error } = await db.rpc('increment_recipe_cap_counter', {
-        p_user_id: userId,
-        p_billing_period: billingPeriod,
-      });
+      // Read-modify-write upsert. Not requiring a DB function keeps deployment to
+      // a single schema.sql run; for V1's per-user recipe-creation rate the lost
+      // atomicity is immaterial (a user does not create two recipes concurrently).
+      const { data: existing, error: selErr } = await db
+        .from('recipe_cap_counters')
+        .select('recipes_used')
+        .eq('user_id', userId)
+        .eq('billing_period', billingPeriod)
+        .maybeSingle();
+      if (selErr) throw selErr;
+      const next = ((existing as { recipes_used: number } | null)?.recipes_used ?? 0) + 1;
+      const { error } = await db
+        .from('recipe_cap_counters')
+        .upsert({ user_id: userId, billing_period: billingPeriod, recipes_used: next });
       if (error) throw error;
-      return (data as number) ?? 0;
+      return next;
     },
 
     async getRecipeCapCount(userId, billingPeriod) {
@@ -278,17 +288,27 @@ export function createSupabaseRepo(db: SupabaseClient): Repo {
         .select('recipes_used')
         .eq('user_id', userId)
         .eq('billing_period', billingPeriod)
-        .single();
-      if (error && !isNoRows(error)) throw error;
+        .maybeSingle();
+      if (error) throw error;
       return (data as { recipes_used: number } | null)?.recipes_used ?? 0;
     },
 
     async incrementTrialRecipesUsed(userId) {
-      const { data, error } = await db.rpc('increment_trial_recipes_used', {
-        p_user_id: userId,
-      });
+      const { data: sub, error: selErr } = await db
+        .from('subscriptions')
+        .select('id, trial_recipes_used')
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (selErr) throw selErr;
+      if (!sub) return null;
+      const row = sub as { id: string; trial_recipes_used: number };
+      const next = (row.trial_recipes_used ?? 0) + 1;
+      const { error } = await db
+        .from('subscriptions')
+        .update({ trial_recipes_used: next })
+        .eq('id', row.id);
       if (error) throw error;
-      return (data as number | null) ?? null;
+      return next;
     },
 
     // ---- abuse detection ----

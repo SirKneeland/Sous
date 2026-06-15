@@ -10,8 +10,8 @@ async function authedToken(app: ReturnType<typeof buildTestApp>['app'], sub: str
   return body.token as string;
 }
 
-test('usage/recipe: increments the period counter and returns the new count', async () => {
-  const { app } = buildTestApp();
+test('usage/recipe: increments period + trial counters and returns new counts', async () => {
+  const { app, state } = buildTestApp();
   const token = await authedToken(app, 'apple-usage-1');
 
   const first = await readJson(
@@ -20,7 +20,10 @@ test('usage/recipe: increments the period counter and returns the new count', as
       headers: { Authorization: `Bearer ${token}` },
     }),
   );
+  // New trial user → both counters advance to 1.
   assert.equal(first.recipesUsed, 1);
+  assert.equal(first.trialRecipesUsed, 1);
+  assert.equal(state.subscriptions[0]!.trial_recipes_used, 1);
 
   const second = await readJson(
     await app.request('/api/v1/usage/recipe', {
@@ -29,6 +32,27 @@ test('usage/recipe: increments the period counter and returns the new count', as
     }),
   );
   assert.equal(second.recipesUsed, 2);
+  assert.equal(second.trialRecipesUsed, 2);
+});
+
+test('usage/recipe + usage/summary: count surfaces in the trial summary', async () => {
+  const { app } = buildTestApp();
+  const token = await authedToken(app, 'apple-usage-1b');
+
+  await app.request('/api/v1/usage/recipe', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  const summary = await readJson(
+    await app.request('/api/v1/usage/summary', {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+  );
+  // The bug was "stuck at 0" — confirm the first recipe shows as 1 of 14.
+  assert.equal(summary.entitlement, 'trialing');
+  assert.equal(summary.trialRecipesUsed, 1);
+  assert.equal(summary.trialRecipeCap, 14);
 });
 
 test('usage/summary: trial user sees trial-specific counts', async () => {

@@ -129,8 +129,8 @@ Hosted on Railway. Run with `tsx` (no build step).
 | `routes/auth.ts` | `/auth/apple` (Sign in with Apple → session), `/auth/signout`, `DELETE /auth/account` — **fully implemented** |
 | `routes/config.ts` | `GET /config` — config map + entitlement — **fully implemented** |
 | `routes/subscription.ts` | `GET /subscription/status` implemented; `validate`/`notify` stubbed (Project 4) |
-| `routes/proxy.ts` | **(Project 3)** `POST /proxy/chat` + `/proxy/tts`: off-topic check, recipe-cap enforcement (402), forward to OpenAI with server key, stream back verbatim, record `usage_events`, async abuse check |
-| `routes/usage.ts` | **(Project 3)** `POST /usage/recipe` (BYOK telemetry), `POST /usage/request` (ack), `GET /usage/summary` (period usage + trial fields) |
+| `routes/proxy.ts` | **(Project 3)** `POST /proxy/chat` + `/proxy/tts`: off-topic check, read-only recipe-cap enforcement (402), forward to OpenAI with server key, stream back verbatim, record `usage_events`, async abuse check. Does NOT increment the counter — that is `/usage/recipe`'s job |
+| `routes/usage.ts` | **(Project 3)** `POST /usage/recipe` (single recipe-count increment — period + trial counters — called by the client when a recipe is created), `POST /usage/request` (ack), `GET /usage/summary` (period usage + trial fields) |
 | `routes/admin.ts` | **(Project 3)** `GET /admin/dashboard` — operator-only aggregate; guarded by `ADMIN_API_KEY` via `X-Admin-Key` (constant-time, fail-closed) |
 | `routes/sync.ts`, `referral.ts` | `sync/recipes` + referral endpoints stubbed (501) for Projects 3–4 |
 | `routes/stubs.ts` | `notImplemented(endpoint, project)` → 501 helper |

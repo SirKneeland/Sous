@@ -18,14 +18,30 @@ export function usageRoutes(): Hono<HonoEnv> {
   const app = new Hono<HonoEnv>();
   app.use('*', authMiddleware);
 
-  // POST /usage/recipe — record a new recipe for users who bypass the proxy
-  // (BYOK). Increments the period counter (uncapped) and returns the new count.
+  // POST /usage/recipe — record that a recipe was actually created. This is the
+  // single, authoritative counting point for ALL users (the proxy only enforces
+  // the cap, it does not increment). The client calls this the moment a recipe
+  // canvas is created. Increments the monthly period counter and, for trial users,
+  // the trial counter that drives the trial display + trial cap. Uncapped here —
+  // the cap is enforced up front by the proxy.
   app.post('/recipe', async (c) => {
     const deps = c.get('deps');
     const userId = c.get('userId');
     const period = currentBillingPeriod(deps.now());
+
+    const access = await resolveAccess(deps, userId);
     const recipesUsed = await deps.repo.incrementRecipeCapCounter(userId, period);
-    return c.json({ recipesUsed, billingPeriod: period });
+    let trialRecipesUsed: number | null = null;
+    if (access?.entitlement.status === 'trialing') {
+      trialRecipesUsed = await deps.repo.incrementTrialRecipesUsed(userId);
+    }
+
+    if (deps.env.nodeEnv !== 'production') {
+      console.log(
+        `[usage/recipe] user=${userId} period=${period} recipesUsed=${recipesUsed} trialRecipesUsed=${trialRecipesUsed ?? '-'}`,
+      );
+    }
+    return c.json({ recipesUsed, trialRecipesUsed, billingPeriod: period });
   });
 
   // POST /usage/request — record a non-recipe request (chat/voice turn) for

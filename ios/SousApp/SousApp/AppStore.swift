@@ -473,12 +473,15 @@ final class AppStore: ObservableObject {
         return try? await backend.fetchUsageSummary()
     }
 
-    /// BYOK users bypass the proxy, so their new recipes are not counted server-side.
-    /// Record the recipe explicitly (display-only telemetry; fire-and-forget, never
-    /// blocks). No-op for non-BYOK users — the proxy already counted the recipe via
-    /// the `X-Sous-Is-New-Recipe` header.
-    private func recordByokRecipeUsage() {
-        guard entitlementProvider?() == .byok, let backend else { return }
+    /// Records a newly created recipe with the backend so the recipe-cap counter
+    /// (and, for trial users, the trial counter) advances. This fires the moment a
+    /// recipe canvas is created and is the SINGLE, reliable counting signal for all
+    /// users — the proxy only *enforces* the cap, it no longer increments it. A
+    /// request-time header can't know whether a call will actually produce a recipe,
+    /// so counting at creation time is the only way the count stays correct across
+    /// every generation path (commit, direct generation, import). Fire-and-forget.
+    private func recordNewRecipeCreated() {
+        guard let backend else { return }
         Task { try? await backend.recordRecipeUsage() }
     }
 
@@ -1425,8 +1428,8 @@ final class AppStore: ObservableObject {
             // Capture the initial recipe state once, on first canvas creation.
             if originalRecipe == nil {
                 originalRecipe = extracted
-                // Imported recipe creation → record BYOK telemetry (no-op otherwise).
-                recordByokRecipeUsage()
+                // Imported recipe creation → count it with the backend.
+                recordNewRecipeCreated()
             }
             chatTranscript = [ChatMessage(role: .assistant, text: assistantMessage)]
             nextLLMContext = nil
@@ -1897,8 +1900,8 @@ final class AppStore: ObservableObject {
         let isFirstCanvas = originalRecipe == nil
         if isFirstCanvas {
             originalRecipe = uiState.recipe
-            // First-time recipe creation → record BYOK telemetry (no-op otherwise).
-            recordByokRecipeUsage()
+            // First-time recipe creation → count it with the backend.
+            recordNewRecipeCreated()
         }
         saveSession()
     }

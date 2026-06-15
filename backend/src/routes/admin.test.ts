@@ -39,6 +39,11 @@ test('admin/dashboard: returns aggregate counts', async () => {
     },
     body: JSON.stringify(chatBody('Make me a pizza recipe')),
   });
+  // The client records the created recipe (the counting path; proxy is read-only).
+  await app.request('/api/v1/usage/recipe', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
 
   // A second, BYOK user.
   await signInWithApple(app, 'apple-admin-2');
