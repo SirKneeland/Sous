@@ -398,11 +398,12 @@
 
 ### US-55: Delete Account
 - Given the user taps Delete Account
-- Then a confirmation modal warns that account, recipes, memories, and preferences
-  will be permanently deleted and this cannot be undone
-- And on confirm, the account is deleted on the backend, all local data
-  (session token, preferences, memories, recipe sessions) is wiped, and the app
-  returns to the sign-in screen
+- Then a confirmation modal warns that account data, recipes, memories, and preferences
+  will be permanently removed or anonymized and this cannot be undone
+- And on confirm, the account is purged on the backend (PII anonymized, preferences
+  and memories hard-deleted, subscription/billing records retained for accounting),
+  all local data (session token, preferences, memories, recipe sessions) is wiped,
+  and the app returns to the sign-in screen
 - And on cancel, nothing changes
 
 ### US-56: Preferences and Memories Sync

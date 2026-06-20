@@ -226,3 +226,82 @@ end $$;
 grant all on all tables    in schema public to service_role;
 grant all on all sequences in schema public to service_role;
 grant execute on all functions in schema public to service_role;
+
+-- ===========================================================================
+-- Account-deletion PII purge (privacy hardening)
+--
+-- DELETE /auth/account no longer merely soft-deletes. It now scrubs PII from the
+-- users row, hard-deletes the user's preferences + memories, and stores a one-way
+-- HMAC of apple_sub in deleted_accounts (never the raw value). Subscriptions are
+-- intentionally LEFT UNTOUCHED (billing/accounting retention). This block is
+-- idempotent — safe to re-run with the rest of the file.
+-- ===========================================================================
+
+-- apple_sub is set to NULL when an account is deleted, so it can no longer be NOT
+-- NULL. (UNIQUE still holds: Postgres treats NULLs as distinct, so many deleted
+-- rows may each have a null apple_sub.) Re-running when already nullable is a no-op.
+alter table public.users alter column apple_sub drop not null;
+
+-- Atomic purge. The whole body commits all-or-nothing, so we can never leave PII
+-- intact while is_deleted is true, nor skip the tombstone after PII is gone. The
+-- apple_sub hash is computed in application code (HMAC — SQL cannot) and passed in.
+create or replace function public.purge_deleted_account(
+  p_user_id        uuid,
+  p_apple_sub_hash text,
+  p_deleted_at     timestamptz
+) returns void
+language plpgsql
+as $$
+begin
+  -- Hashed tombstone first (re-registration trial denial depends on it).
+  insert into public.deleted_accounts (apple_sub, deleted_at)
+  values (p_apple_sub_hash, p_deleted_at)
+  on conflict (apple_sub) do update set deleted_at = excluded.deleted_at;
+
+  -- Scrub PII; retain id / referral / abuse flags / created_at / byok eligibility.
+  update public.users
+     set email        = null,
+         display_name = null,
+         phone_number = null,
+         apple_sub    = null,
+         is_deleted   = true,
+         deleted_at   = p_deleted_at
+   where id = p_user_id;
+
+  -- Hard-delete the user's preferences and memories.
+  delete from public.preferences where user_id = p_user_id;
+  delete from public.memories    where user_id = p_user_id;
+
+  -- Revoke every session for the user.
+  update public.sessions set revoked = true where user_id = p_user_id;
+end;
+$$;
+
+grant execute on function public.purge_deleted_account(uuid, text, timestamptz) to service_role;
+
+-- ---------------------------------------------------------------------------
+-- One-time backfills for accounts deleted under the OLD (soft-delete-only) path.
+-- Idempotent: re-running these SQL statements is harmless.
+--
+-- NOTE: the deleted_accounts tombstone backfill (re-hashing existing plaintext
+-- apple_sub values) CANNOT be done in SQL — an HMAC needs the application secret.
+-- Run backend/scripts/backfill-deleted-account-hashes.ts once, with
+-- ACCOUNT_DELETION_HASH_SECRET set, to migrate those rows.
+-- ---------------------------------------------------------------------------
+
+-- Scrub PII from any previously soft-deleted users.
+update public.users
+   set email        = null,
+       display_name = null,
+       phone_number = null,
+       apple_sub    = null
+ where is_deleted = true;
+
+-- Hard-delete preferences + memories belonging to previously deleted users.
+delete from public.preferences p
+ using public.users u
+ where p.user_id = u.id and u.is_deleted = true;
+
+delete from public.memories m
+ using public.users u
+ where m.user_id = u.id and u.is_deleted = true;

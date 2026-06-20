@@ -21,6 +21,9 @@ const bypassApple = process.env.BYPASS_APPLE_VERIFY === 'true' && nodeEnv !== 'p
 const appleClientId = process.env.APPLE_CLIENT_ID || undefined;
 const adminApiKey = process.env.ADMIN_API_KEY || undefined;
 const appStoreNotificationSecret = process.env.APP_STORE_NOTIFICATION_SECRET || undefined;
+// Fail-closed: account deletion must never run without the tombstone-hash secret,
+// or it would either crash mid-purge or write a raw apple_sub. Required at boot.
+const accountDeletionHashSecret = requireEnv('ACCOUNT_DELETION_HASH_SECRET');
 const appleBundleId = process.env.APPLE_BUNDLE_ID || appleClientId;
 const appleRootFingerprint = process.env.APPLE_ROOT_CA_FINGERPRINT || undefined;
 
@@ -32,7 +35,14 @@ const supabase = createSupabaseClient(
 const deps: AppDeps = {
   repo: createSupabaseRepo(supabase),
   jwtSecret: requireEnv('JWT_SECRET'),
-  env: { nodeEnv, bypassApple, appleClientId, adminApiKey, appStoreNotificationSecret },
+  env: {
+    nodeEnv,
+    bypassApple,
+    appleClientId,
+    adminApiKey,
+    appStoreNotificationSecret,
+    accountDeletionHashSecret,
+  },
   verifyApple: (identityToken) =>
     verifyAppleIdentityToken(identityToken, { bypass: bypassApple, nodeEnv, appleClientId }),
   openai: createOpenAIProxy(requireEnv('OPENAI_API_KEY')),

@@ -70,14 +70,6 @@ export function createSupabaseRepo(db: SupabaseClient): Repo {
       return data as UserRow;
     },
 
-    async softDeleteUser(userId, deletedAt) {
-      const { error } = await db
-        .from('users')
-        .update({ is_deleted: true, deleted_at: deletedAt })
-        .eq('id', userId);
-      if (error) throw error;
-    },
-
     async updateDisplayName(userId, displayName) {
       const { error } = await db
         .from('users')
@@ -86,20 +78,27 @@ export function createSupabaseRepo(db: SupabaseClient): Repo {
       if (error) throw error;
     },
 
-    async getDeletedAccount(appleSub) {
+    async getDeletedAccount(appleSubHash) {
       const { data, error } = await db
         .from('deleted_accounts')
         .select('apple_sub')
-        .eq('apple_sub', appleSub)
+        .eq('apple_sub', appleSubHash)
         .single();
       if (error && !isNoRows(error)) throw error;
       return (data as { apple_sub: string }) ?? null;
     },
 
-    async insertDeletedAccount(appleSub, deletedAt) {
-      const { error } = await db
-        .from('deleted_accounts')
-        .upsert({ apple_sub: appleSub, deleted_at: deletedAt });
+    async purgeAccount(userId, appleSubHash, deletedAt) {
+      // Atomicity: Supabase JS has no client-side multi-statement transaction, so the
+      // tombstone-write + PII-scrub + preferences/memories-delete + session-revoke run
+      // inside a single plpgsql function (db/schema.sql → purge_deleted_account), which
+      // commits all-or-nothing. This is the only way to guarantee we never leave PII
+      // intact while is_deleted is true, nor skip the tombstone after PII is gone.
+      const { error } = await db.rpc('purge_deleted_account', {
+        p_user_id: userId,
+        p_apple_sub_hash: appleSubHash,
+        p_deleted_at: deletedAt,
+      });
       if (error) throw error;
     },
 

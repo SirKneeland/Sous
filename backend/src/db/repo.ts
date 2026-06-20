@@ -28,12 +28,19 @@ export interface Repo {
   getUserById(id: string): Promise<UserRow | null>;
   getUserByReferralCode(code: string): Promise<UserRow | null>;
   createUser(input: NewUser): Promise<UserRow>;
-  softDeleteUser(userId: string, deletedAt: string): Promise<void>;
   updateDisplayName(userId: string, displayName: string | null): Promise<void>;
 
-  // tombstone
-  getDeletedAccount(appleSub: string): Promise<{ apple_sub: string } | null>;
-  insertDeletedAccount(appleSub: string, deletedAt: string): Promise<void>;
+  // tombstone — `appleSubHash` is the HMAC of the apple_sub (see lib/secrets.hashAppleSub),
+  // never the raw value.
+  getDeletedAccount(appleSubHash: string): Promise<{ apple_sub: string } | null>;
+  /**
+   * Atomically delete an account: write the hashed tombstone, scrub the user row's
+   * PII (email/display_name/phone_number/apple_sub → null) and mark it deleted,
+   * hard-delete the user's preferences + memories, and revoke all their sessions —
+   * all in one transaction. Subscriptions are intentionally left untouched.
+   * `appleSubHash` must already be hashed by the caller.
+   */
+  purgeAccount(userId: string, appleSubHash: string, deletedAt: string): Promise<void>;
 
   // subscriptions
   getSubscriptionByUserId(userId: string): Promise<SubscriptionRow | null>;

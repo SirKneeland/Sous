@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import type { HonoEnv, AppDeps } from '../types.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { signSessionToken } from '../lib/tokens.js';
+import { hashAppleSub } from '../lib/secrets.js';
 import { generateReferralCode } from '../lib/referral.js';
 import { computeEntitlement } from '../lib/entitlement.js';
 import { entitlementConfigFrom, trialDurationDays, parseConfig } from '../lib/config.js';
@@ -107,8 +108,12 @@ export function authRoutes(): Hono<HonoEnv> {
       });
     }
 
-    // New account (or a previously-deleted apple_sub re-registering).
-    const tombstoned = await deps.repo.getDeletedAccount(identity.sub);
+    // New account (or a previously-deleted apple_sub re-registering). The tombstone
+    // stores a one-way hash of apple_sub, so hash the incoming identity the same way
+    // before looking it up.
+    const tombstoned = await deps.repo.getDeletedAccount(
+      hashAppleSub(identity.sub, deps.env.accountDeletionHashSecret),
+    );
 
     // Resolve referrer if a code was supplied (best-effort; unknown code is ignored).
     let referredByUserId: string | null = null;
@@ -167,7 +172,10 @@ export function authRoutes(): Hono<HonoEnv> {
     return c.json({ ok: true });
   });
 
-  // DELETE /auth/account — soft-delete + tombstone + revoke all sessions.
+  // DELETE /auth/account — purge PII, write a hashed tombstone, revoke all sessions.
+  // The user row is kept (scrubbed) for FK integrity and abuse/billing retention;
+  // preferences + memories are hard-deleted; the subscription is left untouched. The
+  // whole purge runs atomically in the repo (see purge_deleted_account).
   app.delete('/account', authMiddleware, async (c) => {
     const deps = c.get('deps');
     const userId = c.get('userId');
@@ -175,10 +183,20 @@ export function authRoutes(): Hono<HonoEnv> {
     if (!user) {
       return c.json({ error: 'not_found', message: 'User not found' }, 404);
     }
+    // Short-circuit ONLY on a null apple_sub, which is the post-purge signal: the
+    // sole writer of that null is the atomic purge_deleted_account function, which
+    // commits all-or-nothing, so apple_sub === null ⟺ the purge ran to completion.
+    // We deliberately do NOT short-circuit on is_deleted alone — a row that is
+    // is_deleted=true but still has a non-null apple_sub means a prior purge did NOT
+    // complete (e.g. a legacy soft-delete-only row, or a half-applied state), so we
+    // fall through and actually purge it rather than reporting "already handled".
+    if (user.apple_sub === null) {
+      return c.json({ ok: true });
+    }
     const now = new Date().toISOString();
-    await deps.repo.softDeleteUser(userId, now);
-    await deps.repo.insertDeletedAccount(user.apple_sub, now);
-    await deps.repo.revokeAllSessionsForUser(userId);
+    // Hash apple_sub BEFORE the purge scrubs it to null — we need the original value.
+    const appleSubHash = hashAppleSub(user.apple_sub, deps.env.accountDeletionHashSecret);
+    await deps.repo.purgeAccount(userId, appleSubHash, now);
     return c.json({ ok: true });
   });
 

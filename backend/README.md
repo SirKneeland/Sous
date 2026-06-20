@@ -59,6 +59,23 @@ To confirm the tables exist: left sidebar → **Table Editor**. You should see
 `config`, `memories`, `preferences`, `deleted_accounts`. Open `config` and
 confirm the seed rows (e.g. `trial_duration_days = 14`).
 
+`schema.sql` is idempotent — re-run the whole file any time the schema changes
+(it adds the account-deletion purge function and the PII backfills without
+disturbing existing data).
+
+**One-time backfill (only if accounts were already deleted under the old
+behavior):** the deleted-account tombstones now store a hashed Apple identifier
+instead of the raw one. That rewrite can't be done in SQL (it needs the app
+secret), so after deploying, run it once with `ACCOUNT_DELETION_HASH_SECRET` set:
+
+```
+cd backend
+node --env-file=.env --import tsx scripts/backfill-deleted-account-hashes.ts
+```
+
+It's safe to run more than once (already-hashed rows are skipped). On a brand-new
+project with no deletions yet, you can skip it.
+
 ---
 
 ## Operator setup — environment variables
@@ -66,18 +83,26 @@ confirm the seed rows (e.g. `trial_duration_days = 14`).
 `backend/.env` needs these four values:
 
 ```
-SUPABASE_URL=               # from Supabase → Project Settings → API → Project URL
-SUPABASE_SERVICE_ROLE_KEY=  # from Supabase → Project Settings → API → service_role secret
-JWT_SECRET=                 # a long random string — generate one (see below)
+SUPABASE_URL=                  # from Supabase → Project Settings → API → Project URL
+SUPABASE_SERVICE_ROLE_KEY=     # from Supabase → Project Settings → API → service_role secret
+JWT_SECRET=                    # a long random string — generate one (see below)
+ACCOUNT_DELETION_HASH_SECRET=  # a long random string — generate one (see below)
 PORT=3000
 NODE_ENV=development
 ```
 
-Generate a `JWT_SECRET` by running this in your terminal and pasting the output:
+Generate `JWT_SECRET` and `ACCOUNT_DELETION_HASH_SECRET` by running this in your
+terminal twice and pasting each output:
 
 ```
 openssl rand -base64 48
 ```
+
+> **`ACCOUNT_DELETION_HASH_SECRET` is required** — the server will not boot without
+> it. Account deletion stores a one-way hash (not the raw Apple identifier) of every
+> deleted account so a deleted user can't restart their free trial; this secret is
+> the hash key. **Set it once and never change it** — changing it after any account
+> has been deleted would let those users start a fresh trial again.
 
 For **Postman testing without a real iPhone**, also add:
 
@@ -105,6 +130,7 @@ when `NODE_ENV=production`**, so it can never weaken the live server.
    - `SUPABASE_URL`
    - `SUPABASE_SERVICE_ROLE_KEY`
    - `JWT_SECRET`
+   - `ACCOUNT_DELETION_HASH_SECRET` (required; set once, never change — see note above)
    - `NODE_ENV=production`
    - (Railway sets `PORT` automatically — you do not need to add it.)
 5. Railway will build and deploy. When it's live, open the service →

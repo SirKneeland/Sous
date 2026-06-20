@@ -4,7 +4,8 @@
 
 export interface UserRow {
   id: string;
-  apple_sub: string;
+  /** Null after account deletion (scrubbed); otherwise the Apple subject id. */
+  apple_sub: string | null;
   email: string | null;
   display_name: string | null;
   phone_number: string | null;

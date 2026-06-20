@@ -13,6 +13,8 @@ export interface AppEnvConfig {
   adminApiKey?: string;
   /** Optional shared-secret gate on the App Store notification webhook. */
   appStoreNotificationSecret?: string;
+  /** Keyed HMAC secret for hashing apple_sub into the deleted_accounts tombstone. */
+  accountDeletionHashSecret: string;
 }
 
 /**

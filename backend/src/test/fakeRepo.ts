@@ -90,25 +90,35 @@ export function createFakeRepo(
       state.users.push(user);
       return user;
     },
-    async softDeleteUser(userId, deletedAt) {
-      const u = state.users.find((x) => x.id === userId);
-      if (u) {
-        u.is_deleted = true;
-        u.deleted_at = deletedAt;
-      }
-    },
     async updateDisplayName(userId, displayName) {
       const u = state.users.find((x) => x.id === userId);
       if (u) u.display_name = displayName;
     },
-    async getDeletedAccount(appleSub) {
-      const row = state.deletedAccounts.find((d) => d.apple_sub === appleSub);
+    async getDeletedAccount(appleSubHash) {
+      const row = state.deletedAccounts.find((d) => d.apple_sub === appleSubHash);
       return row ? { apple_sub: row.apple_sub } : null;
     },
-    async insertDeletedAccount(appleSub, deletedAt) {
-      const existing = state.deletedAccounts.find((d) => d.apple_sub === appleSub);
-      if (existing) existing.deleted_at = deletedAt;
-      else state.deletedAccounts.push({ apple_sub: appleSub, deleted_at: deletedAt });
+    async purgeAccount(userId, appleSubHash, deletedAt) {
+      // Mirrors the atomic purge_deleted_account SQL function: tombstone (hashed),
+      // scrub PII + mark deleted, hard-delete preferences + memories, revoke sessions.
+      // Subscriptions are intentionally left untouched.
+      const existingTomb = state.deletedAccounts.find((d) => d.apple_sub === appleSubHash);
+      if (existingTomb) existingTomb.deleted_at = deletedAt;
+      else state.deletedAccounts.push({ apple_sub: appleSubHash, deleted_at: deletedAt });
+
+      const u = state.users.find((x) => x.id === userId);
+      if (u) {
+        u.email = null;
+        u.display_name = null;
+        u.phone_number = null;
+        u.apple_sub = null;
+        u.is_deleted = true;
+        u.deleted_at = deletedAt;
+      }
+
+      state.preferences = state.preferences.filter((p) => p.user_id !== userId);
+      state.memories = state.memories.filter((m) => m.user_id !== userId);
+      for (const s of state.sessions) if (s.user_id === userId) s.revoked = true;
     },
     async getSubscriptionByUserId(userId) {
       return state.subscriptions.find((s) => s.user_id === userId) ?? null;

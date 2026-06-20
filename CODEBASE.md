@@ -36,6 +36,7 @@
 ├── backend/              # Node.js + Hono API (accounts, entitlement, proxy)
 │   ├── db/schema.sql     # Full Supabase/Postgres schema migration
 │   ├── src/              # TypeScript source (see Backend section below)
+│   ├── scripts/          # One-off operator scripts (e.g. deletion tombstone backfill)
 │   ├── package.json
 │   └── .env.example
 ```
@@ -130,11 +131,12 @@ Hosted on Railway. Run with `tsx` (no build step).
 | `index.ts` | Production entry point: loads env, builds real deps, serves on `PORT` |
 | `app.ts` | `createApp(deps)` — builds the Hono app; mounts `/health` + `/api/v1/*` |
 | `types.ts` | `AppDeps` (injected dependencies) and Hono context typing |
-| `routes/auth.ts` | `/auth/apple` (Sign in with Apple → session), `/auth/signout`, `DELETE /auth/account` — **fully implemented** |
+| `routes/auth.ts` | `/auth/apple` (Sign in with Apple → session), `/auth/signout`, `DELETE /auth/account` — **fully implemented**. Deletion now **purges PII**: it scrubs the users row (email/display_name/phone_number/apple_sub → null, keeps id/referral/abuse flags), hard-deletes the user's preferences + memories, revokes sessions, and tombstones a **hashed** apple_sub — all atomically via the `purge_deleted_account` SQL function. The subscription row is intentionally left untouched (billing retention) |
 | `routes/config.ts` | `GET /config` — config map + entitlement — **fully implemented** |
 | `routes/subscription.ts` | `GET /subscription/status` + **(Project 4)** `POST /subscription/validate` (verify StoreKit receipt → activate; refuses a transaction already linked to another account, 409) and `POST /subscription/notify` (ASSN v2 webhook, unauthenticated; Apple-JWS-signed + optional shared-secret gate; maps notification types to subscription status). `/status` uses per-route auth so the webhook stays unauthenticated |
 | `lib/appstore.ts` | **(Project 4)** `AppStoreVerifier` (injected): verifies StoreKit 2 transaction + ASSN v2 JWS — ES256-pinned, full x5c chain validation anchored to Apple Root CA G3 by fingerprint, leaf-key body verify. Tests inject a fake |
-| `lib/secrets.ts` | **(Project 4)** `timingSafeEqualStr` — constant-time secret compare (SHA-256 + `timingSafeEqual`) used by the notify shared-secret gate |
+| `lib/secrets.ts` | **(Project 4)** `timingSafeEqualStr` — constant-time secret compare (SHA-256 + `timingSafeEqual`) used by the notify shared-secret gate. Also `hashAppleSub(appleSub, secret)` — one-way HMAC-SHA256 of apple_sub for the account-deletion tombstone (keyed by `ACCOUNT_DELETION_HASH_SECRET`) |
+| `scripts/backfill-deleted-account-hashes.ts` | One-off operator script: re-hashes any legacy plaintext `deleted_accounts.apple_sub` tombstones into HMACs. Idempotent; run once after deploying the deletion-purge change |
 | `routes/proxy.ts` | **(Project 3)** `POST /proxy/chat` + `/proxy/tts`: off-topic check, read-only recipe-cap enforcement (402), forward to OpenAI with server key, stream back verbatim, record `usage_events`, async abuse check. Does NOT increment the counter — that is `/usage/recipe`'s job |
 | `routes/usage.ts` | **(Project 3)** `POST /usage/recipe` (single recipe-count increment — period + trial counters — called by the client when a recipe is created), `POST /usage/request` (ack), `GET /usage/summary` (period usage + trial fields) |
 | `routes/admin.ts` | **(Project 3)** `GET /admin/dashboard` — operator-only aggregate; guarded by `ADMIN_API_KEY` via `X-Admin-Key` (constant-time, fail-closed) |
@@ -200,7 +202,7 @@ so re-registered (previously-deleted) users can be stored without a trial.
   - Location: `backend/src/**/*.test.ts`
   - Key files: `lib/entitlement.test.ts` (all 5 entitlement states), `lib/tokens.test.ts`, `routes/auth.test.ts`, `routes/config.test.ts`, `routes/sync.test.ts`, and **(Project 3)** `routes/proxy.test.ts` (forward+record, cap 402, off-topic 400, streaming usage), `routes/usage.test.ts` (summary trial/paid, recipe increment), `routes/admin.test.ts` (dashboard + key gate), `lib/offTopicDetector.test.ts` (10+ cases both directions + injection), `lib/abuseDetector.test.ts`
   - **(Project 4)** `routes/subscription.test.ts` (validate activate/sandbox/revoked/cross-account-409, notify all event types, grace→soft_wall) using an injected fake `AppStoreVerifier`.
-  - Tests use an in-memory fake repo + injected fake OpenAI forwarder + injected fake App Store verifier (no Supabase, no network, no real key). 94 tests.
+  - Tests use an in-memory fake repo + injected fake OpenAI forwarder + injected fake App Store verifier (no Supabase, no network, no real key). 102 tests (auth.test.ts gained 8 for the deletion PII-purge: PII scrub, preferences/memories hard-delete, subscription-untouched negative test, hashed-tombstone, re-registration trial denial, unaffected fresh sign-in, and half-deleted re-purge).
   - Run with: `cd backend && npm test`
 
 ---

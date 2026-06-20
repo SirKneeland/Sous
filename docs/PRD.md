@@ -589,7 +589,7 @@ recipe content is shown; the session is restored silently on subsequent launches
   server winning on conflicts; device-only settings (voice, unit system) are
   preserved. Recipe-history sync arrives in a later project.
 - **Sign Out** clears the session only; local recipes remain. **Delete Account**
-  permanently removes the account and wipes all local data, returning to sign-in.
+  permanently removes or anonymizes all account data (PII scrubbed, preferences and memories hard-deleted, subscription/billing records retained for accounting purposes) and wipes all local data, returning to sign-in.
 - **Entitlement** (BYOK / subscriber / trialing / grace / soft-wall) is computed by
   the backend and treated as read-only by the client.
 - **BYOK users** continue to call OpenAI directly from the device exactly as before

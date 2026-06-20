@@ -12,6 +12,7 @@ import { createFakeRepo, type FakeRepoState } from './fakeRepo.js';
 
 export const TEST_JWT_SECRET = 'test-secret-do-not-use-in-production';
 export const TEST_ADMIN_KEY = 'test-admin-key';
+export const TEST_DELETION_HASH_SECRET = 'test-deletion-hash-secret';
 
 export interface TestAppOptions {
   /** Fake OpenAI forwarder. Defaults to a stub returning a minimal completion. */
@@ -108,6 +109,7 @@ export function buildTestApp(
       appleClientId: undefined,
       adminApiKey: options.adminApiKey ?? TEST_ADMIN_KEY,
       appStoreNotificationSecret: options.appStoreNotificationSecret,
+      accountDeletionHashSecret: TEST_DELETION_HASH_SECRET,
     },
     // Deterministic: treat the identity token string as the Apple sub.
     verifyApple: async (identityToken: string) => ({
