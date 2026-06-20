@@ -554,6 +554,7 @@ final class AppStore: ObservableObject {
             UserPreferencesPersistence.clear(from: preferencesDefaults ?? .standard)
         }
         SessionPersistence.clearAll(in: sessionsDirectory)
+        keyProvider.clearKey()
         nextLLMContext = nil
         startNewSession()
     }

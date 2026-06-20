@@ -1590,4 +1590,38 @@ final class AppStoreTests: XCTestCase {
         XCTAssertEqual(notes?[0].header, "Chef's tip")
         XCTAssertEqual(notes?[0].items, ["Season generously"])
     }
+
+    // MARK: - Account deletion clears BYOK key (US-55)
+
+    func test_us55_clearAllLocalData_clearsOpenAIKeychainKey() async {
+        let mock = MockKeychainClient()
+        let keyProvider = KeychainOpenAIKeyProvider(client: mock)
+        keyProvider.setKey("sk-test-byok-key")
+        XCTAssertNotNil(keyProvider.currentKey(), "Precondition: key must be present before deletion")
+
+        let store = AppStore(testOrchestrator: ControlledOrchestrator(), keyProvider: keyProvider)
+        store.clearAllLocalData()
+
+        XCTAssertNil(keyProvider.currentKey(), "OpenAI Keychain key must be wiped after clearAllLocalData()")
+    }
+
+    func test_us55_signOut_doesNotClearOpenAIKeychainKey() async {
+        // Sign out must NOT touch local data per US-54; the BYOK key must survive.
+        // This test calls the real AuthState.signOut() — the actual code path a UI
+        // sign-out triggers — so any future regression added inside
+        // AuthState.finishSignOut() will be caught here.
+        let keychainMock = MockKeychainClient()
+        let keyProvider = KeychainOpenAIKeyProvider(client: keychainMock)
+        keyProvider.setKey("sk-test-byok-key")
+
+        let backend = MockBackend()
+        let session = InMemorySessionProvider(token: "sous-session-tok")
+        let auth = AuthState(api: backend, session: session, defaults: UserDefaults(suiteName: "us55-signout-\(UUID())")!)
+
+        await auth.signOut()
+
+        XCTAssertEqual(auth.status, .signedOut, "Auth must be signed out")
+        XCTAssertNil(session.load(), "Sous session token must be cleared")
+        XCTAssertNotNil(keyProvider.currentKey(), "OpenAI Keychain key must NOT be cleared by signOut()")
+    }
 }
