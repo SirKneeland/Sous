@@ -61,6 +61,22 @@ export interface NewSubscription {
   trialEndsAt: string | null;
 }
 
+/** Fields written when a StoreKit purchase/restore is validated (Project 4). */
+export interface AppleSubscriptionUpdate {
+  status: SubscriptionStatus;
+  appleOriginalTransactionId: string;
+  currentPeriodStart: string | null;
+  currentPeriodEnd: string | null;
+  appleLatestReceipt?: string | null;
+}
+
+/** Fields written on an App Store Server Notification lifecycle event (Project 4). */
+export interface SubscriptionLifecycleUpdate {
+  status: SubscriptionStatus;
+  currentPeriodEnd?: string | null;
+  appleLatestReceipt?: string | null;
+}
+
 export interface NewSession {
   /** Pre-generated so it can be embedded in the signed token before insert. */
   id: string;

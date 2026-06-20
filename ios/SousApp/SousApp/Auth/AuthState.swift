@@ -95,6 +95,32 @@ final class AuthState: ObservableObject {
         }
     }
 
+    /// Re-fetch entitlement from the backend without disturbing sign-in state.
+    /// Called after a StoreKit purchase/restore so the app reflects the new plan
+    /// immediately. A transient failure is ignored (the cached entitlement stands);
+    /// a 401 signs the user out, consistent with every other authed call.
+    func refresh() async {
+        guard case .signedIn = status else { return }
+        do {
+            let serverStatus = try await api.fetchSubscriptionStatus()
+            let merged = Self.mergeProfile(server: serverStatus.profile, cached: cachedProfile())
+            applySignedIn(
+                userId: merged?.userId ?? cachedUserId() ?? currentUserId() ?? "",
+                entitlement: serverStatus.entitlement.status,
+                profile: merged ?? profile
+            )
+        } catch SousAPIError.unauthorized {
+            finishSignOut()
+        } catch {
+            // Keep the current entitlement on a transient failure.
+        }
+    }
+
+    private func currentUserId() -> String? {
+        if case .signedIn(let userId, _) = status { return userId }
+        return nil
+    }
+
     // MARK: Sign in
 
     /// Interactive Sign in with Apple. On success, stores the token, records the

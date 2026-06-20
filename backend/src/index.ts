@@ -6,6 +6,7 @@ import { createSupabaseClient } from './db/client.js';
 import { createSupabaseRepo } from './db/supabaseRepo.js';
 import { verifyAppleIdentityToken } from './lib/apple.js';
 import { createOpenAIProxy } from './lib/openai.js';
+import { createAppStoreVerifier } from './lib/appstore.js';
 import type { AppDeps } from './types.js';
 
 function requireEnv(name: string): string {
@@ -19,6 +20,9 @@ const nodeEnv = process.env.NODE_ENV ?? 'development';
 const bypassApple = process.env.BYPASS_APPLE_VERIFY === 'true' && nodeEnv !== 'production';
 const appleClientId = process.env.APPLE_CLIENT_ID || undefined;
 const adminApiKey = process.env.ADMIN_API_KEY || undefined;
+const appStoreNotificationSecret = process.env.APP_STORE_NOTIFICATION_SECRET || undefined;
+const appleBundleId = process.env.APPLE_BUNDLE_ID || appleClientId;
+const appleRootFingerprint = process.env.APPLE_ROOT_CA_FINGERPRINT || undefined;
 
 const supabase = createSupabaseClient(
   requireEnv('SUPABASE_URL'),
@@ -28,10 +32,14 @@ const supabase = createSupabaseClient(
 const deps: AppDeps = {
   repo: createSupabaseRepo(supabase),
   jwtSecret: requireEnv('JWT_SECRET'),
-  env: { nodeEnv, bypassApple, appleClientId, adminApiKey },
+  env: { nodeEnv, bypassApple, appleClientId, adminApiKey, appStoreNotificationSecret },
   verifyApple: (identityToken) =>
     verifyAppleIdentityToken(identityToken, { bypass: bypassApple, nodeEnv, appleClientId }),
   openai: createOpenAIProxy(requireEnv('OPENAI_API_KEY')),
+  appstore: createAppStoreVerifier({
+    expectedBundleId: appleBundleId,
+    rootFingerprint256: appleRootFingerprint,
+  }),
   now: () => new Date(),
 };
 

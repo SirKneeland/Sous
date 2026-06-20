@@ -4,9 +4,14 @@ import UIKit
 
 struct ContentView: View {
     @EnvironmentObject private var authState: AuthState
+    @EnvironmentObject private var storeKit: StoreKitManager
     @StateObject private var store = AppStore()
     @StateObject private var voiceCoordinator = VoiceModeCoordinator()
     @State private var showSettings = false
+    /// Which billing wall (if any) is being presented over the app.
+    @State private var billingPresentation: BillingPresentation = .none
+    /// Usage snapshot for the cap-reached hard stop.
+    @State private var capSummary: UsageSummary?
     @State private var navigateToMemoriesInSettings = false
     @State private var timerManager = StepTimerManager()
     /// stepId to scroll to in the recipe canvas. Set by timer banner taps.
@@ -28,6 +33,31 @@ struct ContentView: View {
     @State private var isCameraPresented: Bool = false
 
     private var hasDoneBanner: Bool { !timerManager.doneQueue.isEmpty }
+
+    /// Voice mode is hidden during the free trial and in soft wall (BillingGate).
+    private var voiceEnabled: Bool { BillingGate.isVoiceAvailable(authState.entitlement) }
+
+    /// Gate a generative entry point (New Recipe / Import) behind billing. Soft-wall
+    /// users get the paywall; paid users at the monthly cap get the hard stop; anyone
+    /// else proceeds. The backend still enforces independently on the proxy call.
+    private func gateGenerative(_ proceed: @escaping () -> Void) {
+        switch authState.entitlement {
+        case .softWall:
+            billingPresentation = .paywall
+        case .subscriber, .grace:
+            Task {
+                let summary = await store.fetchUsageSummary()
+                if let s = summary, s.recipesUsed >= s.recipeCap {
+                    capSummary = s
+                    billingPresentation = .capReached
+                } else {
+                    proceed()
+                }
+            }
+        case .byok, .trialing, .none:
+            proceed()
+        }
+    }
 
     /// True when the chat overlay should be visible above the recipe canvas.
     private var isChatOpen: Bool {
@@ -96,10 +126,10 @@ struct ContentView: View {
                 ChatSheetView(
                     store: store,
                     isFullscreen: true,
-                    onStartNew: { store.requestNewSession(); timerManager.clearAll() },
+                    onStartNew: { gateGenerative { store.requestNewSession(); timerManager.clearAll() } },
                     onOpenSettings: { showSettings = true },
                     onOpenRecents: { store.showRecentRecipes = true },
-                    onOpenImport: { store.isShowingImportSheet = true },
+                    onOpenImport: { gateGenerative { store.isShowingImportSheet = true } },
                     onNavigateToMemories: { showSettings = true; navigateToMemoriesInSettings = true }
                 )
                 .offset(x: canvasOffset)
@@ -120,7 +150,7 @@ struct ContentView: View {
                     onMarkMiseEnPlaceUndone: { id in store.markMiseEnPlaceUndone(id) },
                     onTriggerMiseEnPlace: { store.triggerMiseEnPlace() },
                     onOpenSettings: { showSettings = true },
-                    onStartNew: { store.requestNewSession(); timerManager.clearAll() },
+                    onStartNew: { gateGenerative { store.requestNewSession(); timerManager.clearAll() } },
                     onOpenRecents: { store.showRecentRecipes = true },
                     onResetRecipe: {
                         store.resetRecipe()
@@ -209,7 +239,8 @@ struct ContentView: View {
                         highlightedStepId = stepId
                     },
                     onHeightChange: { bottomZoneHeight = $0 },
-                    isEnabled: isCanvasEnabled
+                    isEnabled: isCanvasEnabled,
+                    voiceEnabled: voiceEnabled
                 )
                 .offset(x: canvasOffset)
                 .disabled(!isCanvasEnabled)
@@ -262,7 +293,7 @@ struct ContentView: View {
                 store: store,
                 isCanvasEnabled: $isCanvasEnabled,
                 canvasOffset: $canvasOffset,
-                onNewRecipe: { store.requestNewSession(); timerManager.clearAll() },
+                onNewRecipe: { gateGenerative { store.requestNewSession(); timerManager.clearAll() } },
                 onSettings: { showSettings = true },
                 isHamburgerVisible: !isChatOpen
             )
@@ -272,6 +303,36 @@ struct ContentView: View {
                 store.importError = nil
                 store.isShowingImportSheet = false
             })
+        }
+        .fullScreenCover(isPresented: Binding(
+            get: { billingPresentation != .none },
+            set: { if !$0 { billingPresentation = .none } }
+        )) {
+            switch billingPresentation {
+            case .paywall:
+                // Full-screen cover lacks a swipe-to-dismiss back gesture, so a
+                // close control is shown to avoid trapping the user (deviation from
+                // DesignSpec's "no dismiss" — never trap; the backend still gates).
+                PaywallView(
+                    storeKit: storeKit,
+                    showsCloseButton: true,
+                    onClose: { billingPresentation = .none }
+                )
+                .onChange(of: authState.entitlement) { _, newValue in
+                    if newValue == .subscriber || newValue == .grace { billingPresentation = .none }
+                }
+            case .capReached:
+                CapReachedView(
+                    recipesUsed: capSummary?.recipesUsed ?? 0,
+                    recipeCap: capSummary?.recipeCap ?? 100,
+                    resetsInDays: capSummary?.resetsInDays ?? 0,
+                    userEmail: authState.profile?.email,
+                    accountId: authState.profile?.userId,
+                    onClose: { billingPresentation = .none }
+                )
+            case .none:
+                EmptyView()
+            }
         }
         .alert("Convert Units?", isPresented: $store.showUnitConversionPrompt) {
             Button("Convert") { store.convertImportedRecipeUnits() }
@@ -299,4 +360,5 @@ struct ContentView: View {
 #Preview {
     ContentView()
         .environmentObject(AuthState())
+        .environmentObject(StoreKitManager(validateReceipt: { _ in }, listenForTransactions: false))
 }

@@ -129,6 +129,46 @@ export function createFakeRepo(
       state.subscriptions.push(sub);
       return sub;
     },
+    async getSubscriptionByOriginalTransactionId(originalTransactionId) {
+      return (
+        state.subscriptions.find(
+          (s) => s.apple_original_transaction_id === originalTransactionId,
+        ) ?? null
+      );
+    },
+    async updateSubscriptionFromApple(userId, input) {
+      let sub = state.subscriptions.find((s) => s.user_id === userId);
+      if (!sub) {
+        sub = {
+          id: randomUUID(),
+          user_id: userId,
+          status: input.status,
+          trial_started_at: null,
+          trial_ends_at: null,
+          trial_recipes_used: 0,
+          current_period_start: null,
+          current_period_end: null,
+          apple_original_transaction_id: null,
+          apple_latest_receipt: null,
+        };
+        state.subscriptions.push(sub);
+      }
+      sub.status = input.status;
+      sub.apple_original_transaction_id = input.appleOriginalTransactionId;
+      sub.current_period_start = input.currentPeriodStart;
+      sub.current_period_end = input.currentPeriodEnd;
+      if (input.appleLatestReceipt !== undefined) {
+        sub.apple_latest_receipt = input.appleLatestReceipt;
+      }
+      return sub;
+    },
+    async updateSubscriptionLifecycle(subscriptionId, input) {
+      const sub = state.subscriptions.find((s) => s.id === subscriptionId);
+      if (!sub) return;
+      sub.status = input.status;
+      if (input.currentPeriodEnd !== undefined) sub.current_period_end = input.currentPeriodEnd;
+      if (input.appleLatestReceipt !== undefined) sub.apple_latest_receipt = input.appleLatestReceipt;
+    },
     async insertSession(input: NewSession) {
       const session: SessionRow = {
         id: input.id,

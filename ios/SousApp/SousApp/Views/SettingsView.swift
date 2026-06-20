@@ -5,6 +5,8 @@ struct SettingsView: View {
     @ObservedObject var store: AppStore
     @ObservedObject var authState: AuthState
     @Binding var navigateToMemories: Bool
+    @EnvironmentObject private var storeKit: StoreKitManager
+    @State private var showPaywall = false
 
     @State private var keyInput = ""
     @State private var keyIsPresent: Bool = false
@@ -277,6 +279,17 @@ struct SettingsView: View {
                 Text(deleteError ?? "")
             }
             .task { await loadUsage() }
+            .fullScreenCover(isPresented: $showPaywall) {
+                PaywallView(
+                    storeKit: storeKit,
+                    showsCloseButton: true,
+                    onClose: { showPaywall = false }
+                )
+                // Dismiss automatically once the purchase lands and entitlement flips.
+                .onChange(of: authState.entitlement) { _, newValue in
+                    if newValue == .subscriber || newValue == .grace { showPaywall = false }
+                }
+            }
         }
     }
 
@@ -338,6 +351,17 @@ struct SettingsView: View {
 
             // Usage — recipes used this billing period (or BYOK note).
             usageDisplayRow
+
+            // Upgrade — shown to trial / lapsed users (not BYOK, not active payers).
+            if showUpgradeButton {
+                Button {
+                    showPaywall = true
+                } label: {
+                    Text("Upgrade to Sous Pro")
+                        .font(.sousBody)
+                        .foregroundStyle(Color.sousTerracotta)
+                }
+            }
 
             // Manage Subscription — deep link to iOS subscription settings.
             Button {
@@ -446,6 +470,15 @@ struct SettingsView: View {
 
     private var isBYOK: Bool {
         authState.entitlement == .byok || authState.profile?.isByokEligible == true
+    }
+
+    /// Offer the upgrade CTA to anyone who could benefit: trial and lapsed users.
+    /// Hidden for BYOK (OG) and active/grace payers.
+    private var showUpgradeButton: Bool {
+        switch authState.entitlement {
+        case .trialing, .softWall: return true
+        case .byok, .subscriber, .grace, .none: return false
+        }
     }
 
     private var subscriptionStatusText: String {

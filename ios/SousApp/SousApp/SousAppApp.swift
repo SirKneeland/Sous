@@ -4,6 +4,7 @@ import UIKit
 @main
 struct SousAppApp: App {
     @StateObject private var authState = AuthState()
+    @StateObject private var storeKit = StoreKitManager()
 
     init() {
         configureNavigationBar()
@@ -13,7 +14,11 @@ struct SousAppApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(authState)
-                .task { await authState.bootstrap() }
+                .environmentObject(storeKit)
+                .task {
+                    storeKit.attach(authState: authState)
+                    await authState.bootstrap()
+                }
         }
     }
 

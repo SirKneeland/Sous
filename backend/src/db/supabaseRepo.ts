@@ -128,6 +128,58 @@ export function createSupabaseRepo(db: SupabaseClient): Repo {
       return data as SubscriptionRow;
     },
 
+    async getSubscriptionByOriginalTransactionId(originalTransactionId) {
+      const { data, error } = await db
+        .from('subscriptions')
+        .select('*')
+        .eq('apple_original_transaction_id', originalTransactionId)
+        .single();
+      if (error && !isNoRows(error)) throw error;
+      return (data as SubscriptionRow) ?? null;
+    },
+
+    async updateSubscriptionFromApple(userId, input) {
+      const patch = {
+        status: input.status,
+        apple_original_transaction_id: input.appleOriginalTransactionId,
+        current_period_start: input.currentPeriodStart,
+        current_period_end: input.currentPeriodEnd,
+        ...(input.appleLatestReceipt !== undefined
+          ? { apple_latest_receipt: input.appleLatestReceipt }
+          : {}),
+      };
+      // Update the existing (one-per-user) row; create it if somehow absent.
+      const existing = await this.getSubscriptionByUserId(userId);
+      if (existing) {
+        const { data, error } = await db
+          .from('subscriptions')
+          .update(patch)
+          .eq('id', existing.id)
+          .select('*')
+          .single();
+        if (error) throw error;
+        return data as SubscriptionRow;
+      }
+      const { data, error } = await db
+        .from('subscriptions')
+        .insert({ user_id: userId, ...patch })
+        .select('*')
+        .single();
+      if (error) throw error;
+      return data as SubscriptionRow;
+    },
+
+    async updateSubscriptionLifecycle(subscriptionId, input) {
+      const patch: Record<string, unknown> = { status: input.status };
+      if (input.currentPeriodEnd !== undefined) patch.current_period_end = input.currentPeriodEnd;
+      if (input.appleLatestReceipt !== undefined) patch.apple_latest_receipt = input.appleLatestReceipt;
+      const { error } = await db
+        .from('subscriptions')
+        .update(patch)
+        .eq('id', subscriptionId);
+      if (error) throw error;
+    },
+
     async insertSession(input: NewSession) {
       const { data, error } = await db
         .from('sessions')

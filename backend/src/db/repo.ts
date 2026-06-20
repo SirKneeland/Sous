@@ -10,6 +10,8 @@ import type {
   SessionRow,
   NewUser,
   NewSubscription,
+  AppleSubscriptionUpdate,
+  SubscriptionLifecycleUpdate,
   NewSession,
   PreferencesRow,
   PreferencesInput,
@@ -36,6 +38,12 @@ export interface Repo {
   // subscriptions
   getSubscriptionByUserId(userId: string): Promise<SubscriptionRow | null>;
   createSubscription(input: NewSubscription): Promise<SubscriptionRow>;
+  /** Look up a subscription by Apple's original transaction id (notify webhook). */
+  getSubscriptionByOriginalTransactionId(originalTransactionId: string): Promise<SubscriptionRow | null>;
+  /** Upsert the user's subscription from a validated StoreKit purchase. */
+  updateSubscriptionFromApple(userId: string, input: AppleSubscriptionUpdate): Promise<SubscriptionRow>;
+  /** Apply an App Store notification lifecycle change to a subscription row. */
+  updateSubscriptionLifecycle(subscriptionId: string, input: SubscriptionLifecycleUpdate): Promise<void>;
 
   // sessions
   insertSession(input: NewSession): Promise<SessionRow>;

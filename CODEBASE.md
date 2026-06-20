@@ -96,7 +96,11 @@
   - `Keychain/SousSessionProvider.swift` — Keychain storage for the Sous backend session token (distinct account from the OpenAI key); `SousSessionProviding` protocol + `KeychainSousSessionProvider`
   - `Networking/SousAPIClient.swift` — **the Sous backend networking boundary** (distinct from `OpenAIClient`). `@MainActor` client implementing all nine endpoints (`signInWithApple`, `signOut`, `deleteAccount`, `fetchConfig`, `fetchSubscriptionStatus`, `syncPreferences`/`fetchPreferences`, `syncMemories`/`fetchMemories`, `updateDisplayName`); Bearer-token auth; 401 → clear session + `onUnauthorized`. `SousAuthBackend` / `SousSyncBackend` / `SousBackend` protocols; injectable `HTTPTransport`; `SousBackendConfig` resolves the base URL from Info.plist `SousBackendBaseURL`
   - `Networking/SousAPIModels.swift` — Codable wire types: `AuthResponse`, `AppConfig`, `SubscriptionStatus`, `EntitlementInfo`, `Entitlement` enum (`byok/subscriber/trialing/grace/softWall`), `UserProfile`, `PreferencesDTO`, `MemoryDTO`
-  - `Auth/AuthState.swift` — `@MainActor ObservableObject`; `AuthStatus` (`unknown/signedOut/signedIn`) state machine, launch validation against `/subscription/status`, offline cache fallback, Apple full-name capture, `onSignInHydrate` hook
+  - `Auth/AuthState.swift` — `@MainActor ObservableObject`; `AuthStatus` (`unknown/signedOut/signedIn`) state machine, launch validation against `/subscription/status`, offline cache fallback, Apple full-name capture, `onSignInHydrate` hook. **(Project 4)** `refresh()` re-fetches entitlement after a StoreKit purchase/restore without disturbing sign-in.
+  - `Billing/StoreKitManager.swift` — **(Project 4)** `@MainActor ObservableObject`; StoreKit 2 purchase/restore for `com.donutindustries.SousApp.pro.monthly`, `Transaction.updates` listener. Every verified transaction → `SousAPIClient.validateReceipt(jws)` then `AuthState.refresh()`. Validate+refresh core is injected as closures (`handle(jwsRepresentation:)`) for tests. Does NOT own entitlement — `AuthState` does.
+  - `Billing/PaywallView.swift` — **(Project 4)** full-screen subscription wall (design tokens, burgundy CTA, restore + legal links). Shown on soft-wall generative attempt, disabled-feature tap, or Settings "Upgrade". `SousSupport` holds the support email + placeholder legal URLs.
+  - `Billing/CapReachedView.swift` — **(Project 4)** paid-cap "whale UX" hard stop (verbatim John message, pre-filled "Message John" mailto, share). Shown in place of new-recipe/import for subscribers at the 100/month cap; NOT shown to trial users (they get the paywall).
+  - `Billing/BillingGate.swift` — **(Project 4)** pure, tested policy: `presentationForNewRecipe(entitlement:usage:)` → `.none/.paywall/.capReached`; `isVoiceAvailable(_:)` (false in trial + soft wall). Backend still hard-enforces; this drives proactive UI.
   - `Auth/SignInView.swift` — full-screen Sign in with Apple gate (`ASAuthorizationAppleIDButton` via `SignInWithAppleButton`)
   - `Debug/LLMDebugExport.swift` — Exports LLMDebugBundle for analysis
   - `Persistence/SessionSnapshot.swift` — Codable struct; schemaVersion, recipe, pendingPatchSet, chatMessages[], nextLLMContext, savedAt
@@ -128,7 +132,9 @@ Hosted on Railway. Run with `tsx` (no build step).
 | `types.ts` | `AppDeps` (injected dependencies) and Hono context typing |
 | `routes/auth.ts` | `/auth/apple` (Sign in with Apple → session), `/auth/signout`, `DELETE /auth/account` — **fully implemented** |
 | `routes/config.ts` | `GET /config` — config map + entitlement — **fully implemented** |
-| `routes/subscription.ts` | `GET /subscription/status` implemented; `validate`/`notify` stubbed (Project 4) |
+| `routes/subscription.ts` | `GET /subscription/status` + **(Project 4)** `POST /subscription/validate` (verify StoreKit receipt → activate; refuses a transaction already linked to another account, 409) and `POST /subscription/notify` (ASSN v2 webhook, unauthenticated; Apple-JWS-signed + optional shared-secret gate; maps notification types to subscription status). `/status` uses per-route auth so the webhook stays unauthenticated |
+| `lib/appstore.ts` | **(Project 4)** `AppStoreVerifier` (injected): verifies StoreKit 2 transaction + ASSN v2 JWS — ES256-pinned, full x5c chain validation anchored to Apple Root CA G3 by fingerprint, leaf-key body verify. Tests inject a fake |
+| `lib/secrets.ts` | **(Project 4)** `timingSafeEqualStr` — constant-time secret compare (SHA-256 + `timingSafeEqual`) used by the notify shared-secret gate |
 | `routes/proxy.ts` | **(Project 3)** `POST /proxy/chat` + `/proxy/tts`: off-topic check, read-only recipe-cap enforcement (402), forward to OpenAI with server key, stream back verbatim, record `usage_events`, async abuse check. Does NOT increment the counter — that is `/usage/recipe`'s job |
 | `routes/usage.ts` | **(Project 3)** `POST /usage/recipe` (single recipe-count increment — period + trial counters — called by the client when a recipe is created), `POST /usage/request` (ack), `GET /usage/summary` (period usage + trial fields) |
 | `routes/admin.ts` | **(Project 3)** `GET /admin/dashboard` — operator-only aggregate; guarded by `ADMIN_API_KEY` via `X-Admin-Key` (constant-time, fail-closed) |
@@ -193,7 +199,8 @@ so re-registered (previously-deleted) users can be stored without a trial.
 - **Backend tests:** Node.js built-in test runner (`node:test`) via `tsx`
   - Location: `backend/src/**/*.test.ts`
   - Key files: `lib/entitlement.test.ts` (all 5 entitlement states), `lib/tokens.test.ts`, `routes/auth.test.ts`, `routes/config.test.ts`, `routes/sync.test.ts`, and **(Project 3)** `routes/proxy.test.ts` (forward+record, cap 402, off-topic 400, streaming usage), `routes/usage.test.ts` (summary trial/paid, recipe increment), `routes/admin.test.ts` (dashboard + key gate), `lib/offTopicDetector.test.ts` (10+ cases both directions + injection), `lib/abuseDetector.test.ts`
-  - Tests use an in-memory fake repo + injected fake OpenAI forwarder (no Supabase, no network, no real key). 75 tests.
+  - **(Project 4)** `routes/subscription.test.ts` (validate activate/sandbox/revoked/cross-account-409, notify all event types, grace→soft_wall) using an injected fake `AppStoreVerifier`.
+  - Tests use an in-memory fake repo + injected fake OpenAI forwarder + injected fake App Store verifier (no Supabase, no network, no real key). 94 tests.
   - Run with: `cd backend && npm test`
 
 ---

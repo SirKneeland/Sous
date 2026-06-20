@@ -601,10 +601,38 @@ recipe content is shown; the session is restored silently on subsequent launches
   user their recipe usage for the current period ("X of N recipes …"); BYOK users see
   "Using your own API key · No limits apply".
 
-Billing, trials, paywalls, and the *enforcement* of usage caps as a paywall are
-defined separately and are not part of current behavior (see
-`docs/BackendEngineeringPlan.md`, Project 4). Project 3 establishes the metering and
-soft cap-reached responses that Project 4 will build the paywall UX on top of.
+## Billing & Paywall (Project 4 — current behavior)
+
+Sous is a $4.99/month auto-renewing subscription (StoreKit 2), with a free trial of
+**14 days or 14 recipes, whichever comes first**. Entitlement is server-computed
+(`byok / subscriber / trialing / grace / soft_wall`) and the app never computes it
+locally.
+
+- **Trial:** new non-BYOK accounts start in `trialing`. Voice mode is unavailable
+  during the trial.
+- **Soft wall:** when the trial ends (time or recipes), the user enters `soft_wall`
+  — they can still read saved recipes, browse Recent Recipes, and manage their
+  account, but New Recipe / Import / chat-generation present the **paywall**
+  (`PaywallView`). Copy is warm, not punitive.
+- **Paywall:** full-screen, single CTA ("Start Sous Pro — $4.99/month"), Restore
+  Purchases, and Privacy/Terms links. Shown on a soft-wall generative attempt, a
+  disabled-feature tap, or Settings → "Upgrade to Sous Pro".
+- **Purchase:** StoreKit 2 only; the receipt is validated **server-side** (`POST
+  /subscription/validate`) and bound to one account. On success the app refreshes
+  entitlement and unlocks immediately.
+- **Paid cap:** subscribers get 100 new recipes/month. At the cap, a dedicated
+  **hard-stop** screen (`CapReachedView`, NOT the paywall) appears in place of new
+  recipe/import — it shows usage, reset countdown, John's note, a "Message John"
+  email, and a share action. The recipe that hits the cap still finishes.
+- **Grace:** a payment failure keeps subscriber-level access for a 7-day grace
+  window (Apple billing retry) before the soft wall activates.
+- **Lifecycle:** App Store Server Notifications keep status in sync (renew, expire,
+  refund, revoke).
+
+Project 3's proxy still hard-enforces caps server-side (402 `cap_reached`); the
+client presents the right wall proactively from entitlement + usage so users aren't
+sent to OpenAI just to bounce. Full architecture: `docs/BillingPRD.md` and
+`docs/BackendEngineeringPlan.md` (Project 4).
 
 ## Non-Goals (current)
 
@@ -616,7 +644,7 @@ Out of scope until explicitly added to the roadmap:
 - Grocery delivery integrations
 - Multi-canvas workspaces
 - Collaboration with other users
-- Monetization or paywalls
+- Annual / family / team plans, gifting (monthly subscription only — see Billing & Paywall)
 - Preference inference or automated learning
 - Inline generated image display in chat responses (future paid feature)
 - Generated images (future paid feature)

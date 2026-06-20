@@ -69,6 +69,8 @@ struct BottomZoneView: View {
     var onTimerBannerTap: (UUID) -> Void
     var onHeightChange: (CGFloat) -> Void
     var isEnabled: Bool = true
+    /// Voice mode is hidden during the free trial and in soft wall (see BillingGate).
+    var voiceEnabled: Bool = true
 
     @State private var dragOffset: CGFloat = 0
 
@@ -98,20 +100,22 @@ struct BottomZoneView: View {
                 }
                 .buttonStyle(HapticOnPressStyle())
 
-                Rectangle()
-                    .fill(Color.white.opacity(0.25))
-                    .frame(width: 1, height: 52)
+                if voiceEnabled {
+                    Rectangle()
+                        .fill(Color.white.opacity(0.25))
+                        .frame(width: 1, height: 52)
 
-                Button {
-                    onOpenVoiceMode()
-                } label: {
-                    Image(systemName: "mic.fill")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 60, height: 52)
-                        .background(Color.sousTerracotta)
+                    Button {
+                        onOpenVoiceMode()
+                    } label: {
+                        Image(systemName: "mic.fill")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 60, height: 52)
+                            .background(Color.sousTerracotta)
+                    }
+                    .buttonStyle(HapticOnPressStyle())
                 }
-                .buttonStyle(HapticOnPressStyle())
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 12)

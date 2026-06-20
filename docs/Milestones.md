@@ -491,12 +491,13 @@ Project tracking:
 - **Project 1 — Backend Foundation — ✅ Code complete** (Supabase schema, Hono API, auth/config/entitlement endpoints).
 - **Project 2 — iOS Auth Integration — ✅ Code complete.** Sign in with Apple gates the app; session token in Keychain; Account section in Settings; preferences + memories sync to the backend on change and hydrate (server-wins) on sign-in; BYOK users keep direct OpenAI routing with an OG badge. Backend sync endpoints (`/sync/preferences`, `/sync/memories`, `/sync/profile`) implemented.
 - **Project 3 — API Proxy + Instrumentation — ✅ Code complete.** Non-BYOK users' OpenAI calls route through the Sous backend proxy (`/proxy/chat`), which records `usage_events`, enforces the recipe cap (402 when reached), and runs conservative off-topic + abuse detection. Settings shows live usage counts. BYOK users are unaffected (direct OpenAI). Operator-only admin dashboard (`/admin/dashboard`) surfaces cost, active users, cap-hit rate, and flagged accounts. Operator setup pending: set `OPENAI_API_KEY` + `ADMIN_API_KEY` on Railway and re-run `db/schema.sql`.
-- **Project 4 — Billing + Paywall — ⬜ Not started.**
+- **Project 4 — Billing + Paywall — ✅ Code complete.** StoreKit 2 monthly subscription (`StoreKitManager`) with server-side receipt validation (`POST /subscription/validate`, Apple JWS verification) and the App Store Server Notifications v2 webhook (`POST /subscription/notify`) keeping subscription status in sync over the lifecycle (renew / expire / grace / refund). Full-screen `PaywallView` (soft wall / Settings "Upgrade"), `CapReachedView` whale-UX hard stop at the 100/month paid cap, voice mode blocked during trial. Entitlement-driven UI; the proxy still hard-enforces the cap (402). Operator setup pending: create the App Store Connect subscription + sandbox tester, set `APP_STORE_NOTIFICATION_SECRET` on Railway, point the notification URLs at `/api/v1/subscription/notify`, and sandbox-test the purchase on device.
 
 Core capabilities:
 - User accounts ✅
 - Preferences and memories synced to account ✅
 - Usage instrumentation + recipe-cap metering ✅ (Project 3)
+- Subscription billing + paywall + trial enforcement ✅ (Project 4)
 - Recipe history synced to account ⬜ (deferred — `/sync/recipes` still a stub)
 - First-run account setup flow ✅ (sign-in gate)
 

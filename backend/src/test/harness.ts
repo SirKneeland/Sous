@@ -3,6 +3,11 @@
 import { createApp } from '../app.js';
 import type { AppDeps } from '../types.js';
 import type { OpenAIProxy } from '../lib/openai.js';
+import type {
+  AppStoreVerifier,
+  VerifiedTransaction,
+  DecodedNotification,
+} from '../lib/appstore.js';
 import { createFakeRepo, type FakeRepoState } from './fakeRepo.js';
 
 export const TEST_JWT_SECRET = 'test-secret-do-not-use-in-production';
@@ -11,9 +16,57 @@ export const TEST_ADMIN_KEY = 'test-admin-key';
 export interface TestAppOptions {
   /** Fake OpenAI forwarder. Defaults to a stub returning a minimal completion. */
   openai?: OpenAIProxy;
+  /** Fake App Store verifier. Defaults to one treating the JWS string as JSON. */
+  appstore?: AppStoreVerifier;
   /** Fixed clock for deterministic billing-period tests. */
   now?: () => Date;
   adminApiKey?: string;
+  appStoreNotificationSecret?: string;
+}
+
+/**
+ * Default fake App Store verifier for tests. It does NO crypto: it parses the
+ * supplied "JWS" string as JSON and shapes it into a VerifiedTransaction /
+ * DecodedNotification. A string `"invalid"` (or anything non-JSON) throws, so
+ * tests can exercise the rejection path. This keeps subscription route tests free
+ * of Apple keys and certificate chains while still covering the route logic.
+ */
+export function defaultFakeAppStore(): AppStoreVerifier {
+  const txn = (o: Record<string, unknown>): VerifiedTransaction => ({
+    transactionId: String(o.transactionId ?? 'txn-1'),
+    originalTransactionId: String(o.originalTransactionId ?? 'orig-1'),
+    bundleId: String(o.bundleId ?? 'com.donutindustries.SousApp'),
+    productId: String(o.productId ?? 'com.donutindustries.SousApp.pro.monthly'),
+    purchaseDate: String(o.purchaseDate ?? new Date().toISOString()),
+    expiresDate: (o.expiresDate as string | null) ?? null,
+    revocationDate: (o.revocationDate as string | null) ?? null,
+    environment: String(o.environment ?? 'Production'),
+  });
+  function parse(jws: string): Record<string, unknown> {
+    if (jws === 'invalid') throw new Error('invalid receipt');
+    try {
+      return JSON.parse(jws) as Record<string, unknown>;
+    } catch {
+      throw new Error('malformed receipt');
+    }
+  }
+  return {
+    async verifyTransaction(jws) {
+      return txn(parse(jws));
+    },
+    async verifyNotification(jws) {
+      const o = parse(jws);
+      const n: DecodedNotification = {
+        notificationType: String(o.notificationType ?? ''),
+        subtype: (o.subtype as string | null) ?? null,
+        notificationUUID: (o.notificationUUID as string | null) ?? null,
+        bundleId: (o.bundleId as string | null) ?? 'com.donutindustries.SousApp',
+        environment: (o.environment as string | null) ?? 'Production',
+        transaction: o.transaction ? txn(o.transaction as Record<string, unknown>) : null,
+      };
+      return n;
+    },
+  };
 }
 
 /** Default fake forwarder: a non-streaming completion with token usage. */
@@ -54,6 +107,7 @@ export function buildTestApp(
       bypassApple: true,
       appleClientId: undefined,
       adminApiKey: options.adminApiKey ?? TEST_ADMIN_KEY,
+      appStoreNotificationSecret: options.appStoreNotificationSecret,
     },
     // Deterministic: treat the identity token string as the Apple sub.
     verifyApple: async (identityToken: string) => ({
@@ -61,6 +115,7 @@ export function buildTestApp(
       email: `${identityToken}@example.test`,
     }),
     openai: options.openai ?? defaultFakeOpenAI(),
+    appstore: options.appstore ?? defaultFakeAppStore(),
     now: options.now ?? (() => new Date()),
   };
 

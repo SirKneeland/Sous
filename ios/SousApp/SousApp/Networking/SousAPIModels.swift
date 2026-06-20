@@ -137,6 +137,12 @@ struct AppleSignInBody: Encodable {
     let referralCode: String?
 }
 
+/// Body for `POST /subscription/validate`. `receiptData` is the StoreKit 2 signed
+/// transaction (`VerificationResult.jwsRepresentation`).
+struct ValidateReceiptBody: Encodable {
+    let receiptData: String
+}
+
 struct MemoriesSyncBody: Encodable {
     let memories: [MemoryDTO]
 }

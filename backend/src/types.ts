@@ -3,6 +3,7 @@
 import type { Repo } from './db/repo.js';
 import type { AppleIdentity } from './lib/apple.js';
 import type { OpenAIProxy } from './lib/openai.js';
+import type { AppStoreVerifier } from './lib/appstore.js';
 
 export interface AppEnvConfig {
   nodeEnv: string;
@@ -10,6 +11,8 @@ export interface AppEnvConfig {
   appleClientId?: string;
   /** Admin API key guarding /admin/* (separate from user session tokens). */
   adminApiKey?: string;
+  /** Optional shared-secret gate on the App Store notification webhook. */
+  appStoreNotificationSecret?: string;
 }
 
 /**
@@ -24,6 +27,8 @@ export interface AppDeps {
   verifyApple(identityToken: string): Promise<AppleIdentity>;
   /** Forward chat/TTS to OpenAI. Injectable so tests need no network or key. */
   openai: OpenAIProxy;
+  /** Verify StoreKit transactions + App Store notifications. Injectable for tests. */
+  appstore: AppStoreVerifier;
   /** Injectable clock for deterministic billing-period / time-window tests. */
   now(): Date;
 }

@@ -44,6 +44,7 @@ final class MockBackend: SousBackend, @unchecked Sendable {
     var signInResult: Result<AuthResponse, Error>?
     var subscriptionStatusResult: Result<SubscriptionStatus, Error>?
     var configResult: Result<AppConfig, Error>?
+    var validateReceiptResult: Result<SubscriptionStatus, Error>?
     var signOutError: Error?
     var deleteAccountError: Error?
 
@@ -63,6 +64,7 @@ final class MockBackend: SousBackend, @unchecked Sendable {
     private(set) var fetchMemoriesCallCount = 0
     private(set) var recordRecipeUsageCallCount = 0
     private(set) var fetchUsageSummaryCallCount = 0
+    private(set) var validateReceiptCalls: [String] = []
 
     // MARK: SousAuthBackend
 
@@ -87,6 +89,11 @@ final class MockBackend: SousBackend, @unchecked Sendable {
 
     func fetchSubscriptionStatus() async throws -> SubscriptionStatus {
         try unwrap(subscriptionStatusResult)
+    }
+
+    func validateReceipt(_ receiptData: String) async throws -> SubscriptionStatus {
+        validateReceiptCalls.append(receiptData)
+        return try unwrap(validateReceiptResult ?? subscriptionStatusResult)
     }
 
     // MARK: SousSyncBackend

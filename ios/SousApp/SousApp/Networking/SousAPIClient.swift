@@ -59,6 +59,8 @@ protocol SousAuthBackend: AnyObject {
     func deleteAccount() async throws
     func fetchConfig() async throws -> AppConfig
     func fetchSubscriptionStatus() async throws -> SubscriptionStatus
+    /// Validate a StoreKit transaction server-side and return the updated status.
+    func validateReceipt(_ receiptData: String) async throws -> SubscriptionStatus
 }
 
 /// Preferences/memories/profile sync surface used by `AppStore`.
@@ -134,6 +136,14 @@ final class SousAPIClient: SousBackend {
 
     func fetchSubscriptionStatus() async throws -> SubscriptionStatus {
         let data = try await send(path: "subscription/status", method: "GET", body: Optional<Empty>.none, authenticated: true)
+        return try decode(SubscriptionStatus.self, from: data)
+    }
+
+    func validateReceipt(_ receiptData: String) async throws -> SubscriptionStatus {
+        let body = ValidateReceiptBody(receiptData: receiptData)
+        let data = try await send(path: "subscription/validate", method: "POST", body: body, authenticated: true)
+        // The validate response is `{ entitlement, subscription }` — decodes into
+        // SubscriptionStatus (profile is optional and simply absent here).
         return try decode(SubscriptionStatus.self, from: data)
     }
 

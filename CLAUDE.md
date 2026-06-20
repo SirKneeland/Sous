@@ -101,7 +101,30 @@ There are two distinct network clients — never conflate them:
 **Backend env vars** (`backend/.env.example`): in addition to Supabase / JWT /
 Apple keys, Project 3 adds `OPENAI_API_KEY` (server-side key the proxy forwards
 with) and `ADMIN_API_KEY` (guards `GET /api/v1/admin/dashboard`, sent in the
-`X-Admin-Key` header — never a user session token).
+`X-Admin-Key` header — never a user session token). Project 4 adds `APPLE_BUNDLE_ID`,
+`APP_STORE_NOTIFICATION_SECRET` (optional constant-time gate on the notify webhook),
+and `APPLE_ROOT_CA_FINGERPRINT` (optional override of the pinned Apple root).
+
+## Billing / Entitlement (Project 4)
+
+Entitlement is **server-computed** and read-only on the client (five states:
+`byok / subscriber / trialing / grace / soft_wall`). Billing UI is driven by that
+entitlement, never computed locally:
+- `soft_wall` (trial expired by 14 days OR 14 recipes, or subscription lapsed past
+  the 7-day grace) → **paywall** (`PaywallView`) on any generative attempt.
+- `subscriber`/`grace` at the 100/month cap → **hard stop** (`CapReachedView`),
+  shown in place of the new-recipe/import flow. Trial users who hit the trial cap
+  see the paywall, never the hard stop.
+- Voice mode is hidden during `trialing` and `soft_wall` (`BillingGate.isVoiceAvailable`).
+- Purchases use StoreKit 2 (`StoreKitManager`); receipts are validated **server-side
+  only** via `POST /subscription/validate` (Apple JWS verification in
+  `backend/src/lib/appstore.ts`) — never client-side. A transaction is bound to one
+  account (re-claim → 409). The proxy still returns 402 `cap_reached` as the hard
+  backend enforcement; the client gates proactively from entitlement + usage so the
+  user isn't sent to OpenAI just to bounce.
+- `POST /subscription/notify` is the App Store Server Notifications v2 webhook
+  (unauthenticated; trust = Apple JWS signature) that keeps subscription status in
+  sync over the lifecycle.
 
 ---
 

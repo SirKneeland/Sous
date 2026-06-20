@@ -1,12 +1,18 @@
 import SwiftUI
 import AuthenticationServices
 
+private struct IdentifiableURL: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
 /// Full-screen sign-in shown whenever `authState.status == .signedOut`. Presents
 /// the Sous wordmark, a short value proposition, and the native Sign in with
 /// Apple button.
 struct SignInView: View {
     @EnvironmentObject private var authState: AuthState
     @Environment(\.colorScheme) private var colorScheme
+    @State private var activeURL: IdentifiableURL?
 
     var body: some View {
         ZStack {
@@ -46,11 +52,24 @@ struct SignInView: View {
                 .padding(.horizontal, 24)
                 .padding(.bottom, 12)
 
-                Text("By continuing you agree to use Sous responsibly.")
-                    .font(.sousCaption)
-                    .foregroundStyle(Color.sousMuted)
-                    .padding(.bottom, 32)
+                HStack(spacing: 0) {
+                    Text("By continuing, you agree to our ")
+                    Button { activeURL = IdentifiableURL(url: SousSupport.termsOfServiceURL) } label: {
+                        Text("Terms of Service").underline()
+                    }
+                    Text(" and ")
+                    Button { activeURL = IdentifiableURL(url: SousSupport.privacyPolicyURL) } label: {
+                        Text("Privacy Policy").underline()
+                    }
+                    Text(".")
+                }
+                .font(.sousCaption)
+                .foregroundStyle(Color.sousMuted)
+                .padding(.bottom, 32)
             }
+        }
+        .sheet(item: $activeURL) { item in
+            SafariView(url: item.url)
         }
     }
 

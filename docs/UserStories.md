@@ -457,3 +457,53 @@
   and does not spend AI tokens on it
 - And borderline or cooking-adjacent messages are always allowed (the detector is
   intentionally conservative)
+
+### US-63: Subscribe via Paywall (Project 4)
+- Given a non-BYOK user whose trial has ended (soft wall) attempts a generative
+  action, taps a disabled feature, or taps "Upgrade to Sous Pro" in Settings
+- When the paywall appears
+- Then it is a full-screen screen showing the Sous wordmark, 3–4 benefit bullets,
+  a single "Start Sous Pro — $4.99/month" CTA, a Restore Purchases link, and
+  Privacy Policy / Terms of Service links
+- And tapping the CTA starts a StoreKit purchase; on success the receipt is
+  validated server-side and the app transitions to subscriber state automatically
+
+### US-64: Trial Enforcement — 14 days / 14 recipes (Project 4)
+- Given a new non-BYOK account
+- When 14 days pass OR 14 recipes are created (whichever comes first)
+- Then the server reports `soft_wall` entitlement and the app applies the soft wall
+- And a trial user who hits the 14-recipe trial cap sees the paywall (not the
+  paid hard-stop screen)
+
+### US-65: Voice Blocked During Trial (Project 4)
+- Given a user whose entitlement is `trialing` (or `soft_wall`)
+- When they view the cooking canvas
+- Then the microphone / voice-mode button is hidden
+- And subscribers, grace, and BYOK users keep voice mode
+
+### US-66: Soft Wall After Trial (Project 4)
+- Given a soft-wall user
+- When they open the app
+- Then they can still read saved recipes, see Recent Recipes, and manage their
+  account/subscription (read-only)
+- And tapping New Recipe / Import presents the paywall instead of generating
+- And the backend independently blocks any generative call (402)
+
+### US-67: Paid Recipe Cap — Hard Stop (Project 4)
+- Given a paid subscriber who has used 100 of 100 recipes this month
+- When they try to start a new recipe or import
+- Then a dedicated hard-stop screen appears (NOT the paywall) showing
+  "100 of 100 recipes used", the reset countdown, and the verbatim message from
+  John, with a "Message John" button (pre-filled support email carrying the
+  user's email + account id) and a "Share Sous with a friend" button
+- And the recipe that hit the cap was allowed to finish; the stop appears on the
+  next attempt
+
+### US-68: Subscription Lifecycle Stays in Sync (Project 4)
+- Given Apple sends an App Store Server Notification (renew, expire, billing
+  failure, refund, revoke)
+- When the backend webhook receives it
+- Then the subscription status updates accordingly (renew → active, billing
+  failure/expire → lapsed with a 7-day grace window, refund/revoke → soft wall)
+- And during the grace window the user keeps subscriber-level access while being
+  nudged to fix billing
