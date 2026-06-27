@@ -9,7 +9,8 @@ import { signSessionToken } from '../lib/tokens.js';
 import { hashAppleSub } from '../lib/secrets.js';
 import { generateReferralCode } from '../lib/referral.js';
 import { computeEntitlement } from '../lib/entitlement.js';
-import { entitlementConfigFrom, trialDurationDays, parseConfig } from '../lib/config.js';
+import { entitlementConfigFrom, trialDurationDays, parseConfig, byokCutoffEnabled, byokCutoffDate } from '../lib/config.js';
+import { computeByokEligibility } from '../lib/byokEligibility.js';
 import type { UserRow, SubscriptionRow } from '../db/types.js';
 
 const appleBody = z.object({
@@ -122,11 +123,18 @@ export function authRoutes(): Hono<HonoEnv> {
       if (referrer && !referrer.is_deleted) referredByUserId = referrer.id;
     }
 
+    const isByokEligible = computeByokEligibility(
+      deps.now(),
+      byokCutoffEnabled(rawConfig),
+      byokCutoffDate(rawConfig),
+    );
+
     const user = await deps.repo.createUser({
       appleSub: identity.sub,
       email: identity.email ?? null,
       referralCode: generateReferralCode(),
       referredByUserId,
+      isByokEligible,
     });
 
     let subscription: SubscriptionRow;

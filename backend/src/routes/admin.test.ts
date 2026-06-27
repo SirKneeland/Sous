@@ -1,4 +1,4 @@
-// Integration tests for the internal admin dashboard.
+// Integration tests for the internal admin dashboard and admin-only mutations.
 // Run: cd backend && npm test
 
 import { test } from 'node:test';
@@ -65,4 +65,86 @@ test('admin/dashboard: returns aggregate counts', async () => {
   assert.ok(data.costThisMonth.byModality.text > 0);
   assert.equal(data.flaggedAccounts, 1);
   assert.equal(data.topUsersByRecipes[0].recipes, 1);
+});
+
+// --- POST /admin/users/:id/byok-eligible ---
+
+test('admin/byok-eligible: rejects missing or wrong key', async () => {
+  const { app } = buildTestApp();
+  const { body: signIn } = await signInWithApple(app, 'apple-byok-auth-1');
+  const userId = signIn.userId as string;
+
+  const noKey = await app.request(`/api/v1/admin/users/${userId}/byok-eligible`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ eligible: true }),
+  });
+  assert.equal(noKey.status, 401);
+
+  const wrongKey = await app.request(`/api/v1/admin/users/${userId}/byok-eligible`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'X-Admin-Key': 'wrong' },
+    body: JSON.stringify({ eligible: true }),
+  });
+  assert.equal(wrongKey.status, 401);
+});
+
+test('admin/byok-eligible: 404 for unknown user id', async () => {
+  const { app } = buildTestApp();
+  const res = await app.request('/api/v1/admin/users/00000000-0000-0000-0000-000000000000/byok-eligible', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'X-Admin-Key': TEST_ADMIN_KEY },
+    body: JSON.stringify({ eligible: true }),
+  });
+  assert.equal(res.status, 404);
+});
+
+test('admin/byok-eligible: sets is_byok_eligible to true on an existing user', async () => {
+  const { app, state } = buildTestApp();
+  const { body: signIn } = await signInWithApple(app, 'apple-byok-set-1');
+  const userId = signIn.userId as string;
+
+  assert.equal(state.users.find((u) => u.id === userId)!.is_byok_eligible, false);
+
+  const res = await app.request(`/api/v1/admin/users/${userId}/byok-eligible`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'X-Admin-Key': TEST_ADMIN_KEY },
+    body: JSON.stringify({ eligible: true }),
+  });
+  assert.equal(res.status, 200);
+  const data = await readJson(res);
+  assert.equal(data.ok, true);
+  assert.equal(data.eligible, true);
+
+  assert.equal(state.users.find((u) => u.id === userId)!.is_byok_eligible, true);
+});
+
+test('admin/byok-eligible: sets is_byok_eligible to false on an existing user', async () => {
+  const { app, state } = buildTestApp();
+  const { body: signIn } = await signInWithApple(app, 'apple-byok-set-2');
+  const userId = signIn.userId as string;
+
+  // Manually set to true first.
+  state.users.find((u) => u.id === userId)!.is_byok_eligible = true;
+
+  const res = await app.request(`/api/v1/admin/users/${userId}/byok-eligible`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'X-Admin-Key': TEST_ADMIN_KEY },
+    body: JSON.stringify({ eligible: false }),
+  });
+  assert.equal(res.status, 200);
+  assert.equal(state.users.find((u) => u.id === userId)!.is_byok_eligible, false);
+});
+
+test('admin/byok-eligible: 400 when body is missing eligible field', async () => {
+  const { app } = buildTestApp();
+  const { body: signIn } = await signInWithApple(app, 'apple-byok-bad-body');
+  const userId = signIn.userId as string;
+
+  const res = await app.request(`/api/v1/admin/users/${userId}/byok-eligible`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'X-Admin-Key': TEST_ADMIN_KEY },
+    body: JSON.stringify({ enabled: true }), // wrong field name
+  });
+  assert.equal(res.status, 400);
 });

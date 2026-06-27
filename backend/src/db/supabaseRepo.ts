@@ -63,6 +63,7 @@ export function createSupabaseRepo(db: SupabaseClient): Repo {
           email: input.email,
           referral_code: input.referralCode,
           referred_by_user_id: input.referredByUserId,
+          is_byok_eligible: input.isByokEligible,
         })
         .select('*')
         .single();
@@ -74,6 +75,14 @@ export function createSupabaseRepo(db: SupabaseClient): Repo {
       const { error } = await db
         .from('users')
         .update({ display_name: displayName })
+        .eq('id', userId);
+      if (error) throw error;
+    },
+
+    async setByokEligible(userId, eligible) {
+      const { error } = await db
+        .from('users')
+        .update({ is_byok_eligible: eligible })
         .eq('id', userId);
       if (error) throw error;
     },

@@ -40,3 +40,19 @@ export function paidRecipeCap(raw: Record<string, string>): number {
 export function entitlementConfigFrom(raw: Record<string, string>): EntitlementConfig {
   return { trialRecipeCap: trialRecipeCap(raw) };
 }
+
+export function byokCutoffEnabled(raw: Record<string, string>): boolean {
+  const v = raw['byok_cutoff_enabled'];
+  if (v == null) return false;
+  try { return JSON.parse(v) === true; } catch { return false; }
+}
+
+export function byokCutoffDate(raw: Record<string, string>): Date | null {
+  const v = raw['byok_cutoff_date'];
+  if (v == null) return null;
+  try {
+    const parsed: unknown = JSON.parse(v);
+    if (!parsed) return null;
+    return new Date(parsed as string);
+  } catch { return null; }
+}

@@ -323,3 +323,82 @@ test('normal re-registration for a never-deleted identity is unaffected', async 
   const { body } = await signInWithApple(app, 'apple-sub-fresh');
   assert.equal(body.entitlement.status, 'trialing', 'fresh identity gets a normal trial');
 });
+
+// --- BYOK eligibility at signup ---
+
+test('signup: is_byok_eligible=false when cutoff is disabled (default config)', async () => {
+  // Default config has byok_cutoff_enabled=false.
+  const { app, state } = buildTestApp();
+  await signInWithApple(app, 'apple-byok-disabled');
+  assert.equal(state.users[0]!.is_byok_eligible, false);
+});
+
+test('signup: is_byok_eligible=true when cutoff enabled and account created before cutoff date', async () => {
+  // Clock is pinned to before the cutoff date.
+  const cutoffDate = new Date('2030-01-01T00:00:00Z');
+  const signupTime = new Date('2024-06-01T00:00:00Z'); // before cutoff
+
+  const { app, state } = buildTestApp(
+    {
+      config: {
+        trial_duration_days: '14',
+        trial_recipe_cap: '14',
+        paid_recipe_cap: '100',
+        byok_cutoff_enabled: 'true',
+        byok_cutoff_date: JSON.stringify(cutoffDate.toISOString()),
+        abuse_recipes_per_day: '20',
+        abuse_recipes_per_period: '150',
+        abuse_chat_per_recipe: '200',
+        abuse_off_topic_rate: '0.30',
+        off_topic_threshold: '0.8',
+      },
+    },
+    { now: () => signupTime },
+  );
+  await signInWithApple(app, 'apple-byok-eligible');
+  assert.equal(state.users[0]!.is_byok_eligible, true);
+});
+
+test('signup: is_byok_eligible=false when cutoff enabled but account created after cutoff date', async () => {
+  const cutoffDate = new Date('2020-01-01T00:00:00Z');
+  const signupTime = new Date('2024-06-01T00:00:00Z'); // after cutoff
+
+  const { app, state } = buildTestApp(
+    {
+      config: {
+        trial_duration_days: '14',
+        trial_recipe_cap: '14',
+        paid_recipe_cap: '100',
+        byok_cutoff_enabled: 'true',
+        byok_cutoff_date: JSON.stringify(cutoffDate.toISOString()),
+        abuse_recipes_per_day: '20',
+        abuse_recipes_per_period: '150',
+        abuse_chat_per_recipe: '200',
+        abuse_off_topic_rate: '0.30',
+        off_topic_threshold: '0.8',
+      },
+    },
+    { now: () => signupTime },
+  );
+  await signInWithApple(app, 'apple-byok-ineligible');
+  assert.equal(state.users[0]!.is_byok_eligible, false);
+});
+
+test('signup: is_byok_eligible=false when cutoff enabled but cutoff date is null (misconfiguration)', async () => {
+  const { app, state } = buildTestApp({
+    config: {
+      trial_duration_days: '14',
+      trial_recipe_cap: '14',
+      paid_recipe_cap: '100',
+      byok_cutoff_enabled: 'true',
+      byok_cutoff_date: 'null',
+      abuse_recipes_per_day: '20',
+      abuse_recipes_per_period: '150',
+      abuse_chat_per_recipe: '200',
+      abuse_off_topic_rate: '0.30',
+      off_topic_threshold: '0.8',
+    },
+  });
+  await signInWithApple(app, 'apple-byok-null-date');
+  assert.equal(state.users[0]!.is_byok_eligible, false);
+});

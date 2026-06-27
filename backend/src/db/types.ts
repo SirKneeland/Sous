@@ -53,6 +53,7 @@ export interface NewUser {
   email: string | null;
   referralCode: string;
   referredByUserId: string | null;
+  isByokEligible: boolean;
 }
 
 export interface NewSubscription {

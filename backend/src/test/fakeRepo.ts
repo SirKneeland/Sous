@@ -79,7 +79,7 @@ export function createFakeRepo(
         display_name: null,
         phone_number: null,
         account_created_at: new Date().toISOString(),
-        is_byok_eligible: false,
+        is_byok_eligible: input.isByokEligible,
         referral_code: input.referralCode,
         referred_by_user_id: input.referredByUserId,
         is_deleted: false,
@@ -93,6 +93,10 @@ export function createFakeRepo(
     async updateDisplayName(userId, displayName) {
       const u = state.users.find((x) => x.id === userId);
       if (u) u.display_name = displayName;
+    },
+    async setByokEligible(userId, eligible) {
+      const u = state.users.find((x) => x.id === userId);
+      if (u) u.is_byok_eligible = eligible;
     },
     async getDeletedAccount(appleSubHash) {
       const row = state.deletedAccounts.find((d) => d.apple_sub === appleSubHash);

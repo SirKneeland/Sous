@@ -108,6 +108,26 @@ export function adminRoutes(): Hono<HonoEnv> {
     });
   });
 
+  // POST /admin/users/:id/byok-eligible — manually flag an account as BYOK-eligible.
+  // Body: { eligible: boolean }. Used for testing and hand-grandfathering.
+  app.post('/users/:id/byok-eligible', async (c) => {
+    const deps = c.get('deps');
+    const userId = c.req.param('id');
+
+    const body = await c.req.json().catch(() => null) as Record<string, unknown> | null;
+    if (body == null || typeof body.eligible !== 'boolean') {
+      return c.json({ error: 'bad_request', message: 'Expected { eligible: boolean }' }, 400);
+    }
+
+    const user = await deps.repo.getUserById(userId);
+    if (!user) {
+      return c.json({ error: 'not_found', message: 'User not found' }, 404);
+    }
+
+    await deps.repo.setByokEligible(userId, body.eligible);
+    return c.json({ ok: true, userId, eligible: body.eligible });
+  });
+
   return app;
 }
 

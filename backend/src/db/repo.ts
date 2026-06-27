@@ -29,6 +29,7 @@ export interface Repo {
   getUserByReferralCode(code: string): Promise<UserRow | null>;
   createUser(input: NewUser): Promise<UserRow>;
   updateDisplayName(userId: string, displayName: string | null): Promise<void>;
+  setByokEligible(userId: string, eligible: boolean): Promise<void>;
 
   // tombstone — `appleSubHash` is the HMAC of the apple_sub (see lib/secrets.hashAppleSub),
   // never the raw value.
