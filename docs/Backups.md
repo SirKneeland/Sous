@@ -77,6 +77,11 @@ Set on the **Sous** repo (Settings → Secrets and variables → Actions):
 
 ## Known limitations
 
+- **`BACKUP_REPO_TOKEN` expires 2 January 2027.** When it does, backups stop
+  and the only signal is a failed-workflow email. A calendar reminder is set
+  for 18 December 2026. Renewing means generating a new fine-grained token
+  (repo access: `sous-db-backups` only; Contents: read/write) and updating the
+  secret. Consider a longer expiry, or no expiry, on renewal.
 - **GitHub disables scheduled workflows after 60 days of no activity in the
   Sous repo.** If you stop committing for two months, backups stop silently.
   GitHub emails a warning first. If Sous is going dormant, either commit
