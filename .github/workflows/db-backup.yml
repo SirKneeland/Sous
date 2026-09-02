@@ -1,0 +1,95 @@
+# Daily encrypted backup of the Supabase (Postgres) database to a private repo.
+#
+# WHY THIS EXISTS: the Supabase free plan provides NO automatic backups, and
+# pauses projects after ~7 days of inactivity. This workflow covers both:
+#   1. It dumps the database off-site every day.
+#   2. The dump itself is real DB activity, which keeps the project from pausing.
+#
+# The dump contains PII (apple_sub, email, phone_number) and LIVE SESSION TOKENS,
+# so it is encrypted with AES256 before it is ever written to the backup repo.
+# Never remove the encryption step.
+#
+# Restore procedure: see docs/Backups.md
+name: Database backup
+
+on:
+  schedule:
+    - cron: '17 9 * * *' # daily, 09:17 UTC
+  workflow_dispatch: {} # allows a manual run from the Actions tab
+
+concurrency:
+  group: db-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out backup repo
+        uses: actions/checkout@v4
+        with:
+          repository: SirKneeland/sous-db-backups
+          token: ${{ secrets.BACKUP_REPO_TOKEN }}
+          path: backups
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Dump database
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          supabase db dump --db-url "$SUPABASE_DB_URL" --role-only -f out/roles.sql
+          supabase db dump --db-url "$SUPABASE_DB_URL"             -f out/schema.sql
+          supabase db dump --db-url "$SUPABASE_DB_URL" --data-only -f out/data.sql
+
+      # A backup that silently dumps nothing is worse than no backup, because it
+      # looks healthy. Fail loudly instead of committing an empty file.
+      - name: Verify dump looks real
+        run: |
+          set -euo pipefail
+          for f in out/roles.sql out/schema.sql out/data.sql; do
+            [ -s "$f" ] || { echo "::error::$f is empty - aborting"; exit 1; }
+          done
+          grep -q "CREATE TABLE" out/schema.sql \
+            || { echo "::error::schema dump contains no tables - aborting"; exit 1; }
+          wc -l out/*.sql
+
+      - name: Encrypt and stage
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          STAMP="$(date -u +%Y-%m-%d)"
+          DEST="backups/dumps/$STAMP"
+          mkdir -p "$DEST"
+          # Passphrase via fd 3 so it never appears in the process list.
+          tar czf - -C out . \
+            | gpg --batch --yes --symmetric --cipher-algo AES256 \
+                  --passphrase-fd 3 -o "$DEST/sous-db-$STAMP.tar.gz.gpg" 3<<<"$BACKUP_PASSPHRASE"
+          ls -la "$DEST"
+
+      - name: Prune backups older than the most recent 30
+        run: |
+          set -euo pipefail
+          cd backups/dumps
+          ls -1d 20*/ 2>/dev/null | sort | head -n -30 | xargs -r rm -rf
+
+      - name: Commit
+        run: |
+          set -euo pipefail
+          cd backups
+          git config user.name  "sous-backup-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          if git diff --staged --quiet; then
+            echo "Nothing changed - not committing."
+            exit 0
+          fi
+          git commit -m "db backup $(date -u +%F)"
+          git push

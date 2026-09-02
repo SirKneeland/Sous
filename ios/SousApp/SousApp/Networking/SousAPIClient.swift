@@ -13,8 +13,9 @@ enum SousBackendConfig {
            let url = URL(string: raw) {
             return url
         }
-        // TODO(operator): confirm/replace with the live Railway URL via Info.plist.
-        return URL(string: "https://sous-production.up.railway.app")!
+        // Live Railway host. NOTE: the bare `sous-production.up.railway.app` name is
+        // NOT ours — it belongs to an unrelated third party. Keep the `-9a1d` suffix.
+        return URL(string: "https://sous-production-9a1d.up.railway.app")!
     }
 
     /// All API routes are prefixed `/api/v1`.
