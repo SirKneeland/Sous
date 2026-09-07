@@ -868,7 +868,9 @@ final class AppStore: ObservableObject {
         return message
     }
 
-    private func buildLLMUserPrefs() -> LLMUserPrefs {
+    /// Non-private so the DEBUG diagnostic exporter can rebuild an equivalent
+    /// LLMRequest when the in-memory `lastDebugLLMRequest` was lost to a relaunch.
+    func buildLLMUserPrefs() -> LLMUserPrefs {
         LLMUserPrefs(
             hardAvoids: userPreferences.hardAvoids,
             servingSize: userPreferences.servingSize,
@@ -1696,7 +1698,8 @@ final class AppStore: ObservableObject {
     /// and must be preserved so the model has full context.
     ///
     /// Filters out system messages and caps at 20 entries (10 full turns).
-    private func buildConversationHistory(dropLastEntry: Bool = true) -> [LLMMessage] {
+    /// Non-private for the same reason as `buildLLMUserPrefs()`.
+    func buildConversationHistory(dropLastEntry: Bool = true) -> [LLMMessage] {
         let base = dropLastEntry ? Array(chatTranscript.dropLast()) : chatTranscript
         return base
             .filter { $0.role == .user || $0.role == .assistant }

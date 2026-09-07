@@ -101,9 +101,32 @@ struct DebugDiagnosticExporter {
 
     private func buildSystemPrompt() -> String {
         var lines = ["## 4. System Prompt"]
-        guard let request = store.lastDebugLLMRequest else {
-            lines.append("(no LLM call has been made this session)")
+
+        // `lastDebugLLMRequest` is in-memory only, so it is nil after a relaunch even
+        // when the persisted transcript shows prior turns. Rather than report nothing
+        // on exactly the exports taken after something went wrong, fall back to an
+        // equivalent request rebuilt from current state — clearly labelled, because it
+        // reflects the recipe as it stands now, not as it stood on the failing turn.
+        let request: LLMRequest
+        let isReconstructed: Bool
+        if let live = store.lastDebugLLMRequest {
+            request = live
+            isReconstructed = false
+        } else if let rebuilt = rebuildRequestFromCurrentState() {
+            request = rebuilt
+            isReconstructed = true
+        } else {
+            lines.append("(no LLM call this session, and no state to reconstruct one from)")
             return lines.joined(separator: "\n")
+        }
+
+        if isReconstructed {
+            lines.append("> **Reconstructed.** No LLM request was captured in this app run —")
+            lines.append("> most likely the app was relaunched after the turn being debugged.")
+            lines.append("> The prompts below are rebuilt from the CURRENT recipe, preferences,")
+            lines.append("> and transcript. The prompt template wording is exact; the recipe and")
+            lines.append("> preference values may differ from those sent on the failing turn.")
+            lines.append("")
         }
         // Reconstruct via the same orchestrator that built the original — deterministic from request state.
         let orch = OpenAILLMOrchestrator(client: OpenAIClient(apiKey: nil), model: "debug")
@@ -118,6 +141,25 @@ struct DebugDiagnosticExporter {
         lines.append(prompts.context)
         lines.append("```")
         return lines.joined(separator: "\n")
+    }
+
+    /// Builds an LLMRequest equivalent to what `sendWithLLM` would construct right now.
+    /// Used only as the fallback above. Nil when there is no canvas to describe.
+    private func rebuildRequestFromCurrentState() -> LLMRequest? {
+        guard store.hasCanvas else { return nil }
+        let recipe = store.uiState.recipe
+        let lastUserMessage = store.chatTranscript.last { $0.role == .user }?.text ?? ""
+        return LLMRequest(
+            recipeId: recipe.id.uuidString,
+            recipeVersion: recipe.version,
+            hasCanvas: store.hasCanvas,
+            userMessage: lastUserMessage,
+            recipeSnapshotForPrompt: recipe,
+            userPrefs: store.buildLLMUserPrefs(),
+            nextLLMContext: nil,
+            conversationHistory: store.buildConversationHistory(dropLastEntry: true),
+            referencedItem: nil
+        )
     }
 
     private func buildTranscript() -> String {
@@ -163,6 +205,30 @@ struct DebugDiagnosticExporter {
             for step in recipe.steps {
                 let status = step.status == .done ? "✓ done" : "todo"
                 lines.append("- [\(status)] \(step.text)")
+            }
+        }
+        lines.append("")
+        lines.append("**Mise en Place:**")
+        guard let entries = recipe.miseEnPlace else {
+            lines.append("- (not generated for this recipe)")
+            return lines.joined(separator: "\n")
+        }
+        if entries.isEmpty {
+            lines.append("- (generated, but empty — no prep steps were found)")
+            return lines.joined(separator: "\n")
+        }
+        for entry in entries {
+            switch entry.content {
+            case .group(let vesselName, let components):
+                let status = entry.isDone ? "✓ done" : "todo"
+                lines.append("- [\(status)] **\(vesselName)** (group)")
+                for component in components {
+                    let componentStatus = component.isDone ? "✓ done" : "todo"
+                    lines.append("    - [\(componentStatus)] \(component.text)")
+                }
+            case .solo(let instruction, let isDone):
+                let status = isDone ? "✓ done" : "todo"
+                lines.append("- [\(status)] \(instruction) (solo)")
             }
         }
         return lines.joined(separator: "\n")
