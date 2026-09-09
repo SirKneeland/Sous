@@ -18,9 +18,27 @@ struct SousAppApp: App {
                 .task {
                     storeKit.attach(authState: authState)
                     await authState.bootstrap()
+#if DEBUG
+                    await autoSignInIfRequested()
+#endif
                 }
         }
     }
+
+#if DEBUG
+    /// Unattended debug sign-in for simulator automation and UI tests. Runs only
+    /// when `SOUS_DEV_SIGNIN` (env) or `-sous-dev-signin <handle>` (launch
+    /// argument) is present, and only if bootstrap left us signed out — an
+    /// existing real session is never disturbed.
+    private func autoSignInIfRequested() async {
+        guard let handle = DebugSignIn.launchHandle() else { return }
+        guard authState.status == .signedOut else { return }
+        await authState.signIn(
+            identityToken: handle,
+            fullName: DebugSignIn.displayName(for: handle)
+        )
+    }
+#endif
 
     private func configureNavigationBar() {
         let creamColor = UIColor { t in

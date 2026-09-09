@@ -13,6 +13,9 @@ struct SignInView: View {
     @EnvironmentObject private var authState: AuthState
     @Environment(\.colorScheme) private var colorScheme
     @State private var activeURL: IdentifiableURL?
+#if DEBUG
+    @State private var debugHandle: String = DebugSignIn.lastHandle
+#endif
 
     var body: some View {
         ZStack {
@@ -52,6 +55,10 @@ struct SignInView: View {
                 .padding(.horizontal, 24)
                 .padding(.bottom, 12)
 
+#if DEBUG
+                debugBypass
+#endif
+
                 HStack(spacing: 0) {
                     Text("By continuing, you agree to our ")
                     Button { activeURL = IdentifiableURL(url: SousSupport.termsOfServiceURL) } label: {
@@ -72,6 +79,45 @@ struct SignInView: View {
             SafariView(url: item.url)
         }
     }
+
+#if DEBUG
+    /// Debug-only bypass. Signs in through the real `AuthState.signIn` using the
+    /// handle as the Apple `sub`, which the backend accepts when its dev bypass
+    /// is enabled. Never compiled into Release.
+    private var debugBypass: some View {
+        VStack(spacing: 8) {
+            TextField("debug handle", text: $debugHandle)
+                .textFieldStyle(.roundedBorder)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .font(.sousCaption)
+
+            Button {
+                signInAsDebugUser(handle: debugHandle)
+            } label: {
+                Text("Skip sign-in (Debug)")
+                    .font(.sousCaption)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 40)
+            }
+            .buttonStyle(.bordered)
+        }
+        .padding(.horizontal, 24)
+        .padding(.bottom, 12)
+    }
+
+    private func signInAsDebugUser(handle: String) {
+        DebugSignIn.lastHandle = handle
+        let resolved = DebugSignIn.lastHandle
+        debugHandle = resolved
+        Task {
+            await authState.signIn(
+                identityToken: resolved,
+                fullName: DebugSignIn.displayName(for: resolved)
+            )
+        }
+    }
+#endif
 
     private func handleCompletion(_ result: Result<ASAuthorization, Error>) {
         switch result {
