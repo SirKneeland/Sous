@@ -47,6 +47,40 @@ cd evals && npm run eval
 
 Evals test LLM behavior against the real system prompts — things like: does the model correctly refuse to patch a done step, does it respect dietary preferences, does it route ambiguous requests correctly. They run via Braintrust and are written as JSON cases in `/evals/cases/core-behaviors.json`.
 
+## Local development
+
+### Skipping Sign in with Apple
+
+Debug builds can bypass Sign in with Apple, which is useful on a fresh simulator
+(erasing a simulator clears the Keychain and the stored session with it).
+
+This requires a backend running with the dev bypass enabled — set
+`BYPASS_APPLE_VERIFY=true` with `NODE_ENV` set to anything other than
+`production`. The bypass is hard-disabled in production and must stay that way:
+enabling it on a public deployment would let anyone mint a session for any
+account by POSTing a username. Against the production backend the bypass fails
+with the normal 401, and the app shows "Sign in failed."
+
+With such a backend running, the supplied token is treated as the Apple `sub`
+verbatim, so varying the handle yields distinct test users (`<handle>@example.test`).
+
+**By hand:** the Debug sign-in screen shows a handle field and a
+"Skip sign-in (Debug)" button below the Apple button. The handle persists
+across launches.
+
+**Unattended** (simulator automation, UI tests) — either:
+```
+SOUS_DEV_SIGNIN=alice
+```
+```
+-sous-dev-signin alice
+```
+Auto sign-in only runs when the app is already signed out, so an existing
+session is never disturbed.
+
+All of this is wrapped in `#if DEBUG` and is absent from Release builds. See
+`ios/SousApp/SousApp/Debug/DebugSignIn.swift` and `backend/src/lib/apple.ts`.
+
 ## Docs
 
 Project documentation lives in `/docs`: PRD, milestones, state model, design spec,
