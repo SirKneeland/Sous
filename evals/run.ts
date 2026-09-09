@@ -25,12 +25,35 @@ interface Step {
   status: "todo" | "done";
 }
 
+interface MiseEnPlaceComponent {
+  id: string;
+  text: string;
+  done?: boolean;
+}
+
+interface MiseEnPlaceEntry {
+  id: string;
+  type: "group" | "solo";
+  /** group entries only */
+  vesselName?: string;
+  /** group entries only */
+  components?: MiseEnPlaceComponent[];
+  /** solo entries only */
+  instruction?: string;
+  /** solo entries only */
+  done?: boolean;
+}
+
 interface RecipeState {
   version: number;
   title: string;
+  /** What the recipe currently yields. Absent when unknown. */
+  servings?: number;
   ingredients: Ingredient[];
   steps: Step[];
   userPreferences?: string[];
+  /** Absent means the recipe has no mise en place section. */
+  miseEnPlace?: MiseEnPlaceEntry[];
 }
 
 interface ChatMessage {
@@ -158,6 +181,7 @@ RULES — never violate:
 8. Equipment preferences in RECIPE CONTEXT are additive — assume standard home kitchen basics are always available. If no equipment is listed, assume a fully equipped standard home kitchen. Never restrict suggestions to only what's listed.
 9. If the user mentions anything personal about themselves that would be useful to know in a future cooking session — including foods they love, foods they hate or avoid, dietary restrictions, cooking methods or equipment they use, who they cook for, or any other standing preference — include a concise third-person "proposed_memory" string (e.g. "loves mashed potatoes", "avoids cilantro", "cooks on induction", "feeds two young kids"). Write it as a short third-person phrase with no subject — not "I" or "User". Omit if it's a one-time request for this recipe ("add more salt to this"), a question, or already in the user's saved memories. When in doubt, propose it.
 10. assistant_message must always be plain conversational prose — never JSON, never a patchSet, never any structured data. The patchSet always goes in the top-level patchSet field of the response object. Embedding a patchSet or any JSON inside assistant_message is always wrong.
+__MISE_RULE__
 
 Output shape — no changes (proposed_memory is optional, omit when not relevant):
 {"assistant_message":"...","patchSet":null}
@@ -177,7 +201,7 @@ Patch operations (exact "type" values; after_id / after_step_id are JSON null to
 {"type":"add_substep","text":"...","parent_step_id":"<uuid-or-client_id>","after_substep_id":null}   (parent_step_id is the UUID of an existing step, or the client_id of a new add_step in the same patchSet)
 {"type":"update_substep","id":"<uuid>","text":"..."}
 {"type":"remove_substep","id":"<uuid>"}
-{"type":"complete_substep","id":"<uuid>"}
+{"type":"complete_substep","id":"<uuid>"}__MISE_OPS__
 {"type":"add_note","text":"..."}
 
 STEP DECOMPOSITION — few-shot example:
@@ -437,6 +461,26 @@ function buildRecipeContext(recipeState: RecipeState | null): string {
     `personalityMode: normal`,
   ];
 
+  if (recipeState?.servings != null) {
+    lines.push(`servings: ${recipeState.servings} (what the recipe on the canvas currently yields)`);
+  }
+
+  const mise = recipeState?.miseEnPlace ?? [];
+  if (mise.length > 0) {
+    const miseJson = mise
+      .map((entry) => {
+        if (entry.type === "group") {
+          const components = (entry.components ?? [])
+            .map((c) => `{"id":"${c.id}","text":"${c.text}","done":${c.done === true}}`)
+            .join(",");
+          return `{"id":"${entry.id}","type":"group","vesselName":"${entry.vesselName ?? ""}","components":[${components}]}`;
+        }
+        return `{"id":"${entry.id}","type":"solo","instruction":"${entry.instruction ?? ""}","done":${entry.done === true}}`;
+      })
+      .join(",");
+    lines.push(`miseEnPlace: [${miseJson}]`);
+  }
+
   const memories = recipeState?.userPreferences ?? [];
   if (memories.length > 0) {
     const formatted = memories.map((m) => `• ${m}`).join("\n");
@@ -446,11 +490,36 @@ function buildRecipeContext(recipeState: RecipeState | null): string {
   return lines.join("\n");
 }
 
-function selectSystemPrompt(promptType: TestCase["promptType"]): string {
+// Mirrors the hasMiseEnPlace branch of systemPrompt() in OpenAILLMOrchestrator.swift:
+// the mise en place vocabulary is only included when the recipe actually has a
+// mise en place section; otherwise the model gets one line telling it not to fake
+// one with procedure steps.
+const MISE_RULE_PRESENT = `11. MISE EN PLACE. The miseEnPlace list in RECIPE CONTEXT is the prep list shown between INGREDIENTS and PROCEDURE: a "group" entry is a named vessel holding individually checkable components, a "solo" entry is one prep instruction, and entries and components each carry a stable id. Edit that list only with the mise_en_place operations on those ids — never with add_step, update_step, or remove_step, which belong to the PROCEDURE. So "put the amounts into the mise en place" is update_mise_en_place_component on each component, never new steps. Editing a component's text or a solo instruction clears that item's checkmark.`;
+
+// The absent-section note lives at the tail of the prompt, not in the numbered RULES
+// list: inside RULES it measurably suppressed ordinary ingredient and servings patches.
+const MISE_TAIL_ABSENT = `\n\nMISE EN PLACE: this recipe has no mise en place section yet, so there is no prep list to edit. If the user asks to change the mise en place, tell them the section doesn't exist yet and that the carrot button in the recipe header creates one. Never stand in procedure steps for it — a request to change the mise en place must never produce add_step. Every other kind of edit patches exactly as usual.`;
+
+const MISE_OPS = `
+{"type":"add_mise_en_place_entry","vessel_name":"<string or null>","items":["..."],"after_id":null,"client_id":"<kebab>"}   (vessel_name null = a solo prep instruction and items must hold exactly one string; give client_id only when adding components to this new entry in the same patchSet)
+{"type":"update_mise_en_place_entry","id":"<uuid>","text":"..."}   (group entry: renames the vessel; solo entry: replaces the instruction)
+{"type":"remove_mise_en_place_entry","id":"<uuid>"}
+{"type":"add_mise_en_place_component","entry_id":"<uuid>","after_id":null,"text":"..."}   (entry_id must be a group entry, never a solo)
+{"type":"update_mise_en_place_component","id":"<uuid>","text":"..."}
+{"type":"remove_mise_en_place_component","id":"<uuid>"}`;
+
+function hasCanvasPrompt(hasMise: boolean): string {
+  const base = SYSTEM_PROMPT_HAS_CANVAS
+    .replace("__MISE_RULE__\n", hasMise ? MISE_RULE_PRESENT + "\n" : "")
+    .replace("__MISE_OPS__", hasMise ? MISE_OPS : "");
+  return hasMise ? base : base + MISE_TAIL_ABSENT;
+}
+
+function selectSystemPrompt(promptType: TestCase["promptType"], hasMise: boolean): string {
   switch (promptType) {
     case "import":          return SYSTEM_PROMPT_IMPORT;
     case "unit_conversion": return SYSTEM_PROMPT_UNIT_CONVERSION;
-    case "has_canvas":      return SYSTEM_PROMPT_HAS_CANVAS;
+    case "has_canvas":      return hasCanvasPrompt(hasMise);
     case "no_canvas":       return SYSTEM_PROMPT_NO_CANVAS;
     case "voice":           return ""; // voice uses buildVoiceSystemPromptForEval instead
   }
@@ -512,7 +581,10 @@ async function runTask(input: TestInput, promptType: TestCase["promptType"]): Pr
   }
 
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-    { role: "system", content: selectSystemPrompt(promptType) },
+    {
+      role: "system",
+      content: selectSystemPrompt(promptType, (input.recipeState?.miseEnPlace ?? []).length > 0),
+    },
   ];
 
   // Inject RECIPE CONTEXT as a system message (matches OpenAILLMOrchestrator.swift format)

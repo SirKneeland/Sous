@@ -195,4 +195,63 @@ final class PatchCodableTests: XCTestCase {
         XCTAssertNil(decoded.summary)
         XCTAssertNil(decoded.baseRecipeSnapshot)
     }
+
+    // MARK: - Mise en place patches
+
+    func test_addMiseEnPlaceEntry_group() throws {
+        let patch = Patch.addMiseEnPlaceEntry(
+            afterId: SeedRecipes.mepSpiceBowlId,
+            vesselName: "Aromatics Bowl",
+            items: ["garlic", "ginger"],
+            preassignedId: UUID(uuidString: "00000000-0000-0000-0004-000000000001")!
+        )
+        XCTAssertEqual(try roundTrip(patch), patch)
+    }
+
+    func test_addMiseEnPlaceEntry_soloNilOptionals() throws {
+        let patch = Patch.addMiseEnPlaceEntry(afterId: nil, vesselName: nil, items: ["Toast the pine nuts"], preassignedId: nil)
+        XCTAssertEqual(try roundTrip(patch), patch)
+    }
+
+    func test_updateMiseEnPlaceEntry() throws {
+        let patch = Patch.updateMiseEnPlaceEntry(id: SeedRecipes.mepSpiceBowlId, text: "Spice Bowl 1")
+        XCTAssertEqual(try roundTrip(patch), patch)
+    }
+
+    func test_removeMiseEnPlaceEntry() throws {
+        let patch = Patch.removeMiseEnPlaceEntry(id: SeedRecipes.mepSoloTodoId)
+        XCTAssertEqual(try roundTrip(patch), patch)
+    }
+
+    func test_addMiseEnPlaceComponent() throws {
+        let patch = Patch.addMiseEnPlaceComponent(entryId: SeedRecipes.mepSpiceBowlId, afterId: SeedRecipes.mepCuminId, text: "1 tsp coriander")
+        XCTAssertEqual(try roundTrip(patch), patch)
+    }
+
+    func test_addMiseEnPlaceComponent_nilAfterId() throws {
+        let patch = Patch.addMiseEnPlaceComponent(entryId: SeedRecipes.mepSpiceBowlId, afterId: nil, text: "1 tsp coriander")
+        XCTAssertEqual(try roundTrip(patch), patch)
+    }
+
+    func test_updateMiseEnPlaceComponent() throws {
+        let patch = Patch.updateMiseEnPlaceComponent(id: SeedRecipes.mepCuminId, text: "1 tsp cumin")
+        XCTAssertEqual(try roundTrip(patch), patch)
+    }
+
+    func test_removeMiseEnPlaceComponent() throws {
+        let patch = Patch.removeMiseEnPlaceComponent(id: SeedRecipes.mepPaprikaId)
+        XCTAssertEqual(try roundTrip(patch), patch)
+    }
+
+    func test_miseEnPlacePatchSet_roundTripsInsidePatchSet() throws {
+        let patchSet = PatchSet(
+            baseRecipeId: SeedRecipes.recipeId,
+            baseRecipeVersion: 1,
+            patches: [
+                .updateMiseEnPlaceComponent(id: SeedRecipes.mepCuminId, text: "1 tsp cumin"),
+                .removeMiseEnPlaceEntry(id: SeedRecipes.mepSoloTodoId),
+            ]
+        )
+        XCTAssertEqual(try roundTrip(patchSet), patchSet)
+    }
 }

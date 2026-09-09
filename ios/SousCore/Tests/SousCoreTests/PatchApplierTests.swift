@@ -478,4 +478,171 @@ struct PatchApplierTests {
         let updated = try PatchApplier.apply(patchSet: patchSet, to: recipe)
         #expect(updated.servings == 8)
     }
+
+    // MARK: - Mise en place
+
+    private func applyMEP(_ patches: [Patch], to recipe: Recipe) throws -> Recipe {
+        let ps = PatchSet(baseRecipeId: recipe.id, baseRecipeVersion: recipe.version, patches: patches)
+        return try PatchApplier.apply(patchSet: ps, to: recipe)
+    }
+
+    private func group(_ recipe: Recipe, _ id: UUID) -> (String, [MiseEnPlaceComponent])? {
+        guard let entry = recipe.miseEnPlace?.first(where: { $0.id == id }),
+              case .group(let name, let components) = entry.content else { return nil }
+        return (name, components)
+    }
+
+    private func solo(_ recipe: Recipe, _ id: UUID) -> (String, Bool)? {
+        guard let entry = recipe.miseEnPlace?.first(where: { $0.id == id }),
+              case .solo(let instruction, let isDone) = entry.content else { return nil }
+        return (instruction, isDone)
+    }
+
+    @Test("Patches that do not touch mise en place leave it untouched")
+    func mepUntouchedByOtherPatches() throws {
+        let recipe = SeedRecipes.sampleWithMiseEnPlace()
+        let updated = try applyMEP([.setTitle("New Title")], to: recipe)
+        #expect(updated.miseEnPlace == recipe.miseEnPlace)
+    }
+
+    @Test("updateMiseEnPlaceComponent rewrites the component text and keeps its ID")
+    func mepUpdateComponentText() throws {
+        let recipe = SeedRecipes.sampleWithMiseEnPlace()
+        let updated = try applyMEP([.updateMiseEnPlaceComponent(id: SeedRecipes.mepPaprikaId, text: "2 tsp paprika")], to: recipe)
+        let (name, components) = try #require(group(updated, SeedRecipes.mepSpiceBowlId))
+        #expect(name == "Spice Bowl")
+        #expect(components.count == 2)
+        #expect(components[1].id == SeedRecipes.mepPaprikaId)
+        #expect(components[1].text == "2 tsp paprika")
+    }
+
+    @Test("updateMiseEnPlaceComponent clears the check on a component that was already done")
+    func mepUpdateComponentResetsCheck() throws {
+        let recipe = SeedRecipes.sampleWithMiseEnPlace()
+        let updated = try applyMEP([.updateMiseEnPlaceComponent(id: SeedRecipes.mepCuminId, text: "1 tsp cumin")], to: recipe)
+        let (_, components) = try #require(group(updated, SeedRecipes.mepSpiceBowlId))
+        #expect(components[0].text == "1 tsp cumin")
+        #expect(components[0].isDone == false)
+        // Sibling check state is untouched.
+        #expect(components[1].isDone == false)
+    }
+
+    @Test("updateMiseEnPlaceEntry on a group renames the vessel and preserves component checks")
+    func mepRenameVesselPreservesChecks() throws {
+        let recipe = SeedRecipes.sampleWithMiseEnPlace()
+        let updated = try applyMEP([.updateMiseEnPlaceEntry(id: SeedRecipes.mepSpiceBowlId, text: "Spice Bowl 1")], to: recipe)
+        let (name, components) = try #require(group(updated, SeedRecipes.mepSpiceBowlId))
+        #expect(name == "Spice Bowl 1")
+        #expect(components.map(\.id) == [SeedRecipes.mepCuminId, SeedRecipes.mepPaprikaId])
+        #expect(components[0].isDone == true)
+    }
+
+    @Test("updateMiseEnPlaceEntry on a solo replaces the instruction and clears its check")
+    func mepUpdateSoloResetsCheck() throws {
+        let recipe = SeedRecipes.sampleWithMiseEnPlace()
+        let updated = try applyMEP([.updateMiseEnPlaceEntry(id: SeedRecipes.mepSoloDoneId, text: "Mince 6 garlic cloves")], to: recipe)
+        let (instruction, isDone) = try #require(solo(updated, SeedRecipes.mepSoloDoneId))
+        #expect(instruction == "Mince 6 garlic cloves")
+        #expect(isDone == false)
+    }
+
+    @Test("removeMiseEnPlaceEntry drops the entry and leaves the rest in order")
+    func mepRemoveEntry() throws {
+        let recipe = SeedRecipes.sampleWithMiseEnPlace()
+        let updated = try applyMEP([.removeMiseEnPlaceEntry(id: SeedRecipes.mepSoloDoneId)], to: recipe)
+        #expect(updated.miseEnPlace?.map(\.id) == [SeedRecipes.mepSpiceBowlId, SeedRecipes.mepSoloTodoId])
+    }
+
+    @Test("removeMiseEnPlaceComponent drops only that component")
+    func mepRemoveComponent() throws {
+        let recipe = SeedRecipes.sampleWithMiseEnPlace()
+        let updated = try applyMEP([.removeMiseEnPlaceComponent(id: SeedRecipes.mepCuminId)], to: recipe)
+        let (_, components) = try #require(group(updated, SeedRecipes.mepSpiceBowlId))
+        #expect(components.map(\.id) == [SeedRecipes.mepPaprikaId])
+    }
+
+    @Test("addMiseEnPlaceComponent inserts after the named component")
+    func mepAddComponentAfter() throws {
+        let recipe = SeedRecipes.sampleWithMiseEnPlace()
+        let updated = try applyMEP([
+            .addMiseEnPlaceComponent(entryId: SeedRecipes.mepSpiceBowlId, afterId: SeedRecipes.mepCuminId, text: "1 tsp coriander")
+        ], to: recipe)
+        let (_, components) = try #require(group(updated, SeedRecipes.mepSpiceBowlId))
+        #expect(components.map(\.text) == ["cumin", "1 tsp coriander", "paprika"])
+        #expect(components[1].isDone == false)
+    }
+
+    @Test("addMiseEnPlaceEntry appends a vessel group with its components")
+    func mepAddGroupEntry() throws {
+        let recipe = SeedRecipes.sampleWithMiseEnPlace()
+        let newId = UUID()
+        let updated = try applyMEP([
+            .addMiseEnPlaceEntry(afterId: nil, vesselName: "Aromatics Bowl", items: ["garlic", "ginger"], preassignedId: newId)
+        ], to: recipe)
+        #expect(updated.miseEnPlace?.count == 4)
+        let (name, components) = try #require(group(updated, newId))
+        #expect(name == "Aromatics Bowl")
+        #expect(components.map(\.text) == ["garlic", "ginger"])
+        #expect(components.allSatisfy { !$0.isDone })
+    }
+
+    @Test("addMiseEnPlaceEntry with no vessel name creates an unchecked solo entry")
+    func mepAddSoloEntry() throws {
+        let recipe = SeedRecipes.sampleWithMiseEnPlace()
+        let newId = UUID()
+        let updated = try applyMEP([
+            .addMiseEnPlaceEntry(afterId: SeedRecipes.mepSpiceBowlId, vesselName: nil, items: ["Toast the pine nuts"], preassignedId: newId)
+        ], to: recipe)
+        #expect(updated.miseEnPlace?.map(\.id) == [SeedRecipes.mepSpiceBowlId, newId, SeedRecipes.mepSoloDoneId, SeedRecipes.mepSoloTodoId])
+        let (instruction, isDone) = try #require(solo(updated, newId))
+        #expect(instruction == "Toast the pine nuts")
+        #expect(isDone == false)
+    }
+
+    @Test("addMiseEnPlaceEntry creates the section when the recipe has none")
+    func mepAddEntryToRecipeWithoutSection() throws {
+        let recipe = SeedRecipes.sample()
+        #expect(recipe.miseEnPlace == nil)
+        let updated = try applyMEP([
+            .addMiseEnPlaceEntry(afterId: nil, vesselName: "Spice Bowl", items: ["cumin"], preassignedId: nil)
+        ], to: recipe)
+        #expect(updated.miseEnPlace?.count == 1)
+    }
+
+    @Test("Mise en place patches apply atomically — an invalid op discards the whole set")
+    func mepAtomicity() throws {
+        let recipe = SeedRecipes.sampleWithMiseEnPlace()
+        let ps = PatchSet(
+            baseRecipeId: recipe.id,
+            baseRecipeVersion: 1,
+            patches: [
+                .updateMiseEnPlaceComponent(id: SeedRecipes.mepPaprikaId, text: "2 tsp paprika"),
+                .updateMiseEnPlaceComponent(id: UUID(), text: "nonexistent"),
+            ]
+        )
+        #expect(throws: PatchApplierError.self) {
+            _ = try PatchApplier.apply(patchSet: ps, to: recipe)
+        }
+        // Nothing was written to the original recipe.
+        let (_, components) = try #require(group(recipe, SeedRecipes.mepSpiceBowlId))
+        #expect(components[1].text == "paprika")
+    }
+
+    @Test("A mise en place patch increments the recipe version")
+    func mepVersionIncrement() throws {
+        let recipe = SeedRecipes.sampleWithMiseEnPlace()
+        let updated = try applyMEP([.updateMiseEnPlaceComponent(id: SeedRecipes.mepPaprikaId, text: "2 tsp paprika")], to: recipe)
+        #expect(updated.version == 2)
+    }
+
+    @Test("Mise en place edits leave ingredients and steps untouched")
+    func mepDoesNotTouchStepsOrIngredients() throws {
+        let recipe = SeedRecipes.sampleWithMiseEnPlace()
+        let updated = try applyMEP([
+            .updateMiseEnPlaceComponent(id: SeedRecipes.mepPaprikaId, text: "2 tsp paprika"),
+            .removeMiseEnPlaceEntry(id: SeedRecipes.mepSoloTodoId),
+        ], to: recipe)
+        #expect(updated.steps == recipe.steps)
+        #expect(updated.ingredients == recipe.ingredients)
+    }
 }

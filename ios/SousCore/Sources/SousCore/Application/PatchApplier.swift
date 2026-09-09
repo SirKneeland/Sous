@@ -41,6 +41,7 @@ public enum PatchApplier {
         var ingredients = recipe.ingredients
         var steps = recipe.steps
         var notes = recipe.notes
+        var miseEnPlace = recipe.miseEnPlace
 
         for patch in patchSet.patches {
             switch patch {
@@ -130,6 +131,81 @@ public enum PatchApplier {
                     step.notes = notesList
                 }
 
+            case .addMiseEnPlaceEntry(let afterId, let vesselName, let items, let preassignedId):
+                let entryId = preassignedId ?? UUID()
+                let newEntry: MiseEnPlaceEntry
+                if let vesselName = vesselName {
+                    let components = items.map { MiseEnPlaceComponent(text: $0) }
+                    newEntry = MiseEnPlaceEntry(id: entryId, content: .group(vesselName: vesselName, components: components))
+                } else {
+                    // Validation guarantees exactly one item for a solo entry.
+                    newEntry = MiseEnPlaceEntry(id: entryId, content: .solo(instruction: items.first ?? "", isDone: false))
+                }
+                if miseEnPlace == nil { miseEnPlace = [] }
+                if let afterId = afterId, let idx = miseEnPlace!.firstIndex(where: { $0.id == afterId }) {
+                    miseEnPlace!.insert(newEntry, at: idx + 1)
+                } else {
+                    miseEnPlace!.append(newEntry)
+                }
+
+            case .updateMiseEnPlaceEntry(let id, let text):
+                if let idx = miseEnPlace?.firstIndex(where: { $0.id == id }) {
+                    switch miseEnPlace![idx].content {
+                    case .group(_, let components):
+                        // Renaming the vessel leaves component check state untouched.
+                        miseEnPlace![idx] = MiseEnPlaceEntry(id: id, content: .group(vesselName: text, components: components))
+                    case .solo:
+                        // The instruction changed, so the old "done" assertion no longer
+                        // describes what is on the counter — reset it.
+                        miseEnPlace![idx] = MiseEnPlaceEntry(id: id, content: .solo(instruction: text, isDone: false))
+                    }
+                }
+
+            case .removeMiseEnPlaceEntry(let id):
+                miseEnPlace?.removeAll { $0.id == id }
+
+            case .addMiseEnPlaceComponent(let entryId, let afterId, let text):
+                if let idx = miseEnPlace?.firstIndex(where: { $0.id == entryId }),
+                   case .group(let vesselName, var components) = miseEnPlace![idx].content {
+                    let newComponent = MiseEnPlaceComponent(text: text)
+                    if let afterId = afterId, let cIdx = components.firstIndex(where: { $0.id == afterId }) {
+                        components.insert(newComponent, at: cIdx + 1)
+                    } else {
+                        components.append(newComponent)
+                    }
+                    miseEnPlace![idx] = MiseEnPlaceEntry(id: entryId, content: .group(vesselName: vesselName, components: components))
+                }
+
+            case .updateMiseEnPlaceComponent(let id, let text):
+                if let entries = miseEnPlace {
+                    for idx in entries.indices {
+                        guard case .group(let vesselName, var components) = entries[idx].content,
+                              let cIdx = components.firstIndex(where: { $0.id == id }) else { continue }
+                        // Text changed, so the existing check no longer describes what was
+                        // prepped — reset it and let the cook re-check.
+                        components[cIdx] = MiseEnPlaceComponent(id: id, text: text, isDone: false)
+                        miseEnPlace![idx] = MiseEnPlaceEntry(
+                            id: entries[idx].id,
+                            content: .group(vesselName: vesselName, components: components)
+                        )
+                        break
+                    }
+                }
+
+            case .removeMiseEnPlaceComponent(let id):
+                if let entries = miseEnPlace {
+                    for idx in entries.indices {
+                        guard case .group(let vesselName, var components) = entries[idx].content,
+                              components.contains(where: { $0.id == id }) else { continue }
+                        components.removeAll { $0.id == id }
+                        miseEnPlace![idx] = MiseEnPlaceEntry(
+                            id: entries[idx].id,
+                            content: .group(vesselName: vesselName, components: components)
+                        )
+                        break
+                    }
+                }
+
             case .addNoteSection(let afterId, let header, let items):
                 let newSection = NoteSection(header: header, items: items)
                 if let afterId = afterId, let idx = notes?.firstIndex(where: { $0.id == afterId }) {
@@ -157,7 +233,7 @@ public enum PatchApplier {
             ingredients: ingredients,
             steps: steps,
             notes: notes,
-            miseEnPlace: recipe.miseEnPlace,
+            miseEnPlace: miseEnPlace,
             // Prefer a servings value carried on the patchSet (e.g. the model rescaled the
             // recipe); otherwise preserve whatever the recipe already had.
             servings: patchSet.servings ?? recipe.servings

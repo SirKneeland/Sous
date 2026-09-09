@@ -63,3 +63,59 @@ No UI test coverage exists for this. After any refactor of `ChatSheetView`, manu
 - **Flagged:** 2026-06-08
 
 A `// TODO` marks the response format field as stubbed — `json_schema(name:)` is not yet wired because the full schema definition was not available at the time. Currently falls back to unstructured JSON output, which works because the two-pass decoder handles malformed output. Low urgency but worth formalizing when the schema stabilizes.
+
+---
+
+## Eval suite: `patch-removes-ingredient` is prompt-sensitive
+
+- **Area:** `evals/cases/core-behaviors.json`, `evals/run.ts`
+- **Type:** Flaky eval / prompt fragility
+- **Flagged:** 2026-09-07 (updated same day)
+
+While adding the mise en place patch operations, `patch-removes-ingredient` and
+`patch-rescales-servings` were measured repeatedly under identical and
+near-identical prompts. Both sat on a knife edge: the model sometimes answers with a
+clarifying question instead of a patchSet ("which substitute do you want?", "what does
+it currently serve?"), which scores 0 on `schemaScorer`.
+
+`patch-rescales-servings` has since been rewritten and is stable (10/10 runs). Its root
+cause was concrete: the case declared `servings: 4` but neither the eval runner nor
+`OpenAILLMOrchestrator` serialised the recipe's own yield into RECIPE CONTEXT, so the
+model never saw it and asking "what does it currently serve?" was reasonable. Both now
+emit a `servings:` line, and the case uses a dish that scales cleanly (sheet-pan thighs
+rather than one whole chicken, which forced a "second bird or bigger bird?" judgement).
+
+`patch-removes-ingredient` remains mildly flaky (roughly 4 of 5 runs pass) — the model
+occasionally asks which substitute the user wants instead of picking one. If it becomes
+noisy enough to obscure real regressions, the same treatment applies: remove the
+ambiguity from the case rather than lean harder on the prompt.
+
+Two lessons from that investigation, worth keeping for future prompt work:
+
+1. Anything added inside the numbered RULES list competes with rule 7 ("emit patchSet
+   when the user's message implies a recipe change") and can suppress patching
+   suite-wide. Prefer the tail of the prompt for narrow, conditional guidance.
+2. A context line reporting an *absent* section ("miseEnPlace: none …") also suppressed
+   patching, apparently by drawing attention to what the context lacks. RECIPE CONTEXT
+   now omits the mise en place line entirely when there is no section, matching how
+   `notes` is handled.
+
+Run-to-run variance on the suite as a whole is roughly ±5 points on `schemaScorer` even
+with an unchanged prompt. Judge one prompt change against several runs, not one.
+
+---
+
+## Eval prompts in `evals/run.ts` have drifted from `OpenAILLMOrchestrator.swift`
+
+- **Area:** `evals/run.ts`
+- **Type:** Maintenance
+- **Flagged:** 2026-09-07
+
+`SYSTEM_PROMPT_HAS_CANVAS` in the eval runner is a hand-copied mirror of the Swift
+prompt and is now several changes behind: it still lists `add_substep` /
+`update_substep` / `complete_substep` / `add_note` instead of the current step-tree and
+note-section operations, and it still asks for third-person `proposed_memory` while the
+Swift prompt (and the `proposed-memory-second-person` case) require second person —
+which is why that case fails on both the current and the pre-change prompt. The mise en
+place work mirrored only its own additions rather than resyncing the whole prompt, to
+avoid moving many cases at once. A deliberate resync pass is worth scheduling.

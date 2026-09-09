@@ -66,6 +66,32 @@ Step {
 
 ---
 
+## Mise en Place State
+
+The mise en place section lives on Recipe State (`miseEnPlace`), is absent until the
+user triggers extraction, and is rendered between Ingredients and Procedure.
+
+```ts
+MiseEnPlaceEntry =
+  | { id: string; type: "group"; vesselName: string; components: MiseEnPlaceComponent[] }
+  | { id: string; type: "solo";  instruction: string; isDone: boolean }
+
+MiseEnPlaceComponent { id: string; text: string; isDone: boolean }
+```
+
+Rules:
+- Entry ids and component ids are stable and are the targets for patch operations
+  (see docs/PatchingRules.md).
+- A group entry is done when all of its components are done.
+- Checked mise en place items are **not** immutable the way `done` steps are. A patch
+  may edit or remove them; editing the text of a component or of a solo entry clears
+  that item's check, because the check no longer describes what is staged. Renaming a
+  vessel preserves its components' check state.
+- Mise en place check state does not affect "all steps done" logic and is reset on
+  New Recipe.
+
+---
+
 ## User Preferences State
 
 User Preferences represent explicit, persistent constraints and context provided by the user.

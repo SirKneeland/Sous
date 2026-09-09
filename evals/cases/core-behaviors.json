@@ -1471,19 +1471,19 @@
   },
   {
     "name": "patch-rescales-servings",
-    "description": "Canvas exists serving 4. User asks to rescale to 8. Sous should propose a patchSet that scales ingredient quantities and time/vessel-dependent steps, and report servings=8.",
+    "description": "Canvas recipe yields 4 and RECIPE CONTEXT says so. User asks to scale it to 8. Sous should propose a patchSet that doubles the quantities and updates the step whose vessel no longer fits, without asking what the recipe currently serves.",
     "promptType": "has_canvas",
     "input": {
       "recipeState": {
         "version": 1,
-        "title": "Simple Roast Chicken",
+        "title": "Sheet-Pan Chicken Thighs",
         "servings": 4,
         "ingredients": [
           {
             "id": "i1",
-            "name": "whole chicken",
-            "quantity": "1",
-            "unit": "whole",
+            "name": "bone-in chicken thighs",
+            "quantity": "8",
+            "unit": "",
             "checked": false
           },
           {
@@ -1495,6 +1495,101 @@
           },
           {
             "id": "i3",
+            "name": "garlic, minced",
+            "quantity": "4",
+            "unit": "cloves",
+            "checked": false
+          },
+          {
+            "id": "i4",
+            "name": "kosher salt",
+            "quantity": "1",
+            "unit": "tsp",
+            "checked": false
+          },
+          {
+            "id": "i5",
+            "name": "lemon",
+            "quantity": "1",
+            "unit": "",
+            "checked": false
+          }
+        ],
+        "steps": [
+          {
+            "id": "s1",
+            "text": "Preheat the oven to 425°F.",
+            "status": "todo"
+          },
+          {
+            "id": "s2",
+            "text": "Toss the thighs with the oil, garlic, and salt.",
+            "status": "todo"
+          },
+          {
+            "id": "s3",
+            "text": "Arrange the thighs skin-side up in a single layer on one half-sheet pan.",
+            "status": "todo"
+          },
+          {
+            "id": "s4",
+            "text": "Roast for 35 minutes, until the skin is crisp and the juices run clear.",
+            "status": "todo"
+          },
+          {
+            "id": "s5",
+            "text": "Squeeze the lemon over the top and rest for 5 minutes before serving.",
+            "status": "todo"
+          }
+        ]
+      },
+      "chatHistory": [],
+      "userMessage": "I've got eight people coming instead of four — can you scale this up?"
+    },
+    "expected": {
+      "shouldPatch": true,
+      "notes": "RECIPE CONTEXT states servings: 4 and the user asked for 8, so both yields are known — Sous must patch rather than ask what the recipe currently serves. Expect a patchSet that doubles the scalable ingredient quantities (i1-i4; the lemon may reasonably double or stay) and updates s3, because sixteen thighs cannot sit in a single layer on one half-sheet pan — a second pan or a larger pan is required. Reporting top-level servings: 8 is expected. Roast time may reasonably stay at 35 minutes when the thighs are spread across two pans; do not penalise leaving s4 alone. Asking a clarifying question instead of patching is a failure."
+    }
+  },
+  {
+    "name": "mise-en-place-add-amounts",
+    "description": "A mise en place section exists. The user asks for ingredient amounts to be written into the mise en place items. Sous must patch the mise en place entries by id, never add procedure steps.",
+    "promptType": "has_canvas",
+    "input": {
+      "recipeState": {
+        "version": 1,
+        "title": "Skillet Chicken",
+        "ingredients": [
+          {
+            "id": "i1",
+            "name": "chicken thighs",
+            "quantity": "1.5",
+            "unit": "lb",
+            "checked": false
+          },
+          {
+            "id": "i2",
+            "name": "cumin",
+            "quantity": "1",
+            "unit": "tsp",
+            "checked": false
+          },
+          {
+            "id": "i3",
+            "name": "smoked paprika",
+            "quantity": "2",
+            "unit": "tsp",
+            "checked": false
+          },
+          {
+            "id": "i4",
+            "name": "neutral oil",
+            "quantity": "6",
+            "unit": "tbsp",
+            "checked": false
+          },
+          {
+            "id": "i5",
             "name": "garlic",
             "quantity": "4",
             "unit": "cloves",
@@ -1504,22 +1599,327 @@
         "steps": [
           {
             "id": "s1",
-            "text": "Preheat oven to 425°F.",
+            "text": "Heat the oil in a large skillet over medium-high.",
             "status": "todo"
           },
           {
             "id": "s2",
-            "text": "Roast chicken for 60 minutes in a 9x13 inch pan.",
+            "text": "Add the spice mix and bloom for 30 seconds.",
+            "status": "todo"
+          },
+          {
+            "id": "s3",
+            "text": "Add the chicken and cook until browned, about 8 minutes.",
+            "status": "todo"
+          }
+        ],
+        "miseEnPlace": [
+          {
+            "id": "m1",
+            "type": "group",
+            "vesselName": "Spice Bowl",
+            "components": [
+              {
+                "id": "mc1",
+                "text": "cumin",
+                "done": false
+              },
+              {
+                "id": "mc2",
+                "text": "smoked paprika",
+                "done": false
+              }
+            ]
+          },
+          {
+            "id": "m2",
+            "type": "solo",
+            "instruction": "Mince the garlic",
+            "done": false
+          },
+          {
+            "id": "m3",
+            "type": "solo",
+            "instruction": "Measure the oil",
+            "done": false
+          }
+        ]
+      },
+      "chatHistory": [],
+      "userMessage": "Can you put the ingredient amounts into the mise en place instructions?"
+    },
+    "expected": {
+      "shouldPatch": true,
+      "notes": "Sous must emit a patchSet that rewrites the mise en place items to include amounts, using the mise en place operations (update_mise_en_place_component for components mc1/mc2, update_mise_en_place_entry for solo entries m2/m3). Emitting add_step or update_step for this request is a failure — mise en place is not the procedure. Adding new procedure steps such as 'Measure 6 tablespoons neutral oil' is the specific regression this case guards against."
+    }
+  },
+  {
+    "name": "mise-en-place-absent-never-adds-steps",
+    "description": "Regression guard: no mise en place section exists and the user asks to change it. Sous must not append procedure steps as a substitute.",
+    "promptType": "has_canvas",
+    "input": {
+      "recipeState": {
+        "version": 1,
+        "title": "Skillet Chicken",
+        "ingredients": [
+          {
+            "id": "i1",
+            "name": "chicken thighs",
+            "quantity": "1.5",
+            "unit": "lb",
+            "checked": false
+          },
+          {
+            "id": "i2",
+            "name": "cumin",
+            "quantity": "1",
+            "unit": "tsp",
+            "checked": false
+          },
+          {
+            "id": "i3",
+            "name": "smoked paprika",
+            "quantity": "2",
+            "unit": "tsp",
+            "checked": false
+          },
+          {
+            "id": "i4",
+            "name": "neutral oil",
+            "quantity": "6",
+            "unit": "tbsp",
+            "checked": false
+          },
+          {
+            "id": "i5",
+            "name": "garlic",
+            "quantity": "4",
+            "unit": "cloves",
+            "checked": false
+          }
+        ],
+        "steps": [
+          {
+            "id": "s1",
+            "text": "Heat the oil in a large skillet over medium-high.",
+            "status": "todo"
+          },
+          {
+            "id": "s2",
+            "text": "Add the spice mix and bloom for 30 seconds.",
+            "status": "todo"
+          },
+          {
+            "id": "s3",
+            "text": "Add the chicken and cook until browned, about 8 minutes.",
             "status": "todo"
           }
         ]
       },
       "chatHistory": [],
-      "userMessage": "Please rescale this recipe to serve 8 people. Adjust ingredient quantities, cooking times, vessel sizes, and any procedure steps where scaling would affect the outcome (e.g. cooking times, pan sizes)."
+      "userMessage": "Can you put the ingredient amounts into the mise en place instructions?"
+    },
+    "expected": {
+      "shouldPatch": false,
+      "notes": "RECIPE CONTEXT says miseEnPlace is none, so there is nothing to edit. Sous must emit patchSet: null, say the recipe has no mise en place section yet, and point the user at the mise en place (carrot) button. Emitting any patchSet is a failure — in particular, appending add_step patches like 'Measure 6 tablespoons neutral oil' to the procedure is the exact bug this case guards against."
+    }
+  },
+  {
+    "name": "mise-en-place-remove-vessel",
+    "description": "User asks to drop a vessel group from the prep list. Sous should remove the mise en place entry rather than editing the procedure.",
+    "promptType": "has_canvas",
+    "input": {
+      "recipeState": {
+        "version": 1,
+        "title": "Skillet Chicken",
+        "ingredients": [
+          {
+            "id": "i1",
+            "name": "chicken thighs",
+            "quantity": "1.5",
+            "unit": "lb",
+            "checked": false
+          },
+          {
+            "id": "i2",
+            "name": "cumin",
+            "quantity": "1",
+            "unit": "tsp",
+            "checked": false
+          },
+          {
+            "id": "i3",
+            "name": "smoked paprika",
+            "quantity": "2",
+            "unit": "tsp",
+            "checked": false
+          },
+          {
+            "id": "i4",
+            "name": "neutral oil",
+            "quantity": "6",
+            "unit": "tbsp",
+            "checked": false
+          },
+          {
+            "id": "i5",
+            "name": "garlic",
+            "quantity": "4",
+            "unit": "cloves",
+            "checked": false
+          }
+        ],
+        "steps": [
+          {
+            "id": "s1",
+            "text": "Heat the oil in a large skillet over medium-high.",
+            "status": "todo"
+          },
+          {
+            "id": "s2",
+            "text": "Add the spice mix and bloom for 30 seconds.",
+            "status": "todo"
+          },
+          {
+            "id": "s3",
+            "text": "Add the chicken and cook until browned, about 8 minutes.",
+            "status": "todo"
+          }
+        ],
+        "miseEnPlace": [
+          {
+            "id": "m1",
+            "type": "group",
+            "vesselName": "Spice Bowl",
+            "components": [
+              {
+                "id": "mc1",
+                "text": "cumin",
+                "done": false
+              },
+              {
+                "id": "mc2",
+                "text": "smoked paprika",
+                "done": false
+              }
+            ]
+          },
+          {
+            "id": "m2",
+            "type": "solo",
+            "instruction": "Mince the garlic",
+            "done": false
+          },
+          {
+            "id": "m3",
+            "type": "solo",
+            "instruction": "Measure the oil",
+            "done": false
+          }
+        ]
+      },
+      "chatHistory": [],
+      "userMessage": "Drop the spice bowl from the prep list, I'll just add the spices straight from the jars."
     },
     "expected": {
       "shouldPatch": true,
-      "notes": "User asked to rescale from 4 to 8. Should propose a patchSet that scales ingredient quantities (e.g. olive oil, garlic, and likely a second chicken or larger bird) and updates time/vessel-dependent steps (s2: larger or additional pan, adjusted roast time). Must report top-level servings=8. Must not modify any 'done' steps."
+      "notes": "Sous should emit remove_mise_en_place_entry for entry m1 (the Spice Bowl). It must not use remove_step or otherwise edit the procedure to satisfy this request."
+    }
+  },
+  {
+    "name": "mise-en-place-checked-item-edit",
+    "description": "The user asks to change a mise en place component they have already checked off. Sous should still patch it (mise en place is not immutable like done steps) and note that the checkmark clears.",
+    "promptType": "has_canvas",
+    "input": {
+      "recipeState": {
+        "version": 1,
+        "title": "Skillet Chicken",
+        "ingredients": [
+          {
+            "id": "i1",
+            "name": "chicken thighs",
+            "quantity": "1.5",
+            "unit": "lb",
+            "checked": false
+          },
+          {
+            "id": "i2",
+            "name": "cumin",
+            "quantity": "1",
+            "unit": "tsp",
+            "checked": false
+          },
+          {
+            "id": "i3",
+            "name": "smoked paprika",
+            "quantity": "2",
+            "unit": "tsp",
+            "checked": false
+          },
+          {
+            "id": "i4",
+            "name": "neutral oil",
+            "quantity": "6",
+            "unit": "tbsp",
+            "checked": false
+          },
+          {
+            "id": "i5",
+            "name": "garlic",
+            "quantity": "4",
+            "unit": "cloves",
+            "checked": false
+          }
+        ],
+        "steps": [
+          {
+            "id": "s1",
+            "text": "Heat the oil in a large skillet over medium-high.",
+            "status": "todo"
+          },
+          {
+            "id": "s2",
+            "text": "Add the spice mix and bloom for 30 seconds.",
+            "status": "todo"
+          },
+          {
+            "id": "s3",
+            "text": "Add the chicken and cook until browned, about 8 minutes.",
+            "status": "todo"
+          }
+        ],
+        "miseEnPlace": [
+          {
+            "id": "m1",
+            "type": "group",
+            "vesselName": "Spice Bowl",
+            "components": [
+              {
+                "id": "mc1",
+                "text": "1 tsp cumin",
+                "done": true
+              },
+              {
+                "id": "mc2",
+                "text": "2 tsp smoked paprika",
+                "done": true
+              }
+            ]
+          },
+          {
+            "id": "m2",
+            "type": "solo",
+            "instruction": "Mince the garlic",
+            "done": false
+          }
+        ]
+      },
+      "chatHistory": [],
+      "userMessage": "Make it 2 teaspoons of cumin instead — I already measured it out but I can add more."
+    },
+    "expected": {
+      "shouldPatch": true,
+      "notes": "Unlike a done step, a checked mise en place component can still be edited. Sous should emit update_mise_en_place_component for mc1 with the new amount. It must not refuse on immutability grounds and must not add a procedure step instead."
     }
   }
 ]

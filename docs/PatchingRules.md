@@ -71,6 +71,33 @@ This guarantees deterministic, order-safe behavior.
 - `remove_ingredient(id)`
 - `add_note(text)`
 
+### Mise en Place Operations
+
+The mise en place section has its own operations. They are the **only** way to change
+it — a mise en place edit expressed as `add_step` / `update_step` / `remove_step` is a
+bug, because those operate on the Procedure.
+
+- `add_mise_en_place_entry(after_id, vessel_name, items, client_id)`
+  - `vessel_name` non-null → a vessel group whose components come from `items`
+  - `vessel_name` null → a solo prep instruction; `items` must hold exactly one string
+- `update_mise_en_place_entry(id, text)` — renames a vessel group, or replaces a solo
+  entry's instruction
+- `remove_mise_en_place_entry(id)`
+- `add_mise_en_place_component(entry_id, after_id, text)` — `entry_id` must be a group
+- `update_mise_en_place_component(id, text)`
+- `remove_mise_en_place_component(id)`
+
+There is no reorder operation, matching ingredients and steps: reordering is
+remove + add in one PatchSet.
+
+**Check state.** Unlike a `done` step, a checked mise en place item is not immutable —
+prep staged in a bowl can still be adjusted. Editing a component's text or a solo
+entry's instruction therefore applies the edit and **clears that item's checkmark**,
+because the check asserted "I prepped exactly this" and the text no longer says that.
+Renaming a vessel does not touch component checkmarks. Removing a checked item is
+allowed. When no mise en place section exists, every mise en place operation is
+invalid: the assistant must say so rather than adding Procedure steps in its place.
+
 Additional constraints:
 
 - Step IDs and ingredient IDs must refer to existing entities at the time of execution.

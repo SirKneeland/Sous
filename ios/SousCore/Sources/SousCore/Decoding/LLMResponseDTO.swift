@@ -51,6 +51,13 @@ enum LLMPatchOpDTO: Equatable, Sendable {
     case removeStep(id: String)
     case setTitle(title: String)
     case setStepNotes(stepId: String, notes: [String])
+    /// `clientId` is a model-assigned temporary reference for a newly added entry.
+    case addMiseEnPlaceEntry(afterId: String?, vesselName: String?, items: [String], clientId: String?)
+    case updateMiseEnPlaceEntry(id: String, text: String)
+    case removeMiseEnPlaceEntry(id: String)
+    case addMiseEnPlaceComponent(entryId: String, afterId: String?, text: String)
+    case updateMiseEnPlaceComponent(id: String, text: String)
+    case removeMiseEnPlaceComponent(id: String)
     case addNoteSection(afterId: String?, header: String?, items: [String])
     case updateNoteSection(id: String, header: String?, items: [String])
     case removeNoteSection(id: String)

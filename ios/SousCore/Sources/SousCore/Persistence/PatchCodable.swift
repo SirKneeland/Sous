@@ -42,6 +42,7 @@ extension Patch: Codable {
         case type, text, id, afterId, groupId, afterGroupId, header, items
         case parentId, afterStepId, preassignedId, title
         case stepId, notes, sectionId
+        case vesselName, entryId
         // Legacy keys kept for decoding persisted patches from old sessions
         case parentStepId, subStepId, afterSubStepId
     }
@@ -103,6 +104,37 @@ extension Patch: Codable {
             try c.encode("setStepNotes", forKey: .type)
             try c.encode(stepId, forKey: .stepId)
             try c.encode(notesList, forKey: .notes)
+
+        case .addMiseEnPlaceEntry(let afterId, let vesselName, let items, let preassignedId):
+            try c.encode("addMiseEnPlaceEntry", forKey: .type)
+            try c.encodeIfPresent(afterId, forKey: .afterId)
+            try c.encodeIfPresent(vesselName, forKey: .vesselName)
+            try c.encode(items, forKey: .items)
+            try c.encodeIfPresent(preassignedId, forKey: .preassignedId)
+
+        case .updateMiseEnPlaceEntry(let id, let text):
+            try c.encode("updateMiseEnPlaceEntry", forKey: .type)
+            try c.encode(id, forKey: .id)
+            try c.encode(text, forKey: .text)
+
+        case .removeMiseEnPlaceEntry(let id):
+            try c.encode("removeMiseEnPlaceEntry", forKey: .type)
+            try c.encode(id, forKey: .id)
+
+        case .addMiseEnPlaceComponent(let entryId, let afterId, let text):
+            try c.encode("addMiseEnPlaceComponent", forKey: .type)
+            try c.encode(entryId, forKey: .entryId)
+            try c.encodeIfPresent(afterId, forKey: .afterId)
+            try c.encode(text, forKey: .text)
+
+        case .updateMiseEnPlaceComponent(let id, let text):
+            try c.encode("updateMiseEnPlaceComponent", forKey: .type)
+            try c.encode(id, forKey: .id)
+            try c.encode(text, forKey: .text)
+
+        case .removeMiseEnPlaceComponent(let id):
+            try c.encode("removeMiseEnPlaceComponent", forKey: .type)
+            try c.encode(id, forKey: .id)
 
         case .addNoteSection(let afterId, let header, let items):
             try c.encode("addNoteSection", forKey: .type)
@@ -185,6 +217,39 @@ extension Patch: Codable {
                 stepId: try c.decode(UUID.self, forKey: .stepId),
                 notes: try c.decode([String].self, forKey: .notes)
             )
+
+        case "addMiseEnPlaceEntry":
+            self = .addMiseEnPlaceEntry(
+                afterId: try c.decodeIfPresent(UUID.self, forKey: .afterId),
+                vesselName: try c.decodeIfPresent(String.self, forKey: .vesselName),
+                items: try c.decode([String].self, forKey: .items),
+                preassignedId: try c.decodeIfPresent(UUID.self, forKey: .preassignedId)
+            )
+
+        case "updateMiseEnPlaceEntry":
+            self = .updateMiseEnPlaceEntry(
+                id: try c.decode(UUID.self, forKey: .id),
+                text: try c.decode(String.self, forKey: .text)
+            )
+
+        case "removeMiseEnPlaceEntry":
+            self = .removeMiseEnPlaceEntry(id: try c.decode(UUID.self, forKey: .id))
+
+        case "addMiseEnPlaceComponent":
+            self = .addMiseEnPlaceComponent(
+                entryId: try c.decode(UUID.self, forKey: .entryId),
+                afterId: try c.decodeIfPresent(UUID.self, forKey: .afterId),
+                text: try c.decode(String.self, forKey: .text)
+            )
+
+        case "updateMiseEnPlaceComponent":
+            self = .updateMiseEnPlaceComponent(
+                id: try c.decode(UUID.self, forKey: .id),
+                text: try c.decode(String.self, forKey: .text)
+            )
+
+        case "removeMiseEnPlaceComponent":
+            self = .removeMiseEnPlaceComponent(id: try c.decode(UUID.self, forKey: .id))
 
         case "addNoteSection":
             self = .addNoteSection(

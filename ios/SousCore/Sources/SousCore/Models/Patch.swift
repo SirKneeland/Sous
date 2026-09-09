@@ -18,6 +18,15 @@ public enum Patch: Equatable, Sendable {
     case removeStep(id: UUID)
     case setStepNotes(stepId: UUID, notes: [String])
 
+    // Mise en place — entry-level (vessel group or solo prep instruction) and
+    // component-level (one checkable item inside a vessel group) operations.
+    case addMiseEnPlaceEntry(afterId: UUID?, vesselName: String?, items: [String], preassignedId: UUID?)
+    case updateMiseEnPlaceEntry(id: UUID, text: String)
+    case removeMiseEnPlaceEntry(id: UUID)
+    case addMiseEnPlaceComponent(entryId: UUID, afterId: UUID?, text: String)
+    case updateMiseEnPlaceComponent(id: UUID, text: String)
+    case removeMiseEnPlaceComponent(id: UUID)
+
     // Recipe-level note sections
     case addNoteSection(afterId: UUID?, header: String?, items: [String])
     case updateNoteSection(id: UUID, header: String?, items: [String])

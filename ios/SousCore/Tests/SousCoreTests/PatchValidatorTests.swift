@@ -467,4 +467,132 @@ struct PatchValidatorTests {
         )
         #expect(PatchValidator.validate(patchSet: patchSet, recipe: recipe, hardAvoids: ["shellfish", "peanuts"]) == .valid)
     }
+
+    // MARK: - Mise en place
+
+    private func mepPatchSet(_ patches: [Patch], recipe: Recipe) -> PatchSet {
+        PatchSet(baseRecipeId: recipe.id, baseRecipeVersion: recipe.version, patches: patches)
+    }
+
+    @Test("Accepts updateMiseEnPlaceComponent on an existing component")
+    func mepUpdateComponentValid() {
+        let recipe = SeedRecipes.sampleWithMiseEnPlace()
+        let ps = mepPatchSet([.updateMiseEnPlaceComponent(id: SeedRecipes.mepPaprikaId, text: "2 tsp paprika")], recipe: recipe)
+        #expect(PatchValidator.validate(patchSet: ps, recipe: recipe) == .valid)
+    }
+
+    @Test("Accepts updateMiseEnPlaceComponent even when the component is already checked")
+    func mepUpdateCheckedComponentValid() {
+        let recipe = SeedRecipes.sampleWithMiseEnPlace()
+        let ps = mepPatchSet([.updateMiseEnPlaceComponent(id: SeedRecipes.mepCuminId, text: "1 tsp cumin")], recipe: recipe)
+        #expect(PatchValidator.validate(patchSet: ps, recipe: recipe) == .valid)
+    }
+
+    @Test("Rejects updateMiseEnPlaceComponent with unknown ID")
+    func mepUpdateComponentUnknownId() {
+        let recipe = SeedRecipes.sampleWithMiseEnPlace()
+        let badId = UUID()
+        let ps = mepPatchSet([.updateMiseEnPlaceComponent(id: badId, text: "x")], recipe: recipe)
+        #expect(PatchValidator.validate(patchSet: ps, recipe: recipe) == .invalid([.invalidMiseEnPlaceComponentId(badId)]))
+    }
+
+    @Test("Rejects mise en place ops when the recipe has no mise en place section")
+    func mepOpsWithoutSection() {
+        let recipe = SeedRecipes.sample()
+        let entryId = UUID()
+        let componentId = UUID()
+        let ps = mepPatchSet([
+            .updateMiseEnPlaceEntry(id: entryId, text: "Spice Bowl"),
+            .updateMiseEnPlaceComponent(id: componentId, text: "1 tsp cumin"),
+        ], recipe: recipe)
+        #expect(PatchValidator.validate(patchSet: ps, recipe: recipe) == .invalid([
+            .invalidMiseEnPlaceEntryId(entryId),
+            .invalidMiseEnPlaceComponentId(componentId),
+        ]))
+    }
+
+    @Test("Rejects updateMiseEnPlaceEntry with unknown ID")
+    func mepUpdateEntryUnknownId() {
+        let recipe = SeedRecipes.sampleWithMiseEnPlace()
+        let badId = UUID()
+        let ps = mepPatchSet([.updateMiseEnPlaceEntry(id: badId, text: "Bowl 2")], recipe: recipe)
+        #expect(PatchValidator.validate(patchSet: ps, recipe: recipe) == .invalid([.invalidMiseEnPlaceEntryId(badId)]))
+    }
+
+    @Test("Rejects a component update after its entry was removed in the same patchSet")
+    func mepComponentAfterEntryRemoved() {
+        let recipe = SeedRecipes.sampleWithMiseEnPlace()
+        let ps = mepPatchSet([
+            .removeMiseEnPlaceEntry(id: SeedRecipes.mepSpiceBowlId),
+            .updateMiseEnPlaceComponent(id: SeedRecipes.mepCuminId, text: "1 tsp cumin"),
+        ], recipe: recipe)
+        #expect(PatchValidator.validate(patchSet: ps, recipe: recipe) == .invalid([.invalidMiseEnPlaceComponentId(SeedRecipes.mepCuminId)]))
+    }
+
+    @Test("Rejects removing the same mise en place entry twice")
+    func mepDoubleRemoveEntry() {
+        let recipe = SeedRecipes.sampleWithMiseEnPlace()
+        let ps = mepPatchSet([
+            .removeMiseEnPlaceEntry(id: SeedRecipes.mepSoloTodoId),
+            .removeMiseEnPlaceEntry(id: SeedRecipes.mepSoloTodoId),
+        ], recipe: recipe)
+        #expect(PatchValidator.validate(patchSet: ps, recipe: recipe) == .invalid([.invalidMiseEnPlaceEntryId(SeedRecipes.mepSoloTodoId)]))
+    }
+
+    @Test("Rejects addMiseEnPlaceComponent targeting a solo entry")
+    func mepAddComponentToSolo() {
+        let recipe = SeedRecipes.sampleWithMiseEnPlace()
+        let ps = mepPatchSet([.addMiseEnPlaceComponent(entryId: SeedRecipes.mepSoloTodoId, afterId: nil, text: "salt")], recipe: recipe)
+        #expect(PatchValidator.validate(patchSet: ps, recipe: recipe) == .invalid([
+            .internalConflict("cannot add a component to a solo mise en place entry")
+        ]))
+    }
+
+    @Test("Rejects a solo mise en place entry that does not carry exactly one item")
+    func mepSoloRequiresOneItem() {
+        let recipe = SeedRecipes.sampleWithMiseEnPlace()
+        let ps = mepPatchSet([.addMiseEnPlaceEntry(afterId: nil, vesselName: nil, items: ["a", "b"], preassignedId: nil)], recipe: recipe)
+        #expect(PatchValidator.validate(patchSet: ps, recipe: recipe) == .invalid([
+            .internalConflict("a solo mise en place entry must have exactly one item")
+        ]))
+    }
+
+    @Test("Rejects an empty mise en place entry")
+    func mepEmptyEntry() {
+        let recipe = SeedRecipes.sampleWithMiseEnPlace()
+        let ps = mepPatchSet([.addMiseEnPlaceEntry(afterId: nil, vesselName: "Empty Bowl", items: [], preassignedId: nil)], recipe: recipe)
+        #expect(PatchValidator.validate(patchSet: ps, recipe: recipe) == .invalid([
+            .internalConflict("add_mise_en_place_entry requires at least one item")
+        ]))
+    }
+
+    @Test("Accepts adding components to an entry created in the same patchSet")
+    func mepAddComponentToPendingEntry() {
+        let recipe = SeedRecipes.sampleWithMiseEnPlace()
+        let newEntryId = UUID()
+        let ps = mepPatchSet([
+            .addMiseEnPlaceEntry(afterId: nil, vesselName: "Aromatics Bowl", items: ["garlic"], preassignedId: newEntryId),
+            .addMiseEnPlaceComponent(entryId: newEntryId, afterId: nil, text: "ginger"),
+        ], recipe: recipe)
+        #expect(PatchValidator.validate(patchSet: ps, recipe: recipe) == .valid)
+    }
+
+    @Test("Rejects a mise en place item that violates a hard avoid")
+    func mepHardAvoid() {
+        let recipe = SeedRecipes.sampleWithMiseEnPlace()
+        let ps = mepPatchSet([.addMiseEnPlaceComponent(entryId: SeedRecipes.mepSpiceBowlId, afterId: nil, text: "2 tbsp peanut butter")], recipe: recipe)
+        let result = PatchValidator.validate(patchSet: ps, recipe: recipe, hardAvoids: ["peanut"])
+        #expect(result == .invalid([.hardAvoidViolation(ingredient: "peanut")]))
+    }
+
+    @Test("Rejects a mise en place patchSet targeting a stale version")
+    func mepStaleVersion() {
+        let recipe = SeedRecipes.sampleWithMiseEnPlace()
+        let ps = PatchSet(
+            baseRecipeId: recipe.id,
+            baseRecipeVersion: 99,
+            patches: [.updateMiseEnPlaceComponent(id: SeedRecipes.mepPaprikaId, text: "2 tsp paprika")]
+        )
+        #expect(PatchValidator.validate(patchSet: ps, recipe: recipe) == .invalid([.versionMismatch(expected: 1, got: 99)]))
+    }
 }

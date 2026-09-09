@@ -307,10 +307,19 @@ struct PatchReviewView: View {
     // MARK: - Diff Builders
 
     private var allChangedRows: [DiffRow] {
-        // Include group headers only when at least one non-unchanged row follows in the same group.
-        var ingredientResult: [DiffRow] = []
+        let stepChanges = stepRows.filter {
+            if case .unchanged = $0 { return false }
+            return true
+        }
+        return headerAwareChanges(ingredientRows) + headerAwareChanges(miseEnPlaceRows) + stepChanges
+    }
+
+    /// Drops unchanged rows, keeping a group header only when at least one changed row
+    /// follows it in the same group.
+    private func headerAwareChanges(_ rows: [DiffRow]) -> [DiffRow] {
+        var result: [DiffRow] = []
         var pendingHeader: DiffRow? = nil
-        for row in ingredientRows {
+        for row in rows {
             switch row {
             case .groupHeader:
                 pendingHeader = row
@@ -318,18 +327,112 @@ struct PatchReviewView: View {
                 break
             default:
                 if let header = pendingHeader {
-                    ingredientResult.append(header)
+                    result.append(header)
                     pendingHeader = nil
                 }
-                ingredientResult.append(row)
+                result.append(row)
+            }
+        }
+        return result
+    }
+
+    /// Diff rows for the mise en place section. Vessel groups render as a header row
+    /// followed by one row per component; solo entries render as a single row.
+    private var miseEnPlaceRows: [DiffRow] {
+        var rows: [DiffRow] = []
+        // Entry id for each row, so component inserts can find the end of an entry.
+        var owner: [UUID: UUID] = [:]
+
+        for entry in recipe.miseEnPlace ?? [] {
+            switch entry.content {
+            case .group(let vesselName, let components):
+                rows.append(.groupHeader(id: entry.id, text: vesselName))
+                owner[entry.id] = entry.id
+                for component in components {
+                    rows.append(.unchanged(id: component.id, text: component.text))
+                    owner[component.id] = entry.id
+                }
+            case .solo(let instruction, _):
+                rows.append(.unchanged(id: entry.id, text: instruction))
+                owner[entry.id] = entry.id
             }
         }
 
-        let stepChanges = stepRows.filter {
-            if case .unchanged = $0 { return false }
-            return true
+        // Index just past the last row belonging to `entryId`.
+        func endOfEntry(_ entryId: UUID) -> Int? {
+            guard let start = rows.firstIndex(where: { $0.id == entryId }) else { return nil }
+            var idx = start + 1
+            while idx < rows.count, owner[rows[idx].id] == entryId { idx += 1 }
+            return idx
         }
-        return ingredientResult + stepChanges
+
+        for patch in patchSet.patches {
+            switch patch {
+            case .addMiseEnPlaceEntry(_, let vesselName, let items, _):
+                let entryId = UUID()
+                if let vesselName {
+                    rows.append(.added(id: entryId, text: vesselName))
+                    owner[entryId] = entryId
+                    for item in items {
+                        let componentId = UUID()
+                        rows.append(.addedSubStep(id: componentId, parentId: entryId, text: item))
+                        owner[componentId] = entryId
+                    }
+                } else {
+                    rows.append(.added(id: entryId, text: items.first ?? ""))
+                    owner[entryId] = entryId
+                }
+
+            case .updateMiseEnPlaceEntry(let id, let text):
+                if let idx = rows.firstIndex(where: { $0.id == id }) {
+                    switch rows[idx] {
+                    case .groupHeader(_, let oldText), .unchanged(_, let oldText):
+                        rows[idx] = .updated(id: id, oldText: oldText, newText: text)
+                    default:
+                        break
+                    }
+                }
+
+            case .removeMiseEnPlaceEntry(let id):
+                for idx in rows.indices where rows[idx].id == id || owner[rows[idx].id] == id {
+                    switch rows[idx] {
+                    case .groupHeader(let rowId, let text), .unchanged(let rowId, let text):
+                        rows[idx] = .removed(id: rowId, text: text)
+                    default:
+                        break
+                    }
+                }
+
+            case .addMiseEnPlaceComponent(let entryId, let afterId, let text):
+                let componentId = UUID()
+                let newRow = DiffRow.addedSubStep(id: componentId, parentId: entryId, text: text)
+                owner[componentId] = entryId
+                if let afterId, let idx = rows.firstIndex(where: { $0.id == afterId }) {
+                    rows.insert(newRow, at: idx + 1)
+                } else if let end = endOfEntry(entryId) {
+                    rows.insert(newRow, at: end)
+                } else {
+                    rows.append(newRow)
+                }
+
+            case .updateMiseEnPlaceComponent(let id, let text):
+                if let idx = rows.firstIndex(where: { $0.id == id }),
+                   case .unchanged(_, let oldText) = rows[idx] {
+                    rows[idx] = .updated(id: id, oldText: oldText, newText: text)
+                }
+
+            case .removeMiseEnPlaceComponent(let id):
+                if let idx = rows.firstIndex(where: { $0.id == id }),
+                   case .unchanged(_, let text) = rows[idx] {
+                    rows[idx] = .removed(id: id, text: text)
+                }
+
+            default:
+                break
+            }
+        }
+
+        return rows
     }
 
     private var ingredientRows: [DiffRow] {
@@ -446,6 +549,10 @@ struct PatchReviewView: View {
             return "Invalid ingredient group ID: \(id.uuidString)"
         case .invalidNoteSectionId(let id):
             return "Invalid note section ID: \(id.uuidString)"
+        case .invalidMiseEnPlaceEntryId(let id):
+            return "Invalid mise en place entry ID: \(id.uuidString)"
+        case .invalidMiseEnPlaceComponentId(let id):
+            return "Invalid mise en place component ID: \(id.uuidString)"
         }
     }
 }

@@ -240,6 +240,29 @@ struct PatchSetDecoder: Sendable {
                 guard let stepId = obj["step_id"] as? String,
                       let notes = obj["notes"] as? [String] else { return .schemaInvalid(.patchOpMissingField) }
                 patches.append(.setStepNotes(stepId: stepId, notes: notes))
+            case "add_mise_en_place_entry":
+                guard let items = obj["items"] as? [String] else { return .schemaInvalid(.patchOpMissingField) }
+                patches.append(.addMiseEnPlaceEntry(
+                    afterId: obj["after_id"] as? String,
+                    vesselName: obj["vessel_name"] as? String,
+                    items: items,
+                    clientId: obj["client_id"] as? String
+                ))
+            case "update_mise_en_place_entry":
+                guard let id = obj["id"] as? String, let text = obj["text"] as? String else { return .schemaInvalid(.patchOpMissingField) }
+                patches.append(.updateMiseEnPlaceEntry(id: id, text: text))
+            case "remove_mise_en_place_entry":
+                guard let id = obj["id"] as? String else { return .schemaInvalid(.patchOpMissingField) }
+                patches.append(.removeMiseEnPlaceEntry(id: id))
+            case "add_mise_en_place_component":
+                guard let entryId = obj["entry_id"] as? String, let text = obj["text"] as? String else { return .schemaInvalid(.patchOpMissingField) }
+                patches.append(.addMiseEnPlaceComponent(entryId: entryId, afterId: obj["after_id"] as? String, text: text))
+            case "update_mise_en_place_component":
+                guard let id = obj["id"] as? String, let text = obj["text"] as? String else { return .schemaInvalid(.patchOpMissingField) }
+                patches.append(.updateMiseEnPlaceComponent(id: id, text: text))
+            case "remove_mise_en_place_component":
+                guard let id = obj["id"] as? String else { return .schemaInvalid(.patchOpMissingField) }
+                patches.append(.removeMiseEnPlaceComponent(id: id))
             case "add_note_section":
                 guard let items = obj["items"] as? [String] else { return .schemaInvalid(.patchOpMissingField) }
                 patches.append(.addNoteSection(afterId: obj["after_id"] as? String, header: obj["header"] as? String, items: items))

@@ -14,6 +14,8 @@ public enum PatchValidationError: Equatable, Sendable {
     case parentStepDone(UUID)
     case hardAvoidViolation(ingredient: String)
     case invalidNoteSectionId(UUID)
+    case invalidMiseEnPlaceEntryId(UUID)
+    case invalidMiseEnPlaceComponentId(UUID)
 
     public var code: PatchValidationErrorCode {
         switch self {
@@ -28,6 +30,8 @@ public enum PatchValidationError: Equatable, Sendable {
         case .parentStepDone:          return .PARENT_STEP_DONE
         case .hardAvoidViolation:      return .HARD_AVOID_VIOLATION
         case .invalidNoteSectionId:    return .INVALID_NOTE_SECTION_ID
+        case .invalidMiseEnPlaceEntryId:     return .INVALID_MISE_EN_PLACE_ENTRY_ID
+        case .invalidMiseEnPlaceComponentId: return .INVALID_MISE_EN_PLACE_COMPONENT_ID
         }
     }
 }
@@ -43,6 +47,8 @@ public enum PatchValidationErrorCode: String, Sendable {
     case PARENT_STEP_DONE
     case HARD_AVOID_VIOLATION
     case INVALID_NOTE_SECTION_ID
+    case INVALID_MISE_EN_PLACE_ENTRY_ID
+    case INVALID_MISE_EN_PLACE_COMPONENT_ID
 }
 
 public enum PatchValidationResult: Equatable, Sendable {
@@ -66,6 +72,20 @@ public enum PatchValidator {
         return nil
     }
 
+    private static func findMiseEntry(id: UUID, in recipe: Recipe) -> MiseEnPlaceEntry? {
+        recipe.miseEnPlace?.first { $0.id == id }
+    }
+
+    /// Returns the entry that owns the component with `id`, or nil when no entry does.
+    private static func findMiseComponentOwner(componentId: UUID, in recipe: Recipe) -> MiseEnPlaceEntry? {
+        recipe.miseEnPlace?.first { entry in
+            if case .group(_, let components) = entry.content {
+                return components.contains { $0.id == componentId }
+            }
+            return false
+        }
+    }
+
     public static func validate(patchSet: PatchSet, recipe: Recipe, hardAvoids: [String] = []) -> PatchValidationResult {
         var errors: [PatchValidationError] = []
 
@@ -78,6 +98,11 @@ public enum PatchValidator {
         var removedStepIds: Set<UUID> = []
         var pendingGroupIds: Set<UUID> = []
         var pendingStepIds: Set<UUID> = []
+        var removedMiseEntryIds: Set<UUID> = []
+        var removedMiseComponentIds: Set<UUID> = []
+        /// Mise en place entries created earlier in this same PatchSet, mapped to
+        /// whether they are vessel groups (true) or solo instructions (false).
+        var pendingMiseEntryIsGroup: [UUID: Bool] = [:]
 
         for patch in patchSet.patches {
             switch patch {
@@ -221,6 +246,97 @@ public enum PatchValidator {
                 if step.effectiveStatus == .done {
                     errors.append(.stepDoneImmutable(stepId))
                 }
+
+            case .addMiseEnPlaceEntry(let afterId, let vesselName, let items, let preassignedId):
+                for item in items {
+                    if let match = hardAvoidMatch(in: item, hardAvoids: hardAvoids) {
+                        errors.append(.hardAvoidViolation(ingredient: match))
+                    }
+                }
+                if items.isEmpty {
+                    errors.append(.internalConflict("add_mise_en_place_entry requires at least one item"))
+                } else if vesselName == nil && items.count != 1 {
+                    errors.append(.internalConflict("a solo mise en place entry must have exactly one item"))
+                }
+                if let preassignedId {
+                    pendingMiseEntryIsGroup[preassignedId] = (vesselName != nil)
+                }
+                if let afterId {
+                    let exists = findMiseEntry(id: afterId, in: recipe) != nil
+                    let pending = pendingMiseEntryIsGroup[afterId] != nil
+                    if (!exists && !pending) || removedMiseEntryIds.contains(afterId) {
+                        errors.append(.invalidMiseEnPlaceEntryId(afterId))
+                    }
+                }
+
+            case .updateMiseEnPlaceEntry(let id, let text):
+                if let match = hardAvoidMatch(in: text, hardAvoids: hardAvoids) {
+                    errors.append(.hardAvoidViolation(ingredient: match))
+                }
+                let exists = findMiseEntry(id: id, in: recipe) != nil
+                let pending = pendingMiseEntryIsGroup[id] != nil
+                if (!exists && !pending) || removedMiseEntryIds.contains(id) {
+                    errors.append(.invalidMiseEnPlaceEntryId(id))
+                }
+
+            case .removeMiseEnPlaceEntry(let id):
+                let existing = findMiseEntry(id: id, in: recipe)
+                let pending = pendingMiseEntryIsGroup[id] != nil
+                if (existing == nil && !pending) || removedMiseEntryIds.contains(id) {
+                    errors.append(.invalidMiseEnPlaceEntryId(id))
+                } else {
+                    removedMiseEntryIds.insert(id)
+                    pendingMiseEntryIsGroup.removeValue(forKey: id)
+                    if let existing, case .group(_, let components) = existing.content {
+                        components.forEach { removedMiseComponentIds.insert($0.id) }
+                    }
+                }
+
+            case .addMiseEnPlaceComponent(let entryId, let afterId, let text):
+                if let match = hardAvoidMatch(in: text, hardAvoids: hardAvoids) {
+                    errors.append(.hardAvoidViolation(ingredient: match))
+                }
+                if let pendingIsGroup = pendingMiseEntryIsGroup[entryId] {
+                    if !pendingIsGroup {
+                        errors.append(.internalConflict("cannot add a component to a solo mise en place entry"))
+                    }
+                    break
+                }
+                guard let entry = findMiseEntry(id: entryId, in: recipe),
+                      !removedMiseEntryIds.contains(entryId) else {
+                    errors.append(.invalidMiseEnPlaceEntryId(entryId))
+                    break
+                }
+                guard case .group(_, let components) = entry.content else {
+                    errors.append(.internalConflict("cannot add a component to a solo mise en place entry"))
+                    break
+                }
+                if let afterId {
+                    let exists = components.contains { $0.id == afterId }
+                    if !exists || removedMiseComponentIds.contains(afterId) {
+                        errors.append(.invalidMiseEnPlaceComponentId(afterId))
+                    }
+                }
+
+            case .updateMiseEnPlaceComponent(let id, let text):
+                if let match = hardAvoidMatch(in: text, hardAvoids: hardAvoids) {
+                    errors.append(.hardAvoidViolation(ingredient: match))
+                }
+                guard let owner = findMiseComponentOwner(componentId: id, in: recipe),
+                      !removedMiseEntryIds.contains(owner.id),
+                      !removedMiseComponentIds.contains(id) else {
+                    errors.append(.invalidMiseEnPlaceComponentId(id))
+                    break
+                }
+
+            case .removeMiseEnPlaceComponent(let id):
+                guard let owner = findMiseComponentOwner(componentId: id, in: recipe),
+                      !removedMiseEntryIds.contains(owner.id),
+                      !removedMiseComponentIds.contains(id) else {
+                    errors.append(.invalidMiseEnPlaceComponentId(id))
+                    break
+                }
+                removedMiseComponentIds.insert(id)
 
             case .addNoteSection:
                 break

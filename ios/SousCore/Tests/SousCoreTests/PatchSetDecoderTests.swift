@@ -585,4 +585,49 @@ struct PatchSetDecoderTests {
         """
         expectFailure(decoder.decode(json), .schemaInvalid(.patchOpUnknownType))
     }
+
+    // MARK: - Mise en place ops
+
+    @Test("mise en place ops decode into their DTO cases")
+    func miseEnPlaceOpsDecode() {
+        let json = """
+        {"assistant_message":"ok","patchSet":{"patchSetId":"ps-1","baseRecipeId":"r-1","baseRecipeVersion":1,"patches":[{"type":"add_mise_en_place_entry","vessel_name":"Spice Bowl","items":["cumin","paprika"],"after_id":null,"client_id":"spice-bowl"},{"type":"add_mise_en_place_component","entry_id":"spice-bowl","after_id":null,"text":"coriander"},{"type":"update_mise_en_place_entry","id":"e1","text":"Spice Bowl 1"},{"type":"remove_mise_en_place_entry","id":"e2"},{"type":"update_mise_en_place_component","id":"c1","text":"1 tsp cumin"},{"type":"remove_mise_en_place_component","id":"c2"}]}}
+        """
+        guard let dto = expectSuccess(decoder.decode(json)) else { return }
+        #expect(dto.patchSet?.patches == [
+            .addMiseEnPlaceEntry(afterId: nil, vesselName: "Spice Bowl", items: ["cumin", "paprika"], clientId: "spice-bowl"),
+            .addMiseEnPlaceComponent(entryId: "spice-bowl", afterId: nil, text: "coriander"),
+            .updateMiseEnPlaceEntry(id: "e1", text: "Spice Bowl 1"),
+            .removeMiseEnPlaceEntry(id: "e2"),
+            .updateMiseEnPlaceComponent(id: "c1", text: "1 tsp cumin"),
+            .removeMiseEnPlaceComponent(id: "c2"),
+        ])
+    }
+
+    @Test("add_mise_en_place_entry with no vessel_name decodes as a solo entry")
+    func miseEnPlaceSoloEntryDecodes() {
+        let json = """
+        {"assistant_message":"ok","patchSet":{"patchSetId":"ps-1","baseRecipeId":"r-1","baseRecipeVersion":1,"patches":[{"type":"add_mise_en_place_entry","vessel_name":null,"items":["Toast the pine nuts"]}]}}
+        """
+        guard let dto = expectSuccess(decoder.decode(json)) else { return }
+        #expect(dto.patchSet?.patches == [
+            .addMiseEnPlaceEntry(afterId: nil, vesselName: nil, items: ["Toast the pine nuts"], clientId: nil)
+        ])
+    }
+
+    @Test("update_mise_en_place_component missing text → patchOpMissingField")
+    func miseEnPlaceComponentMissingText() {
+        let json = """
+        {"assistant_message":"x","patchSet":{"patchSetId":"p1","baseRecipeId":"r1","baseRecipeVersion":0,"patches":[{"type":"update_mise_en_place_component","id":"c1"}]}}
+        """
+        expectFailure(decoder.decode(json), .schemaInvalid(.patchOpMissingField))
+    }
+
+    @Test("add_mise_en_place_component missing entry_id → patchOpMissingField")
+    func miseEnPlaceComponentMissingEntryId() {
+        let json = """
+        {"assistant_message":"x","patchSet":{"patchSetId":"p1","baseRecipeId":"r1","baseRecipeVersion":0,"patches":[{"type":"add_mise_en_place_component","text":"coriander"}]}}
+        """
+        expectFailure(decoder.decode(json), .schemaInvalid(.patchOpMissingField))
+    }
 }

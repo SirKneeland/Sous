@@ -18,6 +18,29 @@ enum SeedRecipes {
 
     static let recipeId = UUID(uuidString: "00000000-0000-0000-FFFF-000000000001")!
 
+    // Mise en place IDs used in sampleWithMiseEnPlace()
+    static let mepSpiceBowlId   = UUID(uuidString: "00000000-0000-0000-0003-000000000001")!
+    static let mepCuminId       = UUID(uuidString: "00000000-0000-0000-0003-000000000002")!
+    static let mepPaprikaId     = UUID(uuidString: "00000000-0000-0000-0003-000000000003")!
+    static let mepSoloDoneId    = UUID(uuidString: "00000000-0000-0000-0003-000000000004")!
+    static let mepSoloTodoId    = UUID(uuidString: "00000000-0000-0000-0003-000000000005")!
+
+    /// The bread recipe plus a mise en place section: one vessel group ("Spice Bowl")
+    /// whose cumin component is already checked, one checked solo entry, and one
+    /// unchecked solo entry.
+    static func sampleWithMiseEnPlace() -> Recipe {
+        var recipe = sample()
+        recipe.miseEnPlace = [
+            MiseEnPlaceEntry(id: mepSpiceBowlId, content: .group(vesselName: "Spice Bowl", components: [
+                MiseEnPlaceComponent(id: mepCuminId, text: "cumin", isDone: true),
+                MiseEnPlaceComponent(id: mepPaprikaId, text: "paprika", isDone: false),
+            ])),
+            MiseEnPlaceEntry(id: mepSoloDoneId, content: .solo(instruction: "Mince 4 garlic cloves", isDone: true)),
+            MiseEnPlaceEntry(id: mepSoloTodoId, content: .solo(instruction: "Zest one lemon", isDone: false)),
+        ]
+        return recipe
+    }
+
     /// A simple bread recipe where stepMixId has two sub-steps (A = todo, B = todo)
     /// and stepDoneId has one sub-step that is done (making the parent done by derivation).
     static func sampleWithSubSteps() -> Recipe {

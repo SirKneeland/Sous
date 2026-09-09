@@ -459,9 +459,19 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                     groupClientIdToUUID[clientId] = UUID()
                 }
             }
+            // Pre-pass: assign UUIDs to any add_mise_en_place_entry ops that carry a
+            // client_id so sibling add_mise_en_place_component ops can reference the entry.
+            var miseClientIdToUUID: [String: UUID] = [:]
+            for dto in psDTO.patches {
+                if case .addMiseEnPlaceEntry(_, _, _, let clientId) = dto, let clientId {
+                    miseClientIdToUUID[clientId] = UUID()
+                }
+            }
             let patches: [Patch]
             do {
-                patches = try psDTO.patches.map { try toPatch($0, clientIdMap: clientIdToUUID, groupClientIdMap: groupClientIdToUUID) }
+                patches = try psDTO.patches.map {
+                    try toPatch($0, clientIdMap: clientIdToUUID, groupClientIdMap: groupClientIdToUUID, miseClientIdMap: miseClientIdToUUID)
+                }
             } catch {
                 let sig = "validationRecoverable:INVALID_ID"
                 if sig == context.lastFailureSignature {
@@ -661,7 +671,8 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                 hasCanvas: request.hasCanvas,
                 isImportExtraction: request.isImportExtraction,
                 isUnitConversion: request.isUnitConversion,
-                personalityMode: request.userPrefs.personalityMode
+                personalityMode: request.userPrefs.personalityMode,
+                hasMiseEnPlace: request.recipeSnapshotForPrompt.miseEnPlace?.isEmpty == false
             )),
             LLMMessage(role: .system, content: recipeContextMessage(for: request)),
         ]
@@ -712,7 +723,8 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                 hasCanvas: request.hasCanvas,
                 isImportExtraction: request.isImportExtraction,
                 isUnitConversion: request.isUnitConversion,
-                personalityMode: request.userPrefs.personalityMode
+                personalityMode: request.userPrefs.personalityMode,
+                hasMiseEnPlace: request.recipeSnapshotForPrompt.miseEnPlace?.isEmpty == false
             )),
             LLMMessage(role: .system, content: recipeContextMessage(for: request)),
         ]
@@ -723,7 +735,7 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
 
     // MARK: - Prompt Text
 
-    private func systemPrompt(hasCanvas: Bool, isImportExtraction: Bool, isUnitConversion: Bool, personalityMode: String) -> String {
+    private func systemPrompt(hasCanvas: Bool, isImportExtraction: Bool, isUnitConversion: Bool, personalityMode: String, hasMiseEnPlace: Bool = false) -> String {
         if isUnitConversion {
             return """
             You are Sous performing a silent, mechanical unit conversion on the recipe in RECIPE CONTEXT. The target unit system is named in the user message ("imperial" or "metric"). Your only job is to convert every measurement and temperature in the recipe to that target system and emit a PatchSet. This is not a conversation.
@@ -807,6 +819,36 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             {"type":"add_note_section","header":"<string or null>","items":["..."],"after_id":null}
             """
         } else if hasCanvas {
+            // The mise en place vocabulary is only worth its prompt weight when a
+            // mise en place section actually exists. When it does not, the model
+            // needs one line: don't fake it with procedure steps.
+            let miseRule = hasMiseEnPlace
+                ? #"""
+
+            11. MISE EN PLACE. The miseEnPlace list in RECIPE CONTEXT is the prep list shown between INGREDIENTS and PROCEDURE: a "group" entry is a named vessel holding individually checkable components, a "solo" entry is one prep instruction, and entries and components each carry a stable id. Edit that list only with the mise_en_place operations on those ids — never with add_step, update_step, or remove_step, which belong to the PROCEDURE. So "put the amounts into the mise en place" is update_mise_en_place_component on each component, never new steps. Editing a component's text or a solo instruction clears that item's checkmark.
+            """#
+                : ""
+            // When no mise en place section exists the model needs one short note, and it
+            // belongs at the tail: inside the numbered RULES list it measurably suppressed
+            // ordinary ingredient and servings patches (see /evals).
+            let miseTail = hasMiseEnPlace
+                ? ""
+                : #"""
+
+
+            MISE EN PLACE: this recipe has no mise en place section yet, so there is no prep list to edit. If the user asks to change the mise en place, tell them the section doesn't exist yet and that the carrot button in the recipe header creates one. Never stand in procedure steps for it — a request to change the mise en place must never produce add_step. Every other kind of edit patches exactly as usual.
+            """#
+            let miseOps = hasMiseEnPlace
+                ? #"""
+
+            {"type":"add_mise_en_place_entry","vessel_name":"<string or null>","items":["..."],"after_id":null,"client_id":"<kebab>"}   (vessel_name null = a solo prep instruction and items must hold exactly one string; give client_id only when adding components to this new entry in the same patchSet)
+            {"type":"update_mise_en_place_entry","id":"<uuid>","text":"..."}   (group entry: renames the vessel; solo entry: replaces the instruction)
+            {"type":"remove_mise_en_place_entry","id":"<uuid>"}
+            {"type":"add_mise_en_place_component","entry_id":"<uuid>","after_id":null,"text":"..."}   (entry_id must be a group entry, never a solo)
+            {"type":"update_mise_en_place_component","id":"<uuid>","text":"..."}
+            {"type":"remove_mise_en_place_component","id":"<uuid>"}
+            """#
+                : ""
             return """
             You are Sous, a cooking companion who loves food and has strong opinions about it. A recipe is on the canvas and the user is working with it.
 
@@ -826,7 +868,7 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             7. Emit patchSet when the user's message implies a recipe change — including when they are answering a clarifying question you previously asked. If intent is still genuinely unclear after all context, ask one short natural question and emit patchSet: null.
             8. Equipment preferences in RECIPE CONTEXT are additive — assume standard home kitchen basics are always available. If no equipment is listed, assume a fully equipped standard home kitchen. Never restrict suggestions to only what's listed.
             9. If the user mentions anything personal about themselves that would be useful to know in a future cooking session — including foods they love, foods they hate or avoid, dietary restrictions, cooking methods or equipment they use, who they cook for, or any other standing preference — include a concise second-person "proposed_memory" string (e.g. "You love mashed potatoes", "You avoid cilantro", "You cook on induction", "You cook for two young kids"). Write it as a short second-person phrase starting with "You" — not "I", not third-person, no subject-less phrases. Omit if it's a one-time request for this recipe ("add more salt to this"), a question, or already in the user's saved memories. Also omit if the user merely referenced something without expressing a preference (e.g. "you know those Costco meatballs" is a reference, not a preference), or if the user selected from options you offered (picking from your suggestions reflects your framing, not their unprompted taste). When in doubt, propose it.
-            10. assistant_message must always be plain conversational prose — never JSON, never a patchSet, never any structured data. The patchSet always goes in the top-level patchSet field of the response object. Embedding a patchSet or any JSON inside assistant_message is always wrong.
+            10. assistant_message must always be plain conversational prose — never JSON, never a patchSet, never any structured data. The patchSet always goes in the top-level patchSet field of the response object. Embedding a patchSet or any JSON inside assistant_message is always wrong.\(miseRule)
 
             Output shape — no changes (proposed_memory is optional, omit when not relevant):
             {"assistant_message":"...","patchSet":null}
@@ -846,7 +888,7 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             {"type":"add_step","text":"...","parent_id":"<uuid or null>","after_id":null,"client_id":"<kebab>"}  (parent_id null = top-level; add client_id only when this new step will have children added in the same patchSet)
             {"type":"update_step","id":"<uuid>","text":"..."}
             {"type":"remove_step","id":"<uuid>"}
-            {"type":"set_step_notes","step_id":"<uuid>","notes":["..."]}   (replaces the full notes array on that step — include all notes, not just new ones)
+            {"type":"set_step_notes","step_id":"<uuid>","notes":["..."]}   (replaces the full notes array on that step — include all notes, not just new ones)\(miseOps)
             {"type":"add_note_section","header":"<string or null>","items":["..."],"after_id":null}
             {"type":"update_note_section","id":"<uuid>","header":"<string or null>","items":["..."]}
             {"type":"remove_note_section","id":"<uuid>"}
@@ -876,7 +918,7 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             Scenario: the recipe has steps s1–s5 in the wrong order. User says "Wipe the steps and start over" or "The order is wrong, redo the procedure."
             WRONG — never do this: emit only add_step patches for the correct steps, leaving original steps in place.
             CORRECT — always do this: emit remove_step for every step being replaced, then emit add_step for each step in the correct sequence, all in the same patchSet.
-            Rule: "start over," "redo," or "wipe" means remove every incorrect or displaced step AND add the full correct sequence. Never leave a step in place unless it is explicitly correct and correctly positioned.
+            Rule: "start over," "redo," or "wipe" means remove every incorrect or displaced step AND add the full correct sequence. Never leave a step in place unless it is explicitly correct and correctly positioned.\(miseTail)
             """
         } else {
             return """
@@ -949,6 +991,22 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
         }
     }
 
+    /// Serialises the mise en place section for RECIPE CONTEXT. Entries and components
+    /// expose their stable ids so the model can target them with mise en place patches.
+    private func miseEnPlaceJSON(_ entries: [MiseEnPlaceEntry]) -> String {
+        entries.map { entry -> String in
+            switch entry.content {
+            case .group(let vesselName, let components):
+                let componentsJSON = components
+                    .map { #"{"id":"\#($0.id.uuidString)","text":"\#($0.text)","done":\#($0.isDone)}"# }
+                    .joined(separator: ",")
+                return #"{"id":"\#(entry.id.uuidString)","type":"group","vesselName":"\#(vesselName)","components":[\#(componentsJSON)]}"#
+            case .solo(let instruction, let isDone):
+                return #"{"id":"\#(entry.id.uuidString)","type":"solo","instruction":"\#(instruction)","done":\#(isDone)}"#
+            }
+        }.joined(separator: ",")
+    }
+
     private func recipeContextMessage(for request: LLMRequest) -> String {
         let r = request.recipeSnapshotForPrompt
         let ingredients = r.ingredients
@@ -974,6 +1032,17 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
             "hardAvoids: \(avoids)",
             "personalityMode: \(prefs.personalityMode)"
         ]
+
+        // The canvas recipe's own yield. Distinct from defaultServings below, which is
+        // the user's standing preference — without this the model has no way to know
+        // what the recipe currently makes when asked to scale it.
+        if let servings = r.servings {
+            lines.append("servings: \(servings) (what the recipe on the canvas currently yields)")
+        }
+
+        if let mise = r.miseEnPlace, !mise.isEmpty {
+            lines.append("miseEnPlace: [\(miseEnPlaceJSON(mise))]")
+        }
 
         if let notes = r.notes, !notes.isEmpty {
             let notesJSON = notes.map { section -> String in
@@ -1029,7 +1098,12 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
     /// `clientIdMap` carries the pre-generated UUIDs for any `addStep` DTOs that
     /// supplied a `client_id`.  Must be built before calling this function (see the
     /// pre-pass in `decodeAndValidate`).
-    private func toPatch(_ dto: LLMPatchOpDTO, clientIdMap: [String: UUID] = [:], groupClientIdMap: [String: UUID] = [:]) throws -> Patch {
+    private func toPatch(
+        _ dto: LLMPatchOpDTO,
+        clientIdMap: [String: UUID] = [:],
+        groupClientIdMap: [String: UUID] = [:],
+        miseClientIdMap: [String: UUID] = [:]
+    ) throws -> Patch {
         func uuid(_ s: String) throws -> UUID {
             guard let u = UUID(uuidString: s) else { throw ConversionError.invalidUUID }
             return u
@@ -1076,6 +1150,35 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
                 stepId = try uuid(stepIdStr)
             }
             return .setStepNotes(stepId: stepId, notes: notes)
+        case .addMiseEnPlaceEntry(let afterIdStr, let vesselName, let items, let clientId):
+            let preassignedId = clientId.flatMap { miseClientIdMap[$0] }
+            let afterId = try afterIdStr.map { str -> UUID in
+                if let mapped = miseClientIdMap[str] { return mapped }
+                return try uuid(str)
+            }
+            return .addMiseEnPlaceEntry(afterId: afterId, vesselName: vesselName, items: items, preassignedId: preassignedId)
+        case .updateMiseEnPlaceEntry(let idStr, let text):
+            if let mapped = miseClientIdMap[idStr] {
+                return .updateMiseEnPlaceEntry(id: mapped, text: text)
+            }
+            return .updateMiseEnPlaceEntry(id: try uuid(idStr), text: text)
+        case .removeMiseEnPlaceEntry(let idStr):
+            if let mapped = miseClientIdMap[idStr] {
+                return .removeMiseEnPlaceEntry(id: mapped)
+            }
+            return .removeMiseEnPlaceEntry(id: try uuid(idStr))
+        case .addMiseEnPlaceComponent(let entryIdStr, let afterIdStr, let text):
+            let entryId: UUID
+            if let mapped = miseClientIdMap[entryIdStr] {
+                entryId = mapped
+            } else {
+                entryId = try uuid(entryIdStr)
+            }
+            return .addMiseEnPlaceComponent(entryId: entryId, afterId: try afterIdStr.map { try uuid($0) }, text: text)
+        case .updateMiseEnPlaceComponent(let idStr, let text):
+            return .updateMiseEnPlaceComponent(id: try uuid(idStr), text: text)
+        case .removeMiseEnPlaceComponent(let idStr):
+            return .removeMiseEnPlaceComponent(id: try uuid(idStr))
         case .addNoteSection(let afterIdStr, let header, let items):
             return .addNoteSection(afterId: try afterIdStr.map { try uuid($0) }, header: header, items: items)
         case .updateNoteSection(let idStr, let header, let items):
@@ -1221,7 +1324,7 @@ public extension OpenAILLMOrchestrator {
     /// the given request. Used by the debug diagnostic exporter only — not called in
     /// production code paths.
     func buildDebugPromptStrings(for request: LLMRequest) -> (system: String, context: String) {
-        (systemPrompt(hasCanvas: request.hasCanvas, isImportExtraction: request.isImportExtraction, isUnitConversion: request.isUnitConversion, personalityMode: request.userPrefs.personalityMode),
+        (systemPrompt(hasCanvas: request.hasCanvas, isImportExtraction: request.isImportExtraction, isUnitConversion: request.isUnitConversion, personalityMode: request.userPrefs.personalityMode, hasMiseEnPlace: request.recipeSnapshotForPrompt.miseEnPlace?.isEmpty == false),
          recipeContextMessage(for: request))
     }
 }

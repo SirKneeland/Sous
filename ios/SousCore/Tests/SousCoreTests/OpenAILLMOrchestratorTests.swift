@@ -443,4 +443,82 @@ struct OpenAILLMOrchestratorTests {
         }
         #expect(memory == nil)
     }
+
+    // MARK: - Mise en place in RECIPE CONTEXT
+
+    @Test("RECIPE CONTEXT serialises mise en place entries, components and their IDs")
+    func miseEnPlaceInRecipeContext() {
+        let orch = OpenAILLMOrchestrator(client: MockLLMClient([]), model: "gpt-5.4-mini")
+        let recipe = SeedRecipes.sampleWithMiseEnPlace()
+        let req = LLMRequest(
+            recipeId: SeedRecipes.recipeId.uuidString,
+            recipeVersion: 1,
+            hasCanvas: true,
+            userMessage: "put the amounts in the mise en place",
+            recipeSnapshotForPrompt: recipe,
+            userPrefs: LLMUserPrefs(hardAvoids: [])
+        )
+        let context = orch.buildDebugPromptStrings(for: req).context
+        #expect(context.contains("miseEnPlace: ["))
+        #expect(context.contains(SeedRecipes.mepSpiceBowlId.uuidString))
+        #expect(context.contains(SeedRecipes.mepCuminId.uuidString))
+        #expect(context.contains("\"vesselName\":\"Spice Bowl\""))
+        #expect(context.contains("\"type\":\"solo\""))
+        #expect(context.contains("Mince 4 garlic cloves"))
+    }
+
+    @Test("RECIPE CONTEXT reports the recipe's own servings when known")
+    func servingsInRecipeContext() {
+        let orch = OpenAILLMOrchestrator(client: MockLLMClient([]), model: "gpt-5.4-mini")
+        var recipe = SeedRecipes.sample()
+        recipe.servings = 4
+        let req = LLMRequest(
+            recipeId: SeedRecipes.recipeId.uuidString,
+            recipeVersion: 1,
+            hasCanvas: true,
+            userMessage: "scale this to 8",
+            recipeSnapshotForPrompt: recipe,
+            userPrefs: LLMUserPrefs(hardAvoids: [])
+        )
+        #expect(orch.buildDebugPromptStrings(for: req).context.contains("servings: 4"))
+    }
+
+    @Test("RECIPE CONTEXT omits the servings line when the recipe has no known yield")
+    func servingsAbsentFromRecipeContext() {
+        let orch = OpenAILLMOrchestrator(client: MockLLMClient([]), model: "gpt-5.4-mini")
+        #expect(!orch.buildDebugPromptStrings(for: request()).context.contains("servings:"))
+    }
+
+    @Test("RECIPE CONTEXT omits the mise en place line when the recipe has none")
+    func miseEnPlaceAbsentInRecipeContext() {
+        let orch = OpenAILLMOrchestrator(client: MockLLMClient([]), model: "gpt-5.4-mini")
+        let context = orch.buildDebugPromptStrings(for: request()).context
+        #expect(!context.contains("miseEnPlace"))
+    }
+
+    @Test("System prompt teaches the mise en place operations when a section exists")
+    func miseEnPlaceInSystemPrompt() {
+        let orch = OpenAILLMOrchestrator(client: MockLLMClient([]), model: "gpt-5.4-mini")
+        let req = LLMRequest(
+            recipeId: SeedRecipes.recipeId.uuidString,
+            recipeVersion: 1,
+            hasCanvas: true,
+            userMessage: "put the amounts in the mise en place",
+            recipeSnapshotForPrompt: SeedRecipes.sampleWithMiseEnPlace(),
+            userPrefs: LLMUserPrefs(hardAvoids: [])
+        )
+        let system = orch.buildDebugPromptStrings(for: req).system
+        #expect(system.contains("update_mise_en_place_component"))
+        #expect(system.contains("add_mise_en_place_entry"))
+        #expect(system.contains("never with add_step, update_step, or remove_step"))
+    }
+
+    @Test("System prompt withholds the mise en place operations when no section exists")
+    func miseEnPlaceOpsAbsentFromSystemPrompt() {
+        let orch = OpenAILLMOrchestrator(client: MockLLMClient([]), model: "gpt-5.4-mini")
+        let system = orch.buildDebugPromptStrings(for: request()).system
+        #expect(!system.contains("update_mise_en_place_component"))
+        #expect(system.contains("this recipe has no mise en place section yet"))
+        #expect(system.contains("must never produce add_step"))
+    }
 }
