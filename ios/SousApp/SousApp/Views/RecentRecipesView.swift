@@ -22,9 +22,17 @@ struct RecentRecipesView: View {
         if hours < 24 { return "\(hours) HR" }
         let days = hours / 24
         if days < 7 { return "\(days) DAY" }
-        let weeks = days / 7
-        return "\(weeks) WK"
+        if days < 30 { return "\(days / 7) WK" }
+        return Self.monthDayFormatter.string(from: date).uppercased()
     }
+
+    /// Abbreviated month + day (e.g. "Nov 4") for entries older than a month.
+    private static let monthDayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = .current
+        formatter.setLocalizedDateFormatFromTemplate("MMMd")
+        return formatter
+    }()
 
     // MARK: - Summary generation
 
