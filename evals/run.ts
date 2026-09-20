@@ -102,11 +102,22 @@ interface EvalOutput {
 const allCases: TestCase[] = JSON.parse(
   readFileSync(join(__dirname, "cases/core-behaviors.json"), "utf-8")
 );
-const skipped = allCases.filter((tc) => tc.skip);
+// SOUS_EVAL_INCLUDE_SKIPPED=1 runs known-gap cases too — useful when checking
+// whether a candidate model closes a gap the production model cannot.
+const includeSkipped = process.env.SOUS_EVAL_INCLUDE_SKIPPED === "1";
+const skipped = includeSkipped ? [] : allCases.filter((tc) => tc.skip);
 if (skipped.length > 0) {
   console.log(`Skipping ${skipped.length} case(s): ${skipped.map((tc) => tc.name).join(", ")}`);
 }
-const cases = allCases.filter((tc) => !tc.skip);
+const selected = includeSkipped ? allCases : allCases.filter((tc) => !tc.skip);
+
+// SOUS_EVAL_ONLY=<name>[,<name>…] narrows the run to specific cases by name,
+// for quick single-behaviour checks without paying for the whole suite.
+const only = (process.env.SOUS_EVAL_ONLY ?? "").split(",").map((n) => n.trim()).filter(Boolean);
+const cases = only.length > 0 ? selected.filter((tc) => only.includes(tc.name)) : selected;
+if (only.length > 0) {
+  console.log(`Running ${cases.length} selected case(s): ${cases.map((tc) => tc.name).join(", ")}`);
+}
 
 // ---------------------------------------------------------------------------
 // System prompts (sourced from OpenAILLMOrchestrator.swift)
@@ -425,8 +436,40 @@ PERSONALITY: Warm and conversational without being chatty. Sounds like a knowled
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+// Model under test. Override with SOUS_EVAL_MODEL=<id> to compare candidates
+// (e.g. a model upgrade) against the production default.
+const EVAL_MODEL = process.env.SOUS_EVAL_MODEL ?? "gpt-5.4-mini";
+
+// The LLM judge is deliberately NOT configurable: it must stay fixed across
+// runs, or scores from different candidate models are not comparable.
+const JUDGE_MODEL = "gpt-5.4-mini";
+
+console.log(`Model under test: ${EVAL_MODEL} (judge: ${JUDGE_MODEL})`);
+
+/**
+ * Deterministic sampling for a given model. GPT-5.6 and later reject an
+ * explicit `temperature`, accepting only their default of 1, so the parameter
+ * is omitted for those; older models still get temperature 0 so historical
+ * baselines stay reproducible.
+ */
+function isNextGen(model: string): boolean {
+  return /^gpt-5\.[6-9]|^gpt-[6-9]/.test(model);
+}
+
+function samplingFor(model: string): { temperature?: number } {
+  return isNextGen(model) ? {} : { temperature: 0 };
+}
+
+/**
+ * Extra params for calls that pass function tools. GPT-5.6+ rejects function
+ * tools on /v1/chat/completions unless reasoning is explicitly turned off.
+ */
+function toolCallParamsFor(model: string): { reasoning_effort?: "none" } {
+  return isNextGen(model) ? { reasoning_effort: "none" } : {};
+}
+
 // ---------------------------------------------------------------------------
-// Task function: call GPT-5.4-mini with the test case input
+// Task function: call the model under test with the test case input
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
@@ -540,11 +583,12 @@ async function runVoiceTask(input: TestInput): Promise<EvalOutput> {
   messages.push({ role: "user", content: input.userMessage });
 
   const completion = await openai.chat.completions.create({
-    model: "gpt-5.4-mini",
+    model: EVAL_MODEL,
     messages,
     tools: VOICE_TOOLS,
     tool_choice: "auto",
-    temperature: 0,
+    ...samplingFor(EVAL_MODEL),
+    ...toolCallParamsFor(EVAL_MODEL),
   });
 
   const choice = completion.choices[0];
@@ -602,9 +646,9 @@ async function runTask(input: TestInput, promptType: TestCase["promptType"]): Pr
   messages.push({ role: "user", content: input.userMessage });
 
   const completion = await openai.chat.completions.create({
-    model: "gpt-5.4-mini",
+    model: EVAL_MODEL,
     messages,
-    temperature: 0,
+    ...samplingFor(EVAL_MODEL),
   });
 
   const rawContent = completion.choices[0]?.message?.content ?? "";
@@ -860,9 +904,9 @@ Respond with JSON only, in this exact format:
 }`;
 
   const completion = await openai.chat.completions.create({
-    model: "gpt-5.4-mini",
+    model: JUDGE_MODEL,
     messages: [{ role: "user", content: judgePrompt }],
-    temperature: 0,
+    ...samplingFor(JUDGE_MODEL),
     response_format: { type: "json_object" },
   });
 

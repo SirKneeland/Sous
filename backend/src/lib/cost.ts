@@ -4,7 +4,8 @@
 // back to a conservative default rather than failing the request.
 //
 // Keep this table updated as models change; it is the single source of truth
-// for the `estimated_cost_usd` column.
+// for the `estimated_cost_usd` column. Last checked against OpenAI's published
+// rates on 2026-09-15.
 
 interface ChatRate {
   /** USD per 1K input (prompt) tokens. */
@@ -14,13 +15,23 @@ interface ChatRate {
 }
 
 const CHAT_RATES: Record<string, ChatRate> = {
-  'gpt-5.4-mini': { input: 0.00015, output: 0.0006 },
+  // GPT-5.6 family (released 2026-06-26).
+  'gpt-5.6-sol': { input: 0.005, output: 0.03 },
+  'gpt-5.6-terra': { input: 0.0025, output: 0.015 },
+  'gpt-5.6-luna': { input: 0.001, output: 0.006 },
+  // Currently in production.
+  'gpt-5.4-mini': { input: 0.00075, output: 0.0045 },
+  // Legacy.
   'gpt-4o-mini': { input: 0.00015, output: 0.0006 },
   'gpt-4o': { input: 0.0025, output: 0.01 },
 };
 
-/** Default applied to unknown chat models (mirrors the mini tier). */
-const DEFAULT_CHAT_RATE: ChatRate = { input: 0.00015, output: 0.0006 };
+/**
+ * Default applied to unknown chat models. Deliberately set to the most
+ * expensive rate in the table so an unrecognised model over-reports rather
+ * than silently understating spend.
+ */
+const DEFAULT_CHAT_RATE: ChatRate = { input: 0.005, output: 0.03 };
 
 /** USD per 1K characters for TTS (OpenAI tts-1 family). */
 const TTS_RATE_PER_1K_CHARS = 0.015;

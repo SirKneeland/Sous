@@ -119,3 +119,25 @@ Swift prompt (and the `proposed-memory-second-person` case) require second perso
 which is why that case fails on both the current and the pre-change prompt. The mise en
 place work mirrored only its own additions rather than resyncing the whole prompt, to
 avoid moving many cases at once. A deliberate resync pass is worth scheduling.
+
+---
+
+## Import diagnostic export captures OCR text but not the source photo
+
+- **Area:** `ios/SousApp/SousApp/Debug/ImportDebugRecord.swift`, `ios/SousApp/SousApp/Debug/DebugDiagnosticExport.swift`
+- **Type:** Deferred improvement
+- **Flagged:** 2026-09-20
+
+Section 7 of the 5-tap diagnostic export ("Last Import Attempt") records the OCR text read
+from a photo import, plus the photo's pixel dimensions and approximate JPEG byte size — but
+not the photo itself. That is enough to tell what Vision *read*, and not enough to tell why
+it read it wrongly: a blurry, cropped, skewed, or badly-lit page produces plausible-looking
+OCR text with no indication that the image was the problem.
+
+Deferred deliberately on 2026-09-20 to keep the first version small. The agreed shape when
+it is picked up: do **not** embed the image in the Markdown (it bloats the file and makes it
+unpasteable). Instead pass two items to the share sheet — the `.md` file and a JPEG of the
+source photo — so the photo travels alongside the dump and can be dropped from the share when
+it isn't wanted. `ImportDebugRecord` would need to retain the `UIImage` (or encoded JPEG
+data) rather than only its description, and `DebugDiagnosticExporter.export()` would need to
+write the second file and add it to `activityItems`. Debug builds only, as now.

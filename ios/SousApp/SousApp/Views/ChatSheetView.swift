@@ -52,10 +52,7 @@ struct ChatSheetView: View {
                 onCancel: thumbDropCancel
             )
         }
-#if DEBUG
-        .modifier(DebugTapExportModifier(store: store))
-
-#endif
+        .debugTapExport(store: store)
         .onAppear {
             // Fullscreen blank-state: focus only if a quoted context arrived before appear.
             // Overlay (non-fullscreen): focus is handled by onChange(of: isPresented) below,

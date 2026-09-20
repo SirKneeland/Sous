@@ -572,8 +572,6 @@
   },
   {
     "name": "mid-cook-substep-edit",
-    "skip": true,
-    "skipReason": "Known model capability gap: gpt-5.4-mini consistently uses remove_step + add_step instead of update_step + add_substep when decomposing steps. Scored 0 on every run (6/6). Re-enable when the eval model is upgraded.",
     "description": "Canvas exists with a multi-action sauce step (todo). User asks to break that step into smaller pieces. Sous should emit add_substep operations targeting the existing step's UUID, not fold everything into a single update_step.",
     "promptType": "has_canvas",
     "input": {

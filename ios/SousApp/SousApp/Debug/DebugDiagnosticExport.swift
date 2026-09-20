@@ -7,7 +7,8 @@ import UIKit
 // MARK: - DebugDiagnosticExporter
 
 /// Builds and exports a full session diagnostic snapshot as a Markdown file.
-/// Triggered by the 5-tap gesture in ChatSheetView. Debug builds only.
+/// Triggered by the 5-tap gesture in ChatSheetView, and on the import sheet's error
+/// screen, where a failed import leaves no chat sheet to tap. Debug builds only.
 @MainActor
 struct DebugDiagnosticExporter {
     let store: AppStore
@@ -45,6 +46,7 @@ struct DebugDiagnosticExporter {
             buildSystemPrompt(),
             buildTranscript(),
             buildRecipeState(),
+            buildImportAttempt(),
         ].joined(separator: "\n\n---\n\n")
     }
 
@@ -232,6 +234,81 @@ struct DebugDiagnosticExporter {
             }
         }
         return lines.joined(separator: "\n")
+    }
+
+    // MARK: - Import Attempt
+
+    /// Longest input or model response reproduced in the export. A cookbook page's OCR can
+    /// run long; past this the file stops being pasteable and the tail is rarely the problem.
+    static let maxCapturedCharacters = 20_000
+
+    private func buildImportAttempt() -> String {
+        var lines = ["## 7. Last Import Attempt"]
+        guard let record = store.lastImportDebugRecord else {
+            lines.append("(no recipe import attempted in this app run)")
+            return lines.joined(separator: "\n")
+        }
+
+        lines.append("- **Source:** \(record.source.rawValue)")
+        lines.append("- **When:** \(ISO8601DateFormatter().string(from: record.timestamp))")
+        lines.append("- **Outcome:** \(record.outcome.label)")
+        if let imageDescription = record.imageDescription {
+            lines.append("- **Photo:** \(imageDescription) (the photo itself is not included)")
+        }
+        lines.append("")
+
+        let inputHeading = record.source == .photo ? "Input — OCR Text Read From Photo" : "Input — Pasted Text"
+        lines.append("### \(inputHeading)")
+        lines.append(fencedBlock(record.inputText, emptyNote: "(nothing was read)"))
+        lines.append("")
+
+        if let request = record.request {
+            let orch = OpenAILLMOrchestrator(client: OpenAIClient(apiKey: nil), model: "debug")
+            let prompts = orch.buildDebugPromptStrings(for: request)
+            lines.append("### Import Prompt — System Message")
+            lines.append(fencedBlock(prompts.system))
+            lines.append("")
+            lines.append("### Import Prompt — Context Message")
+            lines.append(fencedBlock(prompts.context))
+            lines.append("")
+        }
+
+        lines.append("### Model Response (raw, undecoded)")
+        if let rawResponse = record.rawResponse {
+            lines.append(fencedBlock(rawResponse, emptyNote: "(the model returned an empty response)"))
+        } else {
+            lines.append("(no response — the call either never happened or failed before any content arrived)")
+        }
+
+        if let debug = record.debug {
+            lines.append("")
+            lines.append("### Call Metadata")
+            lines.append("- **Model:** \(debug.model)")
+            lines.append("- **Request ID:** \(debug.requestId)")
+            lines.append("- **Attempts:** \(debug.attemptCount) of \(debug.maxAttempts)")
+            lines.append("- **Repair used:** \(debug.repairUsed) · **Extraction used:** \(debug.extractionUsed)")
+            lines.append("- **Failure category:** \(debug.failureCategory ?? "none")")
+            lines.append("- **Termination reason:** \(debug.terminationReason ?? "unknown")")
+            lines.append("- **Total time:** \(debug.timingTotalMs) ms")
+            let tokens = [debug.promptTokens, debug.completionTokens, debug.totalTokens]
+                .map { $0.map(String.init) ?? "?" }
+            lines.append("- **Tokens (prompt/completion/total):** \(tokens.joined(separator: " / "))")
+        }
+
+        return lines.joined(separator: "\n")
+    }
+
+    /// Wraps text in a fenced code block, truncating past `maxCapturedCharacters`.
+    private func fencedBlock(_ text: String, emptyNote: String = "(empty)") -> String {
+        guard !text.isEmpty else { return emptyNote }
+        var body = text
+        var suffix = ""
+        if body.count > Self.maxCapturedCharacters {
+            let cutoff = body.index(body.startIndex, offsetBy: Self.maxCapturedCharacters)
+            suffix = "\n\n[truncated — \(text.count) characters total, first \(Self.maxCapturedCharacters) shown]"
+            body = String(body[..<cutoff])
+        }
+        return "```\n\(body)\n```\(suffix)"
     }
 }
 

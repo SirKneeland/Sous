@@ -395,6 +395,10 @@ struct RecipeImportSheet: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
+        // A failed import leaves no canvas and no chat sheet, so the 5-tap diagnostic
+        // gesture would otherwise be unreachable on exactly the screen that needs it.
+        .debugTapExport(store: store)
     }
 
     // MARK: - Header
