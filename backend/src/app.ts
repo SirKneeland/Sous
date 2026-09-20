@@ -14,6 +14,7 @@ import { proxyRoutes } from './routes/proxy.js';
 import { syncRoutes } from './routes/sync.js';
 import { referralRoutes } from './routes/referral.js';
 import { adminRoutes } from './routes/admin.js';
+import { bugRoutes } from './routes/bugs.js';
 
 export function createApp(deps: AppDeps): Hono<HonoEnv> {
   const app = new Hono<HonoEnv>();
@@ -39,6 +40,7 @@ export function createApp(deps: AppDeps): Hono<HonoEnv> {
   api.route('/sync', syncRoutes());
   api.route('/referral', referralRoutes());
   api.route('/admin', adminRoutes());
+  api.route('/bugs', bugRoutes());
 
   app.route('/api/v1', api);
 

@@ -20,6 +20,11 @@ import type {
   UsageEventInput,
   UsageEventRow,
   RecipeCapCounterRow,
+  BugReportRow,
+  BugReportSummaryRow,
+  BugStatus,
+  NewBugReport,
+  BugTriageUpdate,
 } from './types.js';
 
 export interface Repo {
@@ -85,6 +90,20 @@ export interface Repo {
   countNewRecipesSince(userId: string, sinceIso: string): Promise<number>;
   /** Total usage events recorded against one recipe for a user. */
   countEventsForRecipe(userId: string, recipeId: string): Promise<number>;
+
+  // bug reports (in-app submission → operator triage)
+  insertBugReport(input: NewBugReport): Promise<BugReportRow>;
+  /** Lookup by the client-generated id, so a retried submit is idempotent. */
+  getBugReportByClientReportId(clientReportId: string): Promise<BugReportRow | null>;
+  getBugReportById(id: string): Promise<BugReportRow | null>;
+  /** Lookup by the short human number ("BUG-17" → 17). */
+  getBugReportBySeq(seq: number): Promise<BugReportRow | null>;
+  /** Triage list, newest first, WITHOUT the diagnostic blob. */
+  listBugReports(filter: { status?: BugStatus; limit: number }): Promise<BugReportSummaryRow[]>;
+  /** Apply triage changes. Never deletes — reports are kept for posterity. */
+  updateBugReportTriage(id: string, input: BugTriageUpdate): Promise<BugReportRow>;
+  /** Reports submitted by one user at/after an ISO timestamp (rate limiting). */
+  countBugReportsSince(userId: string, sinceIso: string): Promise<number>;
 
   // admin dashboard aggregates
   listAllUsers(): Promise<UserRow[]>;

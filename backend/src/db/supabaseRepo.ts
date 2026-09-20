@@ -16,6 +16,10 @@ import type {
   UsageEventInput,
   UsageEventRow,
   RecipeCapCounterRow,
+  BugReportRow,
+  BugReportSummaryRow,
+  NewBugReport,
+  BugTriageUpdate,
 } from './types.js';
 
 /** Supabase returns a PostgREST error with code PGRST116 when .single() finds no row. */
@@ -403,6 +407,106 @@ export function createSupabaseRepo(db: SupabaseClient): Repo {
     },
 
     // ---- admin dashboard aggregates ----
+
+    // ---- bug reports ----
+
+    async insertBugReport(input: NewBugReport) {
+      const { data, error } = await db
+        .from('bug_reports')
+        .insert({
+          user_id: input.userId,
+          client_report_id: input.clientReportId,
+          description: input.description,
+          expected_behavior: input.expectedBehavior,
+          diagnostic: input.diagnostic,
+          app_version: input.appVersion,
+          build_number: input.buildNumber,
+          ios_version: input.iosVersion,
+          device_model: input.deviceModel,
+          app_state: input.appState,
+        })
+        .select('*')
+        .single();
+      if (error) throw error;
+      return data as BugReportRow;
+    },
+
+    async getBugReportByClientReportId(clientReportId) {
+      const { data, error } = await db
+        .from('bug_reports')
+        .select('*')
+        .eq('client_report_id', clientReportId)
+        .single();
+      if (error && !isNoRows(error)) throw error;
+      return (data as BugReportRow) ?? null;
+    },
+
+    async getBugReportById(id) {
+      const { data, error } = await db
+        .from('bug_reports')
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (error && !isNoRows(error)) throw error;
+      return (data as BugReportRow) ?? null;
+    },
+
+    async getBugReportBySeq(seq) {
+      const { data, error } = await db
+        .from('bug_reports')
+        .select('*')
+        .eq('seq', seq)
+        .single();
+      if (error && !isNoRows(error)) throw error;
+      return (data as BugReportRow) ?? null;
+    },
+
+    async listBugReports(filter) {
+      // Every column EXCEPT `diagnostic` — a list of twenty reports should not
+      // carry twenty full transcripts across the wire.
+      let query = db
+        .from('bug_reports')
+        .select(
+          'id, seq, created_at, user_id, client_report_id, description, expected_behavior, ' +
+            'app_version, build_number, ios_version, device_model, app_state, status, ' +
+            'triage_notes, resolution, resolved_at, duplicate_of, tags',
+        )
+        .order('created_at', { ascending: false })
+        .limit(filter.limit);
+      if (filter.status) query = query.eq('status', filter.status);
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data as unknown as BugReportSummaryRow[]) ?? [];
+    },
+
+    async updateBugReportTriage(id, input: BugTriageUpdate) {
+      const patch: Record<string, unknown> = {};
+      if (input.status !== undefined) patch.status = input.status;
+      if (input.triageNotes !== undefined) patch.triage_notes = input.triageNotes;
+      if (input.resolution !== undefined) patch.resolution = input.resolution;
+      if (input.resolvedAt !== undefined) patch.resolved_at = input.resolvedAt;
+      if (input.duplicateOf !== undefined) patch.duplicate_of = input.duplicateOf;
+      if (input.tags !== undefined) patch.tags = input.tags;
+
+      const { data, error } = await db
+        .from('bug_reports')
+        .update(patch)
+        .eq('id', id)
+        .select('*')
+        .single();
+      if (error) throw error;
+      return data as BugReportRow;
+    },
+
+    async countBugReportsSince(userId, sinceIso) {
+      const { count, error } = await db
+        .from('bug_reports')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .gte('created_at', sinceIso);
+      if (error) throw error;
+      return count ?? 0;
+    },
 
     async listAllUsers() {
       const { data, error } = await db.from('users').select('*');

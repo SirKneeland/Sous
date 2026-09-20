@@ -176,3 +176,81 @@ export interface RecipeCapCounterRow {
   billing_period: string;
   recipes_used: number;
 }
+
+// ---------------------------------------------------------------------------
+// Bug reports (in-app submission → operator triage backlog)
+// ---------------------------------------------------------------------------
+
+export type BugStatus =
+  | 'new'
+  | 'triaged'
+  | 'in_progress'
+  | 'fixed'
+  | 'wont_fix'
+  | 'duplicate';
+
+export const BUG_STATUSES = [
+  'new',
+  'triaged',
+  'in_progress',
+  'fixed',
+  'wont_fix',
+  'duplicate',
+] as const satisfies readonly BugStatus[];
+
+/** Statuses that close a report. Reaching one stamps `resolved_at`. */
+export const TERMINAL_BUG_STATUSES = ['fixed', 'wont_fix', 'duplicate'] as const;
+
+export interface BugReportRow {
+  id: string;
+  /** Short human-facing number, e.g. 17 → "BUG-17". */
+  seq: number;
+  created_at: string;
+  user_id: string | null;
+  client_report_id: string;
+  description: string;
+  expected_behavior: string | null;
+  /** Full diagnostic markdown from the iOS DebugDiagnosticExporter. */
+  diagnostic: string;
+  app_version: string | null;
+  build_number: string | null;
+  ios_version: string | null;
+  device_model: string | null;
+  app_state: string | null;
+  status: BugStatus;
+  triage_notes: string | null;
+  resolution: string | null;
+  resolved_at: string | null;
+  duplicate_of: string | null;
+  tags: string[];
+}
+
+/**
+ * A report without its diagnostic blob. The triage list returns these so that
+ * listing twenty bugs does not ship twenty full transcripts.
+ */
+export type BugReportSummaryRow = Omit<BugReportRow, 'diagnostic'>;
+
+/** Fields the API supplies when a report is submitted. */
+export interface NewBugReport {
+  userId: string;
+  clientReportId: string;
+  description: string;
+  expectedBehavior: string | null;
+  diagnostic: string;
+  appVersion: string | null;
+  buildNumber: string | null;
+  iosVersion: string | null;
+  deviceModel: string | null;
+  appState: string | null;
+}
+
+/** Triage fields an operator can change. Omitted keys are left untouched. */
+export interface BugTriageUpdate {
+  status?: BugStatus;
+  triageNotes?: string | null;
+  resolution?: string | null;
+  resolvedAt?: string | null;
+  duplicateOf?: string | null;
+  tags?: string[];
+}

@@ -19,6 +19,10 @@ import type {
   UsageEventInput,
   UsageEventRow,
   RecipeCapCounterRow,
+  BugReportRow,
+  BugReportSummaryRow,
+  NewBugReport,
+  BugTriageUpdate,
 } from '../db/types.js';
 
 export interface FakeRepoState {
@@ -31,6 +35,7 @@ export interface FakeRepoState {
   memories: MemoryRow[];
   usageEvents: UsageEventRow[];
   recipeCapCounters: RecipeCapCounterRow[];
+  bugReports: BugReportRow[];
 }
 
 const DEFAULT_CONFIG: Record<string, string> = {
@@ -58,6 +63,7 @@ export function createFakeRepo(
     preferences: overrides.preferences ?? [],
     memories: overrides.memories ?? [],
     usageEvents: overrides.usageEvents ?? [],
+    bugReports: overrides.bugReports ?? [],
     recipeCapCounters: overrides.recipeCapCounters ?? [],
   };
 
@@ -318,6 +324,73 @@ export function createFakeRepo(
     async countEventsForRecipe(userId, recipeId) {
       return state.usageEvents.filter(
         (e) => e.user_id === userId && e.recipe_id === recipeId,
+      ).length;
+    },
+
+    // ---- bug reports ----
+
+    async insertBugReport(input: NewBugReport) {
+      const row: BugReportRow = {
+        id: randomUUID(),
+        // Mirrors the DB identity column: one higher than the highest so far.
+        seq: state.bugReports.reduce((max, b) => Math.max(max, b.seq), 0) + 1,
+        created_at: new Date().toISOString(),
+        user_id: input.userId,
+        client_report_id: input.clientReportId,
+        description: input.description,
+        expected_behavior: input.expectedBehavior,
+        diagnostic: input.diagnostic,
+        app_version: input.appVersion,
+        build_number: input.buildNumber,
+        ios_version: input.iosVersion,
+        device_model: input.deviceModel,
+        app_state: input.appState,
+        status: 'new',
+        triage_notes: null,
+        resolution: null,
+        resolved_at: null,
+        duplicate_of: null,
+        tags: [],
+      };
+      state.bugReports.push(row);
+      return row;
+    },
+
+    async getBugReportByClientReportId(clientReportId) {
+      return state.bugReports.find((b) => b.client_report_id === clientReportId) ?? null;
+    },
+
+    async getBugReportById(id) {
+      return state.bugReports.find((b) => b.id === id) ?? null;
+    },
+
+    async getBugReportBySeq(seq) {
+      return state.bugReports.find((b) => b.seq === seq) ?? null;
+    },
+
+    async listBugReports(filter) {
+      return state.bugReports
+        .filter((b) => (filter.status ? b.status === filter.status : true))
+        .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+        .slice(0, filter.limit)
+        .map(({ diagnostic: _diagnostic, ...rest }) => rest as BugReportSummaryRow);
+    },
+
+    async updateBugReportTriage(id, input: BugTriageUpdate) {
+      const row = state.bugReports.find((b) => b.id === id);
+      if (!row) throw new Error(`no bug report ${id}`);
+      if (input.status !== undefined) row.status = input.status;
+      if (input.triageNotes !== undefined) row.triage_notes = input.triageNotes;
+      if (input.resolution !== undefined) row.resolution = input.resolution;
+      if (input.resolvedAt !== undefined) row.resolved_at = input.resolvedAt;
+      if (input.duplicateOf !== undefined) row.duplicate_of = input.duplicateOf;
+      if (input.tags !== undefined) row.tags = input.tags;
+      return row;
+    },
+
+    async countBugReportsSince(userId, sinceIso) {
+      return state.bugReports.filter(
+        (b) => b.user_id === userId && b.created_at >= sinceIso,
       ).length;
     },
 

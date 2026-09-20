@@ -4,8 +4,16 @@
 // token. The key is sent in the `X-Admin-Key` header. There is no user context
 // here — this is aggregate, read-only reporting for operator eyes only.
 
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
+import { z } from 'zod';
 import type { HonoEnv } from '../types.js';
+import {
+  BUG_STATUSES,
+  TERMINAL_BUG_STATUSES,
+  type BugReportRow,
+  type BugStatus,
+  type BugTriageUpdate,
+} from '../db/types.js';
 import { computeEntitlement } from '../lib/entitlement.js';
 import { entitlementConfigFrom } from '../lib/config.js';
 import { currentBillingPeriod } from '../lib/billingPeriod.js';
@@ -128,8 +136,104 @@ export function adminRoutes(): Hono<HonoEnv> {
     return c.json({ ok: true, userId, eligible: body.eligible });
   });
 
+  // -------------------------------------------------------------------------
+  // Bug triage (see docs/BugTriage.md, backend/scripts/bugs.sh)
+  //
+  // Reports are never deleted — there is deliberately no DELETE route. Triage
+  // changes `status`; a fixed report stays as regression-test source material.
+  // -------------------------------------------------------------------------
+
+  /** Resolve ":ref" — either a short number ("17") or a full uuid. */
+  async function findBugByRef(
+    c: Context<HonoEnv>,
+    ref: string,
+  ): Promise<BugReportRow | null> {
+    const deps = c.get('deps');
+    return /^\d+$/.test(ref)
+      ? deps.repo.getBugReportBySeq(Number(ref))
+      : deps.repo.getBugReportById(ref);
+  }
+
+  // GET /admin/bugs?status=new&limit=50 — triage list, no diagnostic blobs.
+  app.get('/bugs', async (c) => {
+    const deps = c.get('deps');
+
+    const statusParam = c.req.query('status');
+    if (statusParam && !BUG_STATUSES.includes(statusParam as BugStatus)) {
+      return c.json(
+        { error: 'bad_request', message: `status must be one of: ${BUG_STATUSES.join(', ')}` },
+        400,
+      );
+    }
+
+    const limitParam = Number(c.req.query('limit') ?? '50');
+    const limit = Number.isFinite(limitParam)
+      ? Math.min(Math.max(Math.trunc(limitParam), 1), 200)
+      : 50;
+
+    const bugs = await deps.repo.listBugReports({
+      status: statusParam as BugStatus | undefined,
+      limit,
+    });
+    return c.json({ bugs, count: bugs.length });
+  });
+
+  // GET /admin/bugs/:ref — one full report, diagnostic included.
+  app.get('/bugs/:ref', async (c) => {
+    const bug = await findBugByRef(c, c.req.param('ref'));
+    if (!bug) return c.json({ error: 'not_found', message: 'Bug report not found' }, 404);
+    return c.json(bug);
+  });
+
+  // PATCH /admin/bugs/:ref — apply triage. Omitted fields are left untouched.
+  app.patch('/bugs/:ref', async (c) => {
+    const deps = c.get('deps');
+
+    const bug = await findBugByRef(c, c.req.param('ref'));
+    if (!bug) return c.json({ error: 'not_found', message: 'Bug report not found' }, 404);
+
+    const raw = await c.req.json().catch(() => null);
+    const parsed = triageSchema.safeParse(raw);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      const where = issue?.path.join('.') || 'body';
+      return c.json(
+        { error: 'bad_request', message: `${where}: ${issue?.message ?? 'invalid'}` },
+        400,
+      );
+    }
+
+    const update: BugTriageUpdate = { ...parsed.data };
+
+    // Closing a report stamps resolved_at; reopening clears it. Doing this here
+    // rather than in the DB keeps the timestamp consistent with the injected clock.
+    if (update.status !== undefined) {
+      const isTerminal = (TERMINAL_BUG_STATUSES as readonly string[]).includes(update.status);
+      update.resolvedAt = isTerminal ? (bug.resolved_at ?? deps.now().toISOString()) : null;
+    }
+
+    if (update.duplicateOf === bug.id) {
+      return c.json({ error: 'bad_request', message: 'A report cannot duplicate itself' }, 400);
+    }
+
+    const updated = await deps.repo.updateBugReportTriage(bug.id, update);
+    return c.json(updated);
+  });
+
   return app;
 }
+
+const triageSchema = z
+  .object({
+    status: z.enum(BUG_STATUSES).optional(),
+    triageNotes: z.string().max(10_000).nullable().optional(),
+    resolution: z.string().max(10_000).nullable().optional(),
+    duplicateOf: z.string().uuid().nullable().optional(),
+    tags: z.array(z.string().max(64)).max(20).optional(),
+  })
+  .refine((o) => Object.keys(o).length > 0, {
+    message: 'expected at least one field to change',
+  });
 
 function round4(n: number): number {
   return Math.round(n * 1e4) / 1e4;
