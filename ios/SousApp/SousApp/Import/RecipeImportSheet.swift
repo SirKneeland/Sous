@@ -133,7 +133,7 @@ struct RecipeImportSheet: View {
         Button(action: action) {
             HStack(spacing: 16) {
                 Image(systemName: icon)
-                    .font(.system(size: 20, weight: .regular))
+                    .font(.sousIcon(.xLarge))
                     .foregroundStyle(Color.sousText)
                     .frame(width: 28)
                 VStack(alignment: .leading, spacing: 3) {
@@ -146,7 +146,7 @@ struct RecipeImportSheet: View {
                 }
                 Spacer()
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .regular))
+                    .font(.sousIcon(.small))
                     .foregroundStyle(Color.sousMuted)
             }
             .padding(.horizontal, 20)
@@ -182,7 +182,7 @@ struct RecipeImportSheet: View {
                         mode = .library
                     } label: {
                         Image(systemName: "photo.on.rectangle")
-                            .font(.system(size: 22, weight: .medium))
+                            .font(.sousIcon(.xLarge, weight: .medium))
                             .foregroundStyle(.white)
                             .padding(12)
                             .background(.ultraThinMaterial, in: Circle())
@@ -232,7 +232,7 @@ struct RecipeImportSheet: View {
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "doc.on.clipboard")
-                            .font(.system(size: 12, weight: .regular))
+                            .font(.sousIcon(.small))
                         Text("PASTE FROM CLIPBOARD")
                             .font(.sousCaption)
                             .kerning(0.5)
@@ -410,7 +410,7 @@ struct RecipeImportSheet: View {
                     backAction?()
                 } label: {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 14, weight: .regular))
+                        .font(.sousIcon(.medium))
                         .foregroundStyle(Color.sousText)
                         .frame(width: 32, height: 32)
                         .overlay(Rectangle().stroke(Color.sousText, lineWidth: 1))

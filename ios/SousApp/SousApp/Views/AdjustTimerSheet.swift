@@ -52,7 +52,7 @@ struct AdjustTimerSheet: View {
                     .foregroundStyle(Color.sousText)
                 Spacer()
                 Text(formatTime(remaining))
-                    .font(.system(size: 24, weight: .bold, design: .monospaced))
+                    .font(.sousReadout)
                     .foregroundStyle(Color.sousTerracotta)
                     .monospacedDigit()
             }
@@ -66,13 +66,13 @@ struct AdjustTimerSheet: View {
             HStack(spacing: 0) {
                 VStack(spacing: 4) {
                     Text("HOURS")
-                        .font(.system(size: 15, weight: .semibold, design: .monospaced))
+                        .font(.sousPickerLabel)
                         .foregroundStyle(Color.sousMuted)
                         .kerning(1.0)
                     Picker("Hours", selection: $hours) {
                         ForEach(0..<24, id: \.self) { h in
                             Text("\(h)").tag(h)
-                                .font(.system(size: 22, weight: .regular, design: .monospaced))
+                                .font(.sousPickerValue)
                         }
                     }
                     .pickerStyle(.wheel)
@@ -86,13 +86,13 @@ struct AdjustTimerSheet: View {
 
                 VStack(spacing: 4) {
                     Text("MINUTES")
-                        .font(.system(size: 15, weight: .semibold, design: .monospaced))
+                        .font(.sousPickerLabel)
                         .foregroundStyle(Color.sousMuted)
                         .kerning(1.0)
                     Picker("Minutes", selection: $minutes) {
                         ForEach(0..<60, id: \.self) { m in
                             Text("\(m)").tag(m)
-                                .font(.system(size: 22, weight: .regular, design: .monospaced))
+                                .font(.sousPickerValue)
                         }
                     }
                     .pickerStyle(.wheel)
@@ -154,7 +154,7 @@ struct AdjustTimerSheet: View {
                 onDismiss()
             } label: {
                 Text("Delete Timer")
-                    .font(.system(size: 13, weight: .regular, design: .monospaced))
+                    .font(.sousButtonQuiet)
                     .foregroundStyle(Color.red.opacity(0.8))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)

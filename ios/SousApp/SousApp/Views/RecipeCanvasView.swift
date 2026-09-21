@@ -253,7 +253,7 @@ struct RecipeCanvasView: View {
                             .foregroundStyle(Color.sousTerracotta)
                             .kerning(1.2)
                         Image(systemName: "chevron.down")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.sousIcon(.small, weight: .semibold))
                             .foregroundStyle(Color.sousTerracotta)
                             .rotationEffect(.degrees(ingredientsExpanded ? 0 : -90))
                             .animation(.easeInOut(duration: 0.2), value: ingredientsExpanded)
@@ -294,7 +294,7 @@ struct RecipeCanvasView: View {
                                 }
                             }
                             Image(systemName: "chevron.down")
-                                .font(.system(size: 11, weight: .semibold))
+                                .font(.sousIcon(.small, weight: .semibold))
                                 .foregroundStyle(Color.sousTerracotta)
                                 .rotationEffect(.degrees(miseEnPlaceExpanded ? 0 : -90))
                                 .animation(.easeInOut(duration: 0.2), value: miseEnPlaceExpanded)
@@ -383,7 +383,7 @@ struct RecipeCanvasView: View {
                                 }
                             }
                             Image(systemName: "chevron.down")
-                                .font(.system(size: 11, weight: .semibold))
+                                .font(.sousIcon(.small, weight: .semibold))
                                 .foregroundStyle(Color.sousTerracotta)
                                 .rotationEffect(.degrees(stepsCompletedExpanded ? 0 : -90))
                                 .animation(.easeInOut(duration: 0.2), value: stepsCompletedExpanded)
@@ -437,7 +437,7 @@ struct RecipeCanvasView: View {
                                     .foregroundStyle(Color.sousTerracotta)
                                     .kerning(1.2)
                                 Image(systemName: "chevron.down")
-                                    .font(.system(size: 11, weight: .semibold))
+                                    .font(.sousIcon(.small, weight: .semibold))
                                     .foregroundStyle(Color.sousTerracotta)
                                     .rotationEffect(.degrees(isExpanded ? 0 : -90))
                                     .animation(.easeInOut(duration: 0.2), value: isExpanded)
@@ -477,7 +477,7 @@ struct RecipeCanvasView: View {
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "arrowshape.turn.up.backward.fill")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.sousIcon(.medium, weight: .semibold))
                         Text("Reset Recipe")
                             .font(.sousButton)
                     }
@@ -504,7 +504,7 @@ struct RecipeCanvasView: View {
                     } label: {
                         HStack(spacing: 8) {
                             Image(systemName: "arrowshape.turn.up.backward.2.fill")
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(.sousIcon(.medium, weight: .semibold))
                             Text("Restore Original Recipe")
                                 .font(.sousButton)
                         }
@@ -886,7 +886,7 @@ struct RecipeCanvasView: View {
             } label: {
                 HStack(spacing: 5) {
                     Image(systemName: "person.2")
-                        .font(.system(size: 11, weight: .regular, design: .monospaced))
+                        .font(.sousIcon(.small))
                     Text("SERVES \(servings)")
                         .font(.sousSectionHeader)
                         .kerning(1.2)
@@ -912,7 +912,7 @@ struct RecipeCanvasView: View {
                         .frame(width: 12, height: 12)
                 } else {
                     Image(systemName: "carrot")
-                        .font(.system(size: 11, weight: .regular, design: .monospaced))
+                        .font(.sousIcon(.small))
                 }
                 Text("MISE EN PLACE")
                     .font(.sousSectionHeader)

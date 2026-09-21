@@ -21,7 +21,7 @@ struct TimerDoneBanner: View {
                         .multilineTextAlignment(.center)
 
                     Text("TIMER DONE [\(formatDuration(session.totalDuration))]")
-                        .font(.system(size: 32, weight: .bold, design: .monospaced))
+                        .font(.sousReadoutLarge)
                         .foregroundStyle(.white)
                 }
                 .frame(maxWidth: .infinity)

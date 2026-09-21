@@ -47,13 +47,13 @@ struct ServingsPickerSheet: View {
             // People wheel picker
             VStack(spacing: 4) {
                 Text("PEOPLE")
-                    .font(.system(size: 15, weight: .semibold, design: .monospaced))
+                    .font(.sousPickerLabel)
                     .foregroundStyle(Color.sousMuted)
                     .kerning(1.0)
                 Picker("People", selection: $selection) {
                     ForEach(ServingsPickerSheet.range, id: \.self) { n in
                         Text("\(n)").tag(n)
-                            .font(.system(size: 22, weight: .regular, design: .monospaced))
+                            .font(.sousPickerValue)
                     }
                 }
                 .pickerStyle(.wheel)

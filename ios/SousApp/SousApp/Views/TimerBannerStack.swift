@@ -44,7 +44,7 @@ private struct TimerBannerRow: View {
                 Spacer()
 
                 Text(formatTime(remaining))
-                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                    .font(.sousTimerBanner)
                     .foregroundStyle(.white)
                     .monospacedDigit()
 
@@ -53,7 +53,7 @@ private struct TimerBannerRow: View {
                     showingAdjust = true
                 } label: {
                     Image(systemName: "pencil")
-                        .font(.system(size: 14, weight: .regular))
+                        .font(.sousIcon(.medium))
                         .foregroundStyle(.white)
                         .frame(width: 32, height: 32)
                         .overlay(Rectangle().stroke(Color.white.opacity(0.5), lineWidth: 1))

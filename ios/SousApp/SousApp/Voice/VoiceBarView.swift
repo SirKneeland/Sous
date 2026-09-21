@@ -39,16 +39,16 @@ struct VoiceBarView: View {
     private var stateContent: some View {
         if coordinator.connectionFailed {
             Text("Voice mode unavailable")
-                .font(.system(size: 14, design: .monospaced))
+                .font(.sousVoiceLabel)
                 .foregroundStyle(Color.sousVoiceWarm)
         } else if coordinator.state == .patchPending {
             Text("say 'accept' or 'reject'")
-                .font(.system(size: 14, design: .monospaced))
+                .font(.sousVoiceLabel)
                 .foregroundStyle(Color.sousVoiceSpeaking)
         } else {
             VStack(spacing: 6) {
                 Text(stateText)
-                    .font(.system(size: 14, design: .monospaced))
+                    .font(.sousVoiceLabel)
                     .foregroundStyle(stateTextColor)
             }
         }
@@ -57,7 +57,7 @@ struct VoiceBarView: View {
     private var exitButton: some View {
         Button(action: onExit) {
             Image(systemName: "xmark")
-                .font(.system(size: 11, weight: .semibold))
+                .font(.sousIcon(.small, weight: .semibold))
                 .foregroundStyle(Color.sousVoiceSpeaking)
                 .frame(width: 28, height: 28)
                 .overlay(
@@ -76,7 +76,7 @@ struct VoiceBarView: View {
         HStack(spacing: 0) {
             Button(action: onReject) {
                 Text("REJECT")
-                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    .font(.sousVoiceButton)
                     .foregroundStyle(Color.sousVoiceWarm)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
@@ -89,7 +89,7 @@ struct VoiceBarView: View {
 
             Button(action: onAccept) {
                 Text("ACCEPT CHANGES")
-                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    .font(.sousVoiceButton)
                     .foregroundStyle(Color.sousVoiceSpeaking)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)

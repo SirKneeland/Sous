@@ -92,24 +92,94 @@ extension Color {
 
 // MARK: - Typography
 
+// Every text style in the app comes from a token below. Never write
+// `.system(size:)` in a view — `design/check-tokens.py` fails the build if you do.
+//
+// Monospace is permitted in exactly two roles: numeric readouts and voice bar
+// state labels. See docs/DesignSpec.md.
+
 extension Font {
-    /// New York serif, bold — recipe titles
+
+    // MARK: New York — identity
+
+    /// Recipe titles.
     static let sousTitle: Font = .system(size: 28, weight: .bold, design: .serif)
 
-    /// SF Pro, small ALL CAPS burgundy — section headers (INGREDIENTS, PROCEDURE)
+    /// SOUS logotype in the blank state.
+    static let sousLogotype: Font = .system(size: 34, weight: .bold, design: .serif)
+
+    // MARK: SF Pro — structure and body
+
+    /// Small ALL CAPS burgundy section headers (INGREDIENTS, PROCEDURE).
     static let sousSectionHeader: Font = .system(size: 11, weight: .semibold)
 
-    /// SF Pro, regular weight — body text, ingredient names, step text, chat messages
+    /// Body text, ingredient names, step text, chat messages.
     static let sousBody: Font = .system(size: 16, weight: .regular)
 
-    /// SF Pro, small — captions, timestamps, revision numbers
+    /// Captions, timestamps, revision numbers.
     static let sousCaption: Font = .system(size: 11, weight: .regular)
 
-    /// SF Pro, medium weight — button labels (ALL CAPS)
+    /// Button labels (ALL CAPS).
     static let sousButton: Font = .system(size: 14, weight: .semibold)
 
-    /// New York serif, large bold — SOUS logotype in blank state
-    static let sousLogotype: Font = .system(size: 34, weight: .bold, design: .serif)
+    /// De-emphasised button labels — destructive or secondary actions.
+    static let sousButtonQuiet: Font = .system(size: 13, weight: .regular)
+
+    /// Markdown H1 in assistant chat messages.
+    static let sousHeading1: Font = .system(size: 17, weight: .bold)
+
+    /// Markdown H2 in assistant chat messages.
+    static let sousHeading2: Font = .system(size: 15, weight: .bold)
+
+    /// Markdown H3 and below in assistant chat messages.
+    static let sousHeading3: Font = .system(size: 14, weight: .semibold)
+
+    // MARK: SF Mono — numeric readouts and voice labels only
+
+    /// Timer-done banner. The largest readout in the app.
+    static let sousReadoutLarge: Font = .system(size: 32, weight: .bold, design: .monospaced)
+
+    /// Active countdown in the adjust-timer sheet.
+    static let sousReadout: Font = .system(size: 24, weight: .bold, design: .monospaced)
+
+    /// Digits in the duration and servings wheels.
+    static let sousPickerValue: Font = .system(size: 22, weight: .regular, design: .monospaced)
+
+    /// Wheel labels — HOURS, MINUTES, PEOPLE.
+    static let sousPickerLabel: Font = .system(size: 15, weight: .semibold, design: .monospaced)
+
+    /// Countdown inside a running-timer banner.
+    static let sousTimerBanner: Font = .system(size: 14, weight: .semibold, design: .monospaced)
+
+    /// Voice bar state labels — ready, listening, speaking, thinking.
+    static let sousVoiceLabel: Font = .system(size: 14, weight: .regular, design: .monospaced)
+
+    /// Voice bar ACCEPT / REJECT button labels.
+    static let sousVoiceButton: Font = .system(size: 13, weight: .semibold, design: .monospaced)
+}
+
+// MARK: - Icon Sizing
+
+/// The five permitted SF Symbol sizes. Icons are sized from this scale, never
+/// by eye — an icon that looks wrong at every step usually wants different padding.
+enum SousIconSize: CGFloat {
+    /// Chevrons, close buttons, inline row affordances.
+    case small = 11
+    /// Standard bar and control icons — send, scan, pencil.
+    case medium = 14
+    /// Prominent controls — drawer buttons, mic, camera.
+    case large = 16
+    /// Feature icons in sheets and pickers.
+    case xLarge = 22
+    /// Empty-state illustration icons.
+    case huge = 32
+}
+
+extension Font {
+    /// SF Symbol sizing. Weight defaults to regular; pass one to match surrounding text.
+    static func sousIcon(_ size: SousIconSize, weight: Font.Weight = .regular) -> Font {
+        .system(size: size.rawValue, weight: weight)
+    }
 }
 
 // MARK: - Square Checkbox
@@ -174,7 +244,7 @@ struct SousIconButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 14, weight: .regular))
+                .font(.sousIcon(.medium))
                 .foregroundStyle(Color.sousText)
                 .frame(width: 32, height: 32)
                 .overlay(Rectangle().stroke(Color.sousText, lineWidth: 1))

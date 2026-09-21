@@ -46,19 +46,57 @@ text, ingredient rows, step text, chat messages, buttons, or captions.
 
 ### Type Scale
 
-| Role | Font | Size | Weight | Case | Notes |
-|---|---|---|---|---|---|
-| Recipe title | New York | 28pt | Bold | Title case | Primary canvas heading |
-| Section header label | SF Pro | 11pt | Semibold | ALL CAPS | Letter-spaced 1.2, burgundy |
-| Body / ingredient row | SF Pro | ~16pt | Regular | Sentence case | Line height ~1.6 |
-| Step body text | SF Pro | ~17pt | Regular | Sentence case | Line height ~1.55 |
-| Chat bubble text | SF Pro | ~15–16pt | Regular | Sentence case | |
-| Caption / timestamp | SF Pro | 11pt | Regular | Sentence case | Muted color |
-| Button label | SF Pro | ~14pt | Medium | ALL CAPS | Letter-spaced |
-| Option card dish name | New York | ~17pt | Semibold | Title case | |
-| Voice bar state label | SF Pro | ~13pt | Medium | lowercase | Specific to voice mode bar |
+Seventeen named roles, and nothing else. Every text style in the app comes from one of
+these — `design/check-tokens.py` rejects any font size written inline in a view.
 
-Section labels (INGREDIENTS, STEPS, MISE EN PLACE, etc.) should remain visually distinct via ALL CAPS and letter-spacing even though they're now SF Pro.
+**New York — identity**
+
+| Token | Size | Weight | Case | Used for |
+|---|---|---|---|---|
+| `sousTitle` | 28pt | Bold | Title case | Recipe titles |
+| `sousLogotype` | 34pt | Bold | Title case | SOUS wordmark on the blank state |
+
+**SF Pro — structure and body**
+
+| Token | Size | Weight | Case | Used for |
+|---|---|---|---|---|
+| `sousHeading1` | 17pt | Bold | Sentence | Markdown H1 in assistant chat |
+| `sousBody` | 16pt | Regular | Sentence | Ingredient rows, step text, chat messages |
+| `sousHeading2` | 15pt | Bold | Sentence | Markdown H2 in assistant chat |
+| `sousButton` | 14pt | Semibold | ALL CAPS | Button labels |
+| `sousHeading3` | 14pt | Semibold | Sentence | Markdown H3 and below |
+| `sousButtonQuiet` | 13pt | Regular | Sentence | Destructive or secondary button labels |
+| `sousSectionHeader` | 11pt | Semibold | ALL CAPS | INGREDIENTS, PROCEDURE, MISE EN PLACE — letter-spaced 1.2 |
+| `sousCaption` | 11pt | Regular | Sentence | Captions, timestamps, revision numbers |
+
+**SF Mono — numeric readouts and voice labels only**
+
+| Token | Size | Weight | Used for |
+|---|---|---|---|
+| `sousReadoutLarge` | 32pt | Bold | Timer-done banner |
+| `sousReadout` | 24pt | Bold | Active countdown in the adjust-timer sheet |
+| `sousPickerValue` | 22pt | Regular | Digits in the duration and servings wheels |
+| `sousPickerLabel` | 15pt | Semibold | Wheel labels — HOURS, MINUTES, PEOPLE |
+| `sousTimerBanner` | 14pt | Semibold | Countdown inside a running-timer banner |
+| `sousVoiceLabel` | 14pt | Regular | Voice bar state labels |
+| `sousVoiceButton` | 13pt | Semibold | Voice bar ACCEPT / REJECT labels |
+
+Section labels (INGREDIENTS, STEPS, MISE EN PLACE) stay visually distinct via ALL CAPS and
+letter-spacing even though they're SF Pro rather than New York.
+
+### Icon Scale
+
+SF Symbols are sized from five steps and never by eye. Apply with
+`Font.sousIcon(.medium)`, passing a weight when it should match surrounding text.
+An icon that looks wrong at every step usually wants different padding, not a new size.
+
+| Step | Size | Used for |
+|---|---|---|
+| `.small` | 11pt | Chevrons, close buttons, inline row affordances |
+| `.medium` | 14pt | Standard bar and control icons — send, scan, pencil |
+| `.large` | 16pt | Prominent controls — drawer buttons, mic, camera |
+| `.xLarge` | 22pt | Feature icons in sheets and pickers |
+| `.huge` | 32pt | Empty-state illustration icons |
 
 ---
 
@@ -123,6 +161,21 @@ Cream, ink, and neutral values invert in dark mode as above. The key principle: 
 - List items: row separation via 1pt dividers, not cards
 - Vertical rhythm is consistent — do not mix tight and loose spacing arbitrarily
 - Safe area insets must be respected; content does not bleed under the nav bar or tab bar
+
+### Spacing Scale (advisory)
+
+`4 / 8 / 12 / 16 / 20 / 24 / 32 / 40`, where **20pt is the content gutter**.
+
+Unlike colors, type and icon sizes, this scale is **not enforced** — 20 distinct padding values
+still exist in the app and no sweep is planned, because changing padding reflows layout rather
+than just resizing a glyph.
+
+**The rule is opportunistic.** When you touch a view's spacing for any other reason, snap the
+values you touch to the nearest step. Leave everything else alone. Do not open a pull request
+whose only purpose is migrating padding, and do not add a check that enforces this — it would
+fail on every view nobody has had a reason to touch yet.
+
+New views should use the scale from the start.
 
 ---
 
@@ -261,6 +314,8 @@ All checkbox types remain at full opacity regardless of checked state — do not
 ## What Not To Do
 
 - Do not use monospace outside numeric readouts and voice bar state labels (see Typography)
+- Do not write `.system(size:)` in a view — every size is a token; the check script rejects it
+- Do not invent an icon size outside the five-step scale
 - Do not use rounded buttons (capsule shape)
 - Do not use SwiftUI default grouped list background (system gray)
 - Do not use shadows or elevation

@@ -58,7 +58,7 @@ struct HistoryDrawer: View {
                                     snap(open: false)
                                 } label: {
                                     Image(systemName: "gearshape.fill")
-                                        .font(.system(size: 16, weight: .medium))
+                                        .font(.sousIcon(.large, weight: .medium))
                                         .foregroundStyle(.white)
                                         .frame(width: 44, height: 44)
                                         .background(Color.sousSurfaceInverse)
@@ -83,7 +83,7 @@ struct HistoryDrawer: View {
                         } label: {
                             HStack(spacing: 8) {
                                 Image(systemName: "plus.square.fill")
-                                    .font(.system(size: 16, weight: .regular))
+                                    .font(.sousIcon(.large))
                                     .foregroundStyle(.white)
                                 Text("NEW RECIPE")
                                     .font(.sousButton)
@@ -171,7 +171,7 @@ struct HistoryDrawer: View {
                         snap(open: !store.showRecentRecipes)
                     } label: {
                         Image(systemName: "line.3.horizontal")
-                            .font(.system(size: 16, weight: .medium))
+                            .font(.sousIcon(.large, weight: .medium))
                             .foregroundStyle(.white)
                             .frame(width: 44, height: 44)
                             .background(Color.sousTerracotta)

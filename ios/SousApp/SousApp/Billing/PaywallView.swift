@@ -81,7 +81,7 @@ struct PaywallView: View {
                     ForEach(benefits, id: \.self) { benefit in
                         HStack(alignment: .top, spacing: 12) {
                             Image(systemName: "checkmark")
-                                .font(.system(size: 13, weight: .bold))
+                                .font(.sousIcon(.medium, weight: .bold))
                                 .foregroundStyle(Color.sousTerracotta)
                                 .padding(.top, 2)
                             Text(benefit)

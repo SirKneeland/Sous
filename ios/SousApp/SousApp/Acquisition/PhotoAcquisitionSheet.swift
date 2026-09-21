@@ -42,7 +42,7 @@ struct PhotoAcquisitionSheet: View {
                         acquisitionState = .showingLibraryPicker
                     } label: {
                         Image(systemName: "photo.on.rectangle")
-                            .font(.system(size: 22, weight: .medium))
+                            .font(.sousIcon(.xLarge, weight: .medium))
                             .foregroundStyle(.white)
                             .padding(12)
                             .background(.ultraThinMaterial, in: Circle())

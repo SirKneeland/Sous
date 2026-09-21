@@ -30,13 +30,13 @@ struct APIKeyCallout: View {
 
             VStack(alignment: .trailing, spacing: 4) {
                 Image(systemName: "arrow.up")
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(.sousIcon(.large, weight: .semibold))
                     .foregroundStyle(Color.sousText)
                     .frame(width: 18, height: 18)
                     .padding(.trailing, arrowTrailingPad)
 
                 Text("Start here — add your\nAPI key in Settings.")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.sousBody.weight(.semibold))
                     .foregroundStyle(Color.white)
                     .multilineTextAlignment(.trailing)
                     .padding(.horizontal, 12)

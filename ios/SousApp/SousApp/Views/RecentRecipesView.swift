@@ -91,7 +91,7 @@ struct RecentRecipesView: View {
                                     .font(.sousCaption)
                                     .foregroundStyle(Color.sousMuted)
                                 Image(systemName: "chevron.right")
-                                    .font(.system(size: 11, weight: .regular))
+                                    .font(.sousIcon(.small))
                                     .foregroundStyle(Color.sousMuted)
                             }
                             .contentShape(Rectangle())
@@ -170,7 +170,7 @@ struct RecentRecipesView: View {
             // Pre-canvas: lightbulb.min + resolved summary (or static fallback).
             HStack(spacing: 5) {
                 Image(systemName: "lightbulb.min")
-                    .font(.system(size: 12, weight: .regular))
+                    .font(.sousIcon(.small))
                     .foregroundStyle(Color.sousMuted)
                 Text(localSummaries[snapshot.recipe.id] ?? "New Recipe")
                     .font(.sousBody)

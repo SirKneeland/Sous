@@ -177,26 +177,91 @@ genuinely what shipped.
 
 ---
 
-## Part 3 — Queued for step 2 (not decisions, just visibility)
+## Part 3 — Scale consolidation (done, 2026-09-20)
 
-Reconciliation doesn't fix scale sprawl. Two numbers to be aware of:
+Reconciliation fixed the values; this pass fixed the scales. A scan of all 64
+`.system(size:)` declarations found they were three unrelated things, not one type scale:
 
-- **Type:** 6 named font tokens, but **15 distinct font sizes** in use — 10, 11, 12, 13, 14,
-  15, 16, 17, 18, 20, 22, 24, 28, 32, 34. Most inline sizes were picked one screen at a time.
-- **Spacing:** **20 distinct padding values**. The dominant one (20pt) is used 52 times and
-  matches the spec's margin rule, so the underlying rhythm is real — it's the odd values
-  (2, 6, 10, 13, 14, 18) that are freelancing.
+| Kind | Sites | Outcome |
+|---|---|---|
+| Icon sizing (SF Symbols) | 35 | Consolidated from 11 sizes to 5 |
+| Monospace | 19 | Named as 7 roles; **no value changed** |
+| Design tokens already | 6 | Kept |
+| Inline non-mono text | 4 | Named as tokens; one moved 1pt |
 
-`tokens.json` marks the proposed 8-step spacing scale as `proposed`, not `shipped`, so nothing
-claims to be enforced that isn't.
+**Correction to an earlier claim in this file.** An earlier draft reported "15 distinct font
+sizes" as type-scale sprawl. That figure conflated icon sizing with typography and overstated
+the problem — only 4 of the 64 sites were ordinary inline text.
+
+### 10. Monospace kept at every existing size
+
+The 19 mono sites span 32 / 24 / 22 / 15 / 14 / 13pt, and each size does a distinct job — a
+countdown has to read across a kitchen, a wheel label must not compete with the digits it
+labels. They became seven named tokens (`sousReadoutLarge`, `sousReadout`, `sousPickerValue`,
+`sousPickerLabel`, `sousTimerBanner`, `sousVoiceLabel`, `sousVoiceButton`) with **no value
+changed**. Consolidating them would have made timers harder to read to make a table tidier.
+
+### 11. Two monospace uses did not qualify and were changed
+
+Decision 8 permits monospace only in numeric readouts and voice bar state labels. Two uses
+failed that test:
+
+- **"Delete Timer"** in the adjust-timer sheet was 13pt mono. It's a button label, not a
+  readout. Now `sousButtonQuiet` — SF Pro at the same 13pt regular, so it stays as
+  de-emphasised as the code comment intends.
+- **Two canvas icons** carried `design: .monospaced`, which SF Symbols ignore entirely. The
+  modifier was dead code and is gone.
+
+### 12. Icon scale: eleven sizes to five
+
+`SousIconSize` is now `small 11 / medium 14 / large 16 / xLarge 22 / huge 32`, chosen from the
+sizes already most common so the fewest icons move. **13 of 35 sites changed, none by more
+than 2pt.** The two 2pt movers are the mic button and the onboarding arrow (18pt → 16pt), and
+the import mode icon (20pt → 22pt).
+
+Icons are applied with `Font.sousIcon(.medium, weight: .semibold)`.
 
 ---
 
-## What happens once you sign off
+### 13. Spacing stays as it is, and converges opportunistically
 
-1. Conflicts above get resolved into `tokens.json` (mostly already reflected — only items 6, 7
-   and 8 are genuinely open).
-2. `docs/DesignSpec.md` gets corrected so it describes the real app.
-3. The five files in Part 2 get their hardcoded colors swapped for tokens.
-4. A test asserts `SousTheme.swift` matches `tokens.json`, so they can never drift again.
-5. Only then does Figma work start — against a source of truth that's actually true.
+20 distinct padding values remain in the app. **No sweep will be done.** Unlike a font size,
+changing padding moves layout — it reflows rows, shifts what fits above the fold, and can push
+content under a nav bar — so a bulk migration would mean re-verifying every screen for a
+tidiness win.
+
+The 8-step scale in `tokens.json` is therefore marked **`advisory`**, not `proposed` or
+`shipped`. The rule is opportunistic: **when you touch a view's spacing for any other reason,
+snap the values you touch to the nearest step.** Leave the rest alone. Over a few milestones of
+normal UI work the odd values (2, 6, 10, 13, 14, 18) disappear on their own, with each change
+verified as part of the work that prompted it.
+
+The scale is `4 / 8 / 12 / 16 / 20 / 24 / 32 / 40`, where 20pt is the content gutter — already
+the app's dominant rhythm at 52 uses.
+
+The check script deliberately does **not** enforce spacing. Adding that check would fail the
+build on every untouched view and turn an advisory into a blocker.
+
+---
+
+## Still open
+
+**No destructive color token.** The "Delete Timer" button uses SwiftUI's system red at 80%
+opacity. Sous has no red in its palette, and inventing one is a design decision rather than a
+reconciliation, so it was left alone. The check script only catches hand-built hex values, so
+it does not flag this. Worth deciding on a `status.destructive` token when billing or account
+deletion needs a second one.
+
+---
+
+## What is enforced now
+
+`python3 design/check-tokens.py` fails if any of these regress:
+
+1. A color in `SousTheme.swift` no longer matches `tokens.json`.
+2. A view builds a color by hand instead of using a token.
+3. A view writes `.system(size:)` instead of using a type or icon token.
+4. The `SousIconSize` scale no longer matches `tokens.json`.
+5. A type role in `tokens.json` has no matching token in the theme.
+
+Spacing is **not** in that list, by the decision above.

@@ -142,9 +142,9 @@ struct MarkdownTextView: View {
 
     private func headingFont(_ level: Int) -> Font {
         switch level {
-        case 1: return .system(size: 17, weight: .bold)
-        case 2: return .system(size: 15, weight: .bold)
-        default: return .system(size: 14, weight: .semibold)
+        case 1: return .sousHeading1
+        case 2: return .sousHeading2
+        default: return .sousHeading3
         }
     }
 }

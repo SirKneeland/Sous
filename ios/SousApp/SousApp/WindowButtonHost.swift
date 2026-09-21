@@ -89,7 +89,7 @@ struct BottomZoneView: View {
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "message")
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.sousIcon(.medium, weight: .semibold))
                         Text("TALK TO SOUS")
                             .font(.sousButton)
                     }
@@ -109,7 +109,7 @@ struct BottomZoneView: View {
                         onOpenVoiceMode()
                     } label: {
                         Image(systemName: "mic.fill")
-                            .font(.system(size: 18, weight: .semibold))
+                            .font(.sousIcon(.large, weight: .semibold))
                             .foregroundStyle(.white)
                             .frame(width: 60, height: 52)
                             .background(Color.sousTerracotta)
@@ -124,7 +124,7 @@ struct BottomZoneView: View {
             .zIndex(1)
             // ThumbDrop affordance hint
             Image(systemName: "chevron.down")
-                .font(.system(size: 12, weight: .light))
+                .font(.sousIcon(.small, weight: .light))
                 .foregroundStyle(Color.sousMuted)
                 .frame(maxWidth: .infinity)
                 .padding(.bottom, 8)

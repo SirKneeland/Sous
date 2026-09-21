@@ -119,7 +119,7 @@ struct ChatSheetView: View {
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "doc.viewfinder")
-                            .font(.system(size: 14, weight: .regular))
+                            .font(.sousIcon(.medium))
                         Text("TALK TO A RECIPE")
                             .font(.sousButton)
                     }
@@ -141,7 +141,7 @@ struct ChatSheetView: View {
                             .foregroundStyle(Color.sousMuted)
                             .kerning(1.0)
                         Image(systemName: "chevron.down")
-                            .font(.system(size: 10, weight: .light))
+                            .font(.sousIcon(.small, weight: .light))
                             .foregroundStyle(Color.sousMuted)
                     }
                 }
@@ -414,7 +414,7 @@ struct ChatSheetView: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "wand.and.stars")
-                        .font(.system(size: 12, weight: .regular))
+                        .font(.sousIcon(.small))
                     Text("Make this recipe")
                         .font(.sousButton)
                 }
@@ -443,7 +443,7 @@ struct ChatSheetView: View {
                 showPhotoSheet = true
             } label: {
                 Image(systemName: "camera")
-                    .font(.system(size: 15, weight: .regular))
+                    .font(.sousIcon(.large))
                     .foregroundStyle(Color.sousText)
                     .frame(width: 44, height: 44)
                     .overlay(Rectangle().stroke(Color.sousText, lineWidth: 1))
@@ -503,7 +503,7 @@ struct ChatSheetView: View {
                 sendAction()
             } label: {
                 Image(systemName: "paperplane.fill")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.sousIcon(.medium, weight: .semibold))
                     .foregroundStyle(canSend ? Color.sousBackground : Color.sousMuted)
                     .frame(width: 44, height: 44)
                     .background(canSend ? Color.sousText : Color.clear)
@@ -528,7 +528,7 @@ struct ChatSheetView: View {
             // ThumbDrop affordance hint — only shown when a canvas exists
             if !isFullscreen {
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 12, weight: .light))
+                    .font(.sousIcon(.small, weight: .light))
                     .foregroundStyle(Color.sousMuted)
                     .offset(y: 16)
                     .allowsHitTesting(false)
@@ -1001,7 +1001,7 @@ private struct QuotedContextChip: View {
                 onDismiss()
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.sousIcon(.small, weight: .semibold))
                     .foregroundStyle(Color.sousMuted)
                     .padding(8)
             }
@@ -1079,7 +1079,7 @@ private struct PhotoThumbnailView: View {
         } else {
             // Missing file placeholder — never crashes
             Image(systemName: "photo")
-                .font(.system(size: 32))
+                .font(.sousIcon(.huge))
                 .foregroundStyle(Color.sousBackground.opacity(0.5))
                 .frame(width: 80, height: 60)
         }

@@ -52,13 +52,13 @@ struct DurationPickerSheet: View {
                 // Hours
                 VStack(spacing: 4) {
                     Text("HOURS")
-                        .font(.system(size: 15, weight: .semibold, design: .monospaced))
+                        .font(.sousPickerLabel)
                         .foregroundStyle(Color.sousMuted)
                         .kerning(1.0)
                     Picker("Hours", selection: $hours) {
                         ForEach(0..<24, id: \.self) { h in
                             Text("\(h)").tag(h)
-                                .font(.system(size: 22, weight: .regular, design: .monospaced))
+                                .font(.sousPickerValue)
                         }
                     }
                     .pickerStyle(.wheel)
@@ -74,13 +74,13 @@ struct DurationPickerSheet: View {
                 // Minutes
                 VStack(spacing: 4) {
                     Text("MINUTES")
-                        .font(.system(size: 15, weight: .semibold, design: .monospaced))
+                        .font(.sousPickerLabel)
                         .foregroundStyle(Color.sousMuted)
                         .kerning(1.0)
                     Picker("Minutes", selection: $minutes) {
                         ForEach(0..<60, id: \.self) { m in
                             Text("\(m)").tag(m)
-                                .font(.system(size: 22, weight: .regular, design: .monospaced))
+                                .font(.sousPickerValue)
                         }
                     }
                     .pickerStyle(.wheel)
