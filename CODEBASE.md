@@ -24,6 +24,10 @@
 │   ├── DesignSpec.md
 │   ├── PersonalityModes.md
 │   └── Screenshots/       # App screenshots for reference
+├── design/                # Design system source of truth
+│   ├── tokens.json        # Canonical palette, type roles, spacing — feeds Swift and Figma
+│   ├── TOKEN-DECISIONS.md # Why each token has the value it has
+│   └── check-tokens.py    # Fails if tokens.json and SousTheme.swift drift apart
 ├── ios/
 │   ├── SousCore/          # Swift Package — core logic (no UI)
 │   │   ├── Package.swift
@@ -202,6 +206,11 @@ so re-registered (previously-deleted) users can be stored without a trial.
   - Run with: `xcodebuild test -scheme SousApp -destination 'platform=iOS Simulator,name=iPhone 17'`
 
 - **UI tests:** `SousAppUITests` — Minimal coverage, launch tests only
+
+- **Design token check:** verifies `SousTheme.swift` still matches `design/tokens.json`,
+  and that no view hardcodes a color
+  - Run with: `python3 design/check-tokens.py` (from the repo root)
+  - Run it after any palette change. No dependencies, no build required.
 
 - **Backend tests:** Node.js built-in test runner (`node:test`) via `tsx`
   - Location: `backend/src/**/*.test.ts`

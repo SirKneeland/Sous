@@ -1,58 +1,93 @@
 import SwiftUI
 import UIKit
 
-// MARK: - Color Palette
+// MARK: - Palette
 
-extension Color {
-    /// Warm cream (light) / Charcoal (dark) — primary background
-    static let sousBackground = Color(UIColor { t in
-        t.userInterfaceStyle == .dark
-            ? UIColor(red: 26/255, green: 26/255, blue: 26/255, alpha: 1)
-            : UIColor(red: 242/255, green: 239/255, blue: 233/255, alpha: 1)
-    })
+// The hex literals below are the single source of truth for Sous's palette in
+// code. They are verified against `design/tokens.json` by `design/check-tokens.py`
+// — if you change a value here, change it there too or the check fails.
+//
+// Never hardcode a color in a view. If a view needs a color that isn't here,
+// add a token here first.
 
-    /// Near-black (light) / Cream (dark) — primary text and borders
-    static let sousText = Color(UIColor { t in
-        t.userInterfaceStyle == .dark
-            ? UIColor(red: 242/255, green: 239/255, blue: 233/255, alpha: 1)
-            : UIColor(red: 26/255, green: 26/255, blue: 26/255, alpha: 1)
-    })
+private extension UIColor {
+    convenience init(sousHex hex: UInt32) {
+        self.init(
+            red: CGFloat((hex >> 16) & 0xFF) / 255,
+            green: CGFloat((hex >> 8) & 0xFF) / 255,
+            blue: CGFloat(hex & 0xFF) / 255,
+            alpha: 1
+        )
+    }
+}
 
-    /// Burgundy — accent, section headers, active states
-    /// Light: #8B2E3F  Dark: #C45068
-    static let sousTerracotta = Color(UIColor { t in
-        t.userInterfaceStyle == .dark
-            ? UIColor(red: 196/255, green: 80/255, blue: 104/255, alpha: 1)
-            : UIColor(red: 139/255, green: 46/255, blue: 63/255, alpha: 1)
-    })
+/// Builds a color that resolves differently in light and dark mode.
+/// Pass the same value twice for a token that does not invert.
+private func sousDynamic(light: UInt32, dark: UInt32) -> UIColor {
+    UIColor { t in
+        UIColor(sousHex: t.userInterfaceStyle == .dark ? dark : light)
+    }
+}
 
-    /// Pale burgundy — timer-highlight row background
-    /// Light: #F7EAEC  Dark: #2C1018
-    static let sousHighlightBackground = Color(UIColor { t in
-        t.userInterfaceStyle == .dark
-            ? UIColor(red: 44/255, green: 16/255, blue: 24/255, alpha: 1)
-            : UIColor(red: 247/255, green: 234/255, blue: 236/255, alpha: 1)
-    })
+/// UIKit-facing tokens. Needed where SwiftUI can't reach — `UINavigationBarAppearance`,
+/// `NSAttributedString`. SwiftUI code should use the `Color` equivalents below.
+extension UIColor {
+    /// Warm cream (light) / charcoal (dark) — primary background
+    static let sousBackgroundUI = sousDynamic(light: 0xF2EFE9, dark: 0x1A1A1A)
 
-    /// Warm gray #9A9590 — captions, timestamps, placeholders
-    static let sousMuted = Color(red: 154/255, green: 149/255, blue: 144/255)
+    /// Near-black (light) / cream (dark) — primary text and strong borders
+    static let sousTextUI = sousDynamic(light: 0x1A1A1A, dark: 0xF2EFE9)
 
-    /// White (light) / Dark surface (dark) — chat sheet, input fields
-    static let sousSurface = Color(UIColor { t in
-        t.userInterfaceStyle == .dark
-            ? UIColor(red: 34/255, green: 34/255, blue: 34/255, alpha: 1)
-            : UIColor.white
-    })
+    /// Burgundy — accent, section headers, active states, nav bar, voice bar
+    static let sousTerracottaUI = sousDynamic(light: 0x8B2E3F, dark: 0xC45068)
 
-    /// Muted green #2D6A4F — added items in patch diff
-    static let sousGreen = Color(red: 45/255, green: 106/255, blue: 79/255)
+    /// Pale burgundy — timer-highlight rows, user chat bubbles
+    static let sousHighlightBackgroundUI = sousDynamic(light: 0xF7EAEC, dark: 0x2C1018)
+
+    /// Warm gray — captions, timestamps, done steps, placeholders
+    static let sousMutedUI = sousDynamic(light: 0x9A9590, dark: 0x9A9590)
+
+    /// White (light) / dark surface (dark) — chat sheet, input fields
+    static let sousSurfaceUI = sousDynamic(light: 0xFFFFFF, dark: 0x222222)
+
+    /// Ink fill that stays dark in both modes — history settings button, ACCEPT fill
+    static let sousSurfaceInverseUI = sousDynamic(light: 0x1A1A1A, dark: 0x1A1A1A)
+
+    /// Backdrop behind the photo acquisition sheet
+    static let sousScrimUI = sousDynamic(light: 0x757471, dark: 0x757471)
+
+    /// Muted green — added items in patch diff only
+    static let sousGreenUI = sousDynamic(light: 0x2D6A4F, dark: 0x2D6A4F)
 
     /// Thin separator / divider line
-    static let sousSeparator = Color(UIColor { t in
-        t.userInterfaceStyle == .dark
-            ? UIColor(red: 58/255, green: 53/255, blue: 48/255, alpha: 1)
-            : UIColor(red: 208/255, green: 203/255, blue: 195/255, alpha: 1)
-    })
+    static let sousSeparatorUI = sousDynamic(light: 0xD0CBC3, dark: 0x3A3530)
+
+    // Voice mode renders on a burgundy fill in both modes, so these do not invert.
+
+    /// Voice: "listening" label and listening waveform
+    static let sousVoiceBrightUI = sousDynamic(light: 0xFAECE7, dark: 0xFAECE7)
+
+    /// Voice: "speaking" label, speaking waveform, exit icon, patch-pending text
+    static let sousVoiceSpeakingUI = sousDynamic(light: 0xF5C4B3, dark: 0xF5C4B3)
+
+    /// Voice: "ready" / "thinking" labels and secondary voice copy
+    static let sousVoiceWarmUI = sousDynamic(light: 0xF0997B, dark: 0xF0997B)
+}
+
+extension Color {
+    static let sousBackground = Color(UIColor.sousBackgroundUI)
+    static let sousText = Color(UIColor.sousTextUI)
+    static let sousTerracotta = Color(UIColor.sousTerracottaUI)
+    static let sousHighlightBackground = Color(UIColor.sousHighlightBackgroundUI)
+    static let sousMuted = Color(UIColor.sousMutedUI)
+    static let sousSurface = Color(UIColor.sousSurfaceUI)
+    static let sousSurfaceInverse = Color(UIColor.sousSurfaceInverseUI)
+    static let sousScrim = Color(UIColor.sousScrimUI)
+    static let sousGreen = Color(UIColor.sousGreenUI)
+    static let sousSeparator = Color(UIColor.sousSeparatorUI)
+    static let sousVoiceBright = Color(UIColor.sousVoiceBrightUI)
+    static let sousVoiceSpeaking = Color(UIColor.sousVoiceSpeakingUI)
+    static let sousVoiceWarm = Color(UIColor.sousVoiceWarmUI)
 }
 
 // MARK: - Typography

@@ -211,7 +211,7 @@ struct ChatSheetView: View {
                 .opacity(inputBarDragOffset == 0 ? 1 : 0)
             composerBar
         }
-        .background((showPhotoSheet ? Color(red: 117/255, green: 116/255, blue: 113/255) : Color.sousSurface).ignoresSafeArea(isFullscreen ? .all : .keyboard))
+        .background((showPhotoSheet ? Color.sousScrim : Color.sousSurface).ignoresSafeArea(isFullscreen ? .all : .keyboard))
         .animation(.easeOut(duration: 0.25), value: store.canGenerateRecipe)
     }
 

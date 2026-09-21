@@ -41,21 +41,9 @@ struct SousAppApp: App {
 #endif
 
     private func configureNavigationBar() {
-        let creamColor = UIColor { t in
-            t.userInterfaceStyle == .dark
-                ? UIColor(red: 26/255, green: 26/255, blue: 26/255, alpha: 1)
-                : UIColor(red: 242/255, green: 239/255, blue: 233/255, alpha: 1)
-        }
-        let textColor = UIColor { t in
-            t.userInterfaceStyle == .dark
-                ? UIColor(red: 242/255, green: 239/255, blue: 233/255, alpha: 1)
-                : UIColor(red: 26/255, green: 26/255, blue: 26/255, alpha: 1)
-        }
-        let separatorColor = UIColor { t in
-            t.userInterfaceStyle == .dark
-                ? UIColor(red: 58/255, green: 53/255, blue: 48/255, alpha: 1)
-                : UIColor(red: 208/255, green: 203/255, blue: 195/255, alpha: 1)
-        }
+        let creamColor = UIColor.sousBackgroundUI
+        let textColor = UIColor.sousTextUI
+        let separatorColor = UIColor.sousSeparatorUI
 
         let titleFont = UIFont.systemFont(ofSize: 16, weight: .semibold)
 

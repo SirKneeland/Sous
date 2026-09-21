@@ -1,14 +1,6 @@
 import Combine
 import SwiftUI
 
-// MARK: - Private colors
-
-private extension Color {
-    static let vbSalmon   = Color(red: 0xF0 / 255.0, green: 0x99 / 255.0, blue: 0x7B / 255.0)
-    static let vbCream    = Color(red: 0xFA / 255.0, green: 0xEC / 255.0, blue: 0xE7 / 255.0)
-    static let vbPeach    = Color(red: 0xF5 / 255.0, green: 0xC4 / 255.0, blue: 0xB3 / 255.0)
-}
-
 // MARK: - VoiceBarView
 
 struct VoiceBarView: View {
@@ -48,11 +40,11 @@ struct VoiceBarView: View {
         if coordinator.connectionFailed {
             Text("Voice mode unavailable")
                 .font(.system(size: 14, design: .monospaced))
-                .foregroundStyle(Color.vbSalmon)
+                .foregroundStyle(Color.sousVoiceWarm)
         } else if coordinator.state == .patchPending {
             Text("say 'accept' or 'reject'")
                 .font(.system(size: 14, design: .monospaced))
-                .foregroundStyle(Color.vbPeach)
+                .foregroundStyle(Color.sousVoiceSpeaking)
         } else {
             VStack(spacing: 6) {
                 Text(stateText)
@@ -66,7 +58,7 @@ struct VoiceBarView: View {
         Button(action: onExit) {
             Image(systemName: "xmark")
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Color.vbPeach)
+                .foregroundStyle(Color.sousVoiceSpeaking)
                 .frame(width: 28, height: 28)
                 .overlay(
                     RoundedRectangle(cornerRadius: 4)
@@ -85,7 +77,7 @@ struct VoiceBarView: View {
             Button(action: onReject) {
                 Text("REJECT")
                     .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(Color.vbSalmon)
+                    .foregroundStyle(Color.sousVoiceWarm)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
                     .background(Color.white.opacity(0.08))
@@ -98,7 +90,7 @@ struct VoiceBarView: View {
             Button(action: onAccept) {
                 Text("ACCEPT CHANGES")
                     .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(Color.vbPeach)
+                    .foregroundStyle(Color.sousVoiceSpeaking)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
                     .background(Color.white.opacity(0.08))
@@ -121,11 +113,11 @@ struct VoiceBarView: View {
 
     private var stateTextColor: Color {
         switch coordinator.state {
-        case .ready:        .vbSalmon
-        case .listening:    .vbCream
-        case .thinking:     .vbSalmon
-        case .speaking:     .vbPeach
-        case .patchPending: .vbPeach
+        case .ready:        .sousVoiceWarm
+        case .listening:    .sousVoiceBright
+        case .thinking:     .sousVoiceWarm
+        case .speaking:     .sousVoiceSpeaking
+        case .patchPending: .sousVoiceSpeaking
         }
     }
 }
@@ -158,7 +150,7 @@ private struct VoiceCanvasStrip: View {
             }
 
         case .listening, .speaking:
-            let barColor: Color = state == .listening ? .vbCream : .vbPeach
+            let barColor: Color = state == .listening ? .sousVoiceBright : .sousVoiceSpeaking
             TimelineView(.animation) { _ in
                 Canvas { ctx, s in
                     drawBars(ctx: &ctx, size: s, color: barColor)

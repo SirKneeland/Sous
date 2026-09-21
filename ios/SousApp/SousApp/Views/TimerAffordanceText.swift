@@ -119,21 +119,9 @@ private struct TimerStepTextView: UIViewRepresentable {
         UIFont.systemFont(ofSize: 16, weight: isCurrent ? .bold : .regular)
     }
 
-    private static var textUIColor: UIColor {
-        UIColor { t in
-            t.userInterfaceStyle == .dark
-                ? UIColor(red: 242/255, green: 239/255, blue: 233/255, alpha: 1)
-                : UIColor(red:  26/255, green:  26/255, blue:  26/255, alpha: 1)
-        }
-    }
+    private static var textUIColor: UIColor { .sousTextUI }
 
-    private static var accentUIColor: UIColor {
-        UIColor { t in
-            t.userInterfaceStyle == .dark
-                ? UIColor(red: 196/255, green: 80/255, blue: 104/255, alpha: 1)
-                : UIColor(red: 139/255, green: 46/255, blue:  63/255, alpha: 1)
-        }
-    }
+    private static var accentUIColor: UIColor { .sousTerracottaUI }
 
     // MARK: UIViewRepresentable
 

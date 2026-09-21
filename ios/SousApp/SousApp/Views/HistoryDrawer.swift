@@ -61,7 +61,7 @@ struct HistoryDrawer: View {
                                         .font(.system(size: 16, weight: .medium))
                                         .foregroundStyle(.white)
                                         .frame(width: 44, height: 44)
-                                        .background(Color(red: 26/255, green: 26/255, blue: 26/255))
+                                        .background(Color.sousSurfaceInverse)
                                 }
                                 .buttonStyle(.plain)
                                 .padding(.trailing, 16)
