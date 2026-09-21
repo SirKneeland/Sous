@@ -62,6 +62,15 @@ final class AppStore: ObservableObject {
     /// The most recent recipe import attempt, input through raw response. Used by the
     /// 5-tap diagnostic exporter, which otherwise sees nothing of an import.
     var lastImportDebugRecord: ImportDebugRecord? = nil
+    /// Rolling log of every turn that could have produced a memory, and what became of it.
+    /// Capped at `maxMemoryDecisionLogEntries`, oldest dropped first.
+    var memoryDecisionLog: [MemoryDecisionRecord] = []
+    /// Index into `memoryDecisionLog` of the proposal currently on screen, if any.
+    private var pendingMemoryDecisionIndex: Int? = nil
+    /// When this AppStore was created — used to mark memories added during this app run.
+    let debugRunStartedAt = Date()
+
+    static let maxMemoryDecisionLogEntries = 20
 #endif
     /// True when a recipe canvas exists (user has at least one recipe). False in blank/exploration state.
     @Published var hasCanvas: Bool
@@ -408,11 +417,63 @@ final class AppStore: ObservableObject {
         saveMemories()
     }
 
+    /// Records the turn in the debug decision log and shows the proposal, if there is one.
+    /// Every path that can return a `proposed_memory` funnels through here, including the
+    /// turns where nothing was proposed — the no-proposal turns are what make the rate legible.
+    func handleProposedMemory(_ proposal: String?, turnSource: String) {
+#if DEBUG
+        logMemoryDecision(proposal: proposal, turnSource: turnSource)
+#endif
+        if let proposal { proposeMemory(text: proposal) }
+    }
+
     /// Sets the pending memory proposal shown in the toast. Replaces any existing proposal.
     func proposeMemory(text: String) {
         pendingMemoryProposal = text
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     }
+
+#if DEBUG
+    private func logMemoryDecision(proposal: String?, turnSource: String) {
+        // A new proposal displaces whatever was still counting down.
+        if proposal != nil, let index = pendingMemoryDecisionIndex,
+           memoryDecisionLog.indices.contains(index),
+           memoryDecisionLog[index].fate == .pending {
+            memoryDecisionLog[index].fate = .supersededByLaterProposal
+        }
+
+        let record = MemoryDecisionRecord(
+            timestamp: Date(),
+            turnSource: turnSource,
+            proposedText: proposal,
+            duplicateOf: proposal.flatMap {
+                MemoryDecisionRecord.duplicate(of: $0, among: memories.map(\.text))
+            },
+            memoriesInContextCount: memories.count,
+            fate: proposal == nil ? .noProposal : .pending
+        )
+        memoryDecisionLog.append(record)
+
+        pendingMemoryDecisionIndex = proposal == nil ? nil : memoryDecisionLog.count - 1
+
+        if memoryDecisionLog.count > Self.maxMemoryDecisionLogEntries {
+            let overflow = memoryDecisionLog.count - Self.maxMemoryDecisionLogEntries
+            memoryDecisionLog.removeFirst(overflow)
+            pendingMemoryDecisionIndex = pendingMemoryDecisionIndex.map { $0 - overflow }
+        }
+    }
+
+    /// Resolves the proposal currently on screen. Ignored once it has already resolved, so a
+    /// save followed by the toast's dismissal doesn't overwrite the save with a skip.
+    private func resolveMemoryDecision(_ fate: MemoryDecisionRecord.Fate) {
+        guard let index = pendingMemoryDecisionIndex,
+              memoryDecisionLog.indices.contains(index),
+              memoryDecisionLog[index].fate == .pending
+        else { return }
+        memoryDecisionLog[index].fate = fate
+        if case .saved = fate { pendingMemoryDecisionIndex = nil }
+    }
+#endif
 
     /// Saves the proposed memory (with optional edits) and clears the toast.
     /// When firstPersonText is nil, generates it via MemoryPersonConverter before saving.
@@ -424,13 +485,17 @@ final class AppStore: ObservableObject {
             fp = await MemoryPersonConverter.toFirstPerson(text: text)
         }
         addMemory(text, firstPersonText: fp)
+#if DEBUG
+        resolveMemoryDecision(.saved(trigger: .tappedSave, savedText: text))
+#endif
         pendingMemoryProposal = nil
         UINotificationFeedbackGenerator().notificationOccurred(.success)
     }
 
     /// Saves the proposed memory without dismissing the toast. The toast remains visible
     /// so the countdown can complete before `dismissMemoryProposal` is called.
-    func saveMemoryOnly(text: String, firstPersonText: String? = nil) async {
+    func saveMemoryOnly(text: String, firstPersonText: String? = nil,
+                        trigger: MemorySaveTrigger = .tappedSave) async {
         let fp: String
         if let provided = firstPersonText {
             fp = provided
@@ -438,11 +503,19 @@ final class AppStore: ObservableObject {
             fp = await MemoryPersonConverter.toFirstPerson(text: text)
         }
         addMemory(text, firstPersonText: fp)
+#if DEBUG
+        resolveMemoryDecision(.saved(trigger: trigger, savedText: text))
+#endif
         UINotificationFeedbackGenerator().notificationOccurred(.success)
     }
 
     /// Discards the pending memory proposal without saving.
     func dismissMemoryProposal() {
+#if DEBUG
+        // Only marks a skip when the proposal hasn't already resolved — the toast calls this
+        // after a save too, to take itself off screen.
+        resolveMemoryDecision(.skipped)
+#endif
         pendingMemoryProposal = nil
     }
 
@@ -990,14 +1063,14 @@ final class AppStore: ObservableObject {
             let safeMessage = sanitizedAssistantMessage(assistantMessage, hasCanvas: hasCanvas)
             append(ChatMessage(role: .assistant, text: safeMessage))
             llmDebugStatus = "succeeded"
-            if let memory = proposedMemory { proposeMemory(text: memory) }
+            handleProposedMemory(proposedMemory, turnSource: userText)
 
         case .noPatches(let assistantMessage, _, let debug, let proposedMemory, let suggestGenerate):
             lastDebugBundle = debug
             nextLLMContext = nil
             append(ChatMessage(role: .assistant, text: assistantMessage))
             llmDebugStatus = "succeeded"
-            if let memory = proposedMemory { proposeMemory(text: memory) }
+            handleProposedMemory(proposedMemory, turnSource: userText)
             if !hasCanvas, let sg = suggestGenerate { canGenerateRecipe = sg }
 
         case .failure(let fallbackPatchSet, let assistantMessage, _, let debug, _):
@@ -1137,14 +1210,14 @@ final class AppStore: ObservableObject {
             send(.patchReceived(patchSet))
             append(ChatMessage(role: .assistant, text: assistantMessage))
             llmDebugStatus = "succeeded"
-            if let memory = proposedMemory { proposeMemory(text: memory) }
+            handleProposedMemory(proposedMemory, turnSource: "photo sent into chat: \(multimodalReq.base.userMessage)")
 
         case .noPatches(let assistantMessage, _, let debug, let proposedMemory, _):
             lastDebugBundle = debug
             nextLLMContext = nil
             append(ChatMessage(role: .assistant, text: assistantMessage))
             llmDebugStatus = "succeeded"
-            if let memory = proposedMemory { proposeMemory(text: memory) }
+            handleProposedMemory(proposedMemory, turnSource: "photo sent into chat: \(multimodalReq.base.userMessage)")
 
         case .failure(let fallbackPatchSet, let assistantMessage, _, let debug, _):
             lastDebugBundle = debug
@@ -1726,7 +1799,7 @@ final class AppStore: ObservableObject {
             let safeMessage = sanitizedAssistantMessage(assistantMessage, hasCanvas: true)
             append(ChatMessage(role: .assistant, text: safeMessage))
             llmDebugStatus = "succeeded"
-            if let memory = proposedMemory { proposeMemory(text: memory) }
+            handleProposedMemory(proposedMemory, turnSource: "serving rescale to \(targetServings) — no user message")
 
         case .noPatches, .failure:
             // Dismiss the loading screen silently — the recipe stays unchanged.

@@ -76,8 +76,19 @@ final class ImportDebugExportTests: XCTestCase {
         }
     }
 
-    private func drainMain() async {
-        for _ in 0..<10 { await Task.yield() }
+    /// Yields until `condition` holds or the deadline passes. Preferred over a fixed yield
+    /// count: under parallel simulator clones a fixed count is timing-sensitive, and this
+    /// suite already has one documented flaky test for exactly that reason.
+    private func waitUntil(_ condition: () -> Bool, timeout: TimeInterval = 5) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition() && Date() < deadline {
+            await Task.yield()
+        }
+    }
+
+    /// Waits for an import to finish, successfully or not.
+    private func waitForImport(_ store: AppStore) async {
+        await waitUntil { store.lastImportDebugRecord != nil }
     }
 
     private func markdown(_ store: AppStore) -> String {
@@ -91,7 +102,7 @@ final class ImportDebugExportTests: XCTestCase {
         store.startNewSession()
 
         store.sendImportRequest(text: "Carbonara\n200g spaghetti\nBoil pasta")
-        await drainMain()
+        await waitForImport(store)
 
         let record = try XCTUnwrap(store.lastImportDebugRecord)
         XCTAssertEqual(record.source, .pastedText)
@@ -109,7 +120,7 @@ final class ImportDebugExportTests: XCTestCase {
         store.startNewSession()
 
         store.sendImportRequest(text: "some recipe text")
-        await drainMain()
+        await waitForImport(store)
 
         let request = try XCTUnwrap(store.lastDebugLLMRequest)
         XCTAssertEqual(request.isImportExtraction, true,
@@ -128,7 +139,7 @@ final class ImportDebugExportTests: XCTestCase {
         store.startNewSession()
 
         store.sendImportRequest(text: "unparseable recipe")
-        await drainMain()
+        await waitForImport(store)
 
         let record = try XCTUnwrap(store.lastImportDebugRecord)
         XCTAssertEqual(record.inputText, "unparseable recipe",
@@ -151,7 +162,7 @@ final class ImportDebugExportTests: XCTestCase {
         store.startNewSession()
 
         store.sendImportRequest(text: "grocery list, not a recipe")
-        await drainMain()
+        await waitForImport(store)
 
         let record = try XCTUnwrap(store.lastImportDebugRecord)
         XCTAssertEqual(record.inputText, "grocery list, not a recipe")
@@ -168,7 +179,7 @@ final class ImportDebugExportTests: XCTestCase {
         store.startNewSession()
 
         store.sendImportRequest(text: "Carbonara\n200g spaghetti")
-        await drainMain()
+        await waitForImport(store)
 
         let md = markdown(store)
         XCTAssertTrue(md.contains("## 7. Last Import Attempt"), "Section 7 must be present")
@@ -192,7 +203,7 @@ final class ImportDebugExportTests: XCTestCase {
         store.startNewSession()
 
         store.sendImportRequest(text: "recipe that fails")
-        await drainMain()
+        await waitForImport(store)
 
         let md = markdown(store)
         XCTAssertTrue(md.contains("recipe that fails"),
@@ -218,7 +229,7 @@ final class ImportDebugExportTests: XCTestCase {
         store.startNewSession()
 
         store.sendImportRequest(text: longText)
-        await drainMain()
+        await waitForImport(store)
 
         let md = markdown(store)
         XCTAssertTrue(md.contains("[truncated"), "Oversized input must be marked as truncated")

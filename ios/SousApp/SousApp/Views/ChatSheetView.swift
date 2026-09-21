@@ -184,7 +184,9 @@ struct ChatSheetView: View {
             if let proposal = store.pendingMemoryProposal {
                 MemoryProposalToast(
                     text: proposal,
-                    onSave: { text, firstPersonText in Task { await store.saveMemoryOnly(text: text, firstPersonText: firstPersonText) } },
+                    onSave: { text, firstPersonText, trigger in
+                        Task { await store.saveMemoryOnly(text: text, firstPersonText: firstPersonText, trigger: trigger) }
+                    },
                     onComplete: { store.dismissMemoryProposal() },
                     onDismiss: { store.dismissMemoryProposal() },
                     onNavigateToMemories: { onNavigateToMemories() }
@@ -328,7 +330,9 @@ struct ChatSheetView: View {
             if let proposal = store.pendingMemoryProposal {
                 MemoryProposalToast(
                     text: proposal,
-                    onSave: { text, firstPersonText in Task { await store.saveMemoryOnly(text: text, firstPersonText: firstPersonText) } },
+                    onSave: { text, firstPersonText, trigger in
+                        Task { await store.saveMemoryOnly(text: text, firstPersonText: firstPersonText, trigger: trigger) }
+                    },
                     onComplete: { store.dismissMemoryProposal() },
                     onDismiss: { store.dismissMemoryProposal() },
                     onNavigateToMemories: { onNavigateToMemories() }
@@ -720,7 +724,7 @@ private struct StreamingBubbleView: View {
 
 private struct MemoryProposalToast: View {
     let text: String
-    let onSave: (String, String?) -> Void
+    let onSave: (String, String?, MemorySaveTrigger) -> Void
     let onComplete: () -> Void
     let onDismiss: () -> Void
     let onNavigateToMemories: () -> Void
@@ -745,7 +749,7 @@ private struct MemoryProposalToast: View {
     private let ticker = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
     private let countdownDuration: TimeInterval = 6.0
 
-    init(text: String, onSave: @escaping (String, String?) -> Void, onComplete: @escaping () -> Void, onDismiss: @escaping () -> Void, onNavigateToMemories: @escaping () -> Void) {
+    init(text: String, onSave: @escaping (String, String?, MemorySaveTrigger) -> Void, onComplete: @escaping () -> Void, onDismiss: @escaping () -> Void, onNavigateToMemories: @escaping () -> Void) {
         self.text = text
         self.onSave = onSave
         self.onComplete = onComplete
@@ -817,7 +821,7 @@ private struct MemoryProposalToast: View {
                     }
                     if !hasCommittedEdit {
                     HStack(spacing: 0) {
-                        Button("SAVE") { hasCompleted = true; onSave(displayText, firstPersonSnapshot); onComplete() }
+                        Button("SAVE") { hasCompleted = true; onSave(displayText, firstPersonSnapshot, .tappedSave); onComplete() }
                             .font(.sousButton)
                             .foregroundStyle(Color.white)
                             .buttonStyle(.plain)
@@ -883,7 +887,7 @@ private struct MemoryProposalToast: View {
         .onTapGesture { onNavigateToMemories() }
         .gesture(DragGesture(minimumDistance: 20).onEnded { _ in
             hasCompleted = true
-            if !hasCommittedEdit { onSave(displayText, firstPersonSnapshot) }
+            if !hasCommittedEdit { onSave(displayText, firstPersonSnapshot, .swipedAway) }
             onComplete()
         })
         .onAppear {
@@ -903,7 +907,7 @@ private struct MemoryProposalToast: View {
             displayProgress = max(0, 1.0 - elapsed / countdownDuration)
             if elapsed >= countdownDuration {
                 hasCompleted = true
-                if !hasCommittedEdit { onSave(displayText, firstPersonSnapshot) }
+                if !hasCommittedEdit { onSave(displayText, firstPersonSnapshot, .countdownExpired) }
                 onComplete()
             }
         }
@@ -940,7 +944,7 @@ private struct MemoryProposalToast: View {
             startDate = Date()
             displayProgress = 1.0
             timerPaused = false
-            onSave(displayText, firstPersonSnapshot)
+            onSave(displayText, firstPersonSnapshot, .editedThenSaved)
         }
     }
 }

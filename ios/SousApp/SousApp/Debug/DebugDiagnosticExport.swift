@@ -52,6 +52,7 @@ struct DebugDiagnosticExporter {
             buildTranscript(),
             buildRecipeState(),
             buildImportAttempt(),
+            buildMemoryDecisions(),
         ].joined(separator: "\n\n---\n\n")
     }
 
@@ -105,7 +106,8 @@ struct DebugDiagnosticExporter {
             lines.append("(no memories saved)")
         } else {
             for memory in store.memories {
-                lines.append("- \(memory.text)")
+                let addedThisRun = memory.createdAt >= store.debugRunStartedAt
+                lines.append("- \(memory.text)\(addedThisRun ? "  ← added during this app run" : "")")
             }
         }
         return lines.joined(separator: "\n")
@@ -319,6 +321,60 @@ struct DebugDiagnosticExporter {
             body = String(body[..<cutoff])
         }
         return "```\n\(body)\n```\(suffix)"
+    }
+
+    // MARK: - Memory Decisions
+
+    private func buildMemoryDecisions() -> String {
+        var lines = ["## 8. Memory Decisions"]
+        let log = store.memoryDecisionLog
+        guard !log.isEmpty else {
+            lines.append("(no turns yet that could have produced a memory)")
+            return lines.joined(separator: "\n")
+        }
+
+        let proposals = log.filter { $0.proposedText != nil }
+        let savedCount = proposals.filter { if case .saved = $0.fate { return true } else { return false } }.count
+        let automatic = proposals.filter {
+            if case .saved(let trigger, _) = $0.fate {
+                return trigger == .countdownExpired || trigger == .swipedAway
+            }
+            return false
+        }.count
+        let duplicates = proposals.filter { $0.duplicateOf != nil }.count
+
+        lines.append("")
+        lines.append("Last \(log.count) turn(s) that could have produced a memory "
+                     + "(capped at \(AppStore.maxMemoryDecisionLogEntries), oldest dropped first).")
+        lines.append("")
+        lines.append("- **Turns with a proposal:** \(proposals.count) of \(log.count)")
+        lines.append("- **Proposals saved:** \(savedCount) — of which \(automatic) saved themselves without a tap")
+        lines.append("- **Proposals duplicating an existing memory:** \(duplicates)")
+        lines.append("")
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+
+        for (index, record) in log.enumerated().reversed() {
+            lines.append("### Turn \(index + 1) — \(formatter.string(from: record.timestamp))")
+            lines.append("- **Triggered by:** \(record.turnSource)")
+            lines.append("- **Memories in context:** \(record.memoriesInContextCount)")
+            if let proposed = record.proposedText {
+                lines.append("- **Proposed:** \(proposed)")
+                lines.append("- **Outcome:** \(record.fate.label)")
+                if case .saved(_, let savedText) = record.fate, savedText != proposed {
+                    lines.append("- **Saved as:** \(savedText)")
+                }
+                if let duplicateOf = record.duplicateOf {
+                    lines.append("- **Duplicates existing memory:** \(duplicateOf)")
+                }
+            } else {
+                lines.append("- **Proposed:** nothing")
+            }
+            lines.append("")
+        }
+
+        return lines.joined(separator: "\n")
     }
 }
 
