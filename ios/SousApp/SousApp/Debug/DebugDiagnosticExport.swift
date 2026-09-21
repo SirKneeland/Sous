@@ -15,8 +15,13 @@ struct DebugDiagnosticExporter {
 
     /// Writes the diagnostic Markdown to the temp directory and presents a share sheet.
     func export() {
-        let markdown = buildMarkdown()
+        Self.share(markdown: buildMarkdown())
+    }
 
+    /// Shares markdown that has already been built. The report sheet captures the
+    /// diagnostic when it opens, so sharing from there must not rebuild it — the
+    /// state may have moved on while the user was typing.
+    static func share(markdown: String) {
         let formatter = ISO8601DateFormatter()
         let timestamp = formatter.string(from: Date())
             .replacingOccurrences(of: ":", with: "-")
@@ -58,9 +63,7 @@ struct DebugDiagnosticExporter {
         let buildNumber = info?["CFBundleVersion"] as? String ?? "unknown"
         let iosVersion  = UIDevice.current.systemVersion
         let timestamp   = ISO8601DateFormatter().string(from: Date())
-        let appState    = store.hasCanvas
-            ? "cooking (recipe canvas active)"
-            : "exploration (pre-recipe)"
+        let appState    = Self.appStateLabel(store: store)
 
         return """
         # Sous Debug Diagnostic
@@ -70,8 +73,15 @@ struct DebugDiagnosticExporter {
         - **Timestamp:** \(timestamp)
         - **App Version:** \(appVersion) (\(buildNumber))
         - **iOS Version:** \(iosVersion)
+        - **Device:** \(DebugReportMetadata.hardwareIdentifier())
         - **App State:** \(appState)
         """
+    }
+
+    /// Plain-English description of where the app is, shared by the markdown header
+    /// and the bug report's `appState` column.
+    static func appStateLabel(store: AppStore) -> String {
+        store.hasCanvas ? "cooking (recipe canvas active)" : "exploration (pre-recipe)"
     }
 
     private func buildPreferences() -> String {
@@ -314,12 +324,20 @@ struct DebugDiagnosticExporter {
 
 // MARK: - DebugTapExportModifier
 
-/// A ViewModifier that counts rapid taps and fires the diagnostic exporter on the 5th.
-/// The 2-second window resets on inactivity or after a successful export.
+/// A ViewModifier that counts rapid taps and opens the bug report sheet on the 5th.
+/// The 2-second window resets on inactivity or after the sheet opens.
+///
+/// The sheet, not the share sheet, is what the gesture now opens: a report can go to
+/// the triage backlog (see docs/BugTriage.md), with "Share File…" kept as the fallback
+/// for a failed send or no network.
 struct DebugTapExportModifier: ViewModifier {
     let store: AppStore
+    /// Injectable so tests and previews need no live backend.
+    var backend: any DebugReportSubmitting = SousAPIClient.shared
+
     @State private var tapCount = 0
     @State private var lastTapDate = Date.distantPast
+    @State private var reportModel: DebugReportSheetModel?
 
     func body(content: Content) -> some View {
         content
@@ -327,6 +345,13 @@ struct DebugTapExportModifier: ViewModifier {
                 TapGesture()
                     .onEnded { handleTap() }
             )
+            .sheet(item: $reportModel) { model in
+                DebugReportSheet(
+                    model: model,
+                    onShareFile: { DebugDiagnosticExporter.share(markdown: model.diagnostic) },
+                    onDismiss: { reportModel = nil }
+                )
+            }
     }
 
     @MainActor
@@ -339,11 +364,23 @@ struct DebugTapExportModifier: ViewModifier {
         }
         lastTapDate = now
 
-        if tapCount >= 5 {
-            tapCount = 0
-            lastTapDate = .distantPast
-            DebugDiagnosticExporter(store: store).export()
-        }
+        guard tapCount >= 5 else { return }
+        tapCount = 0
+        lastTapDate = .distantPast
+
+        // Capture the diagnostic now, at the moment the gesture fires, so nothing
+        // the user does while typing can alter the state being reported.
+        let exporter = DebugDiagnosticExporter(store: store)
+        reportModel = DebugReportSheetModel(
+            diagnostic: exporter.buildMarkdown(),
+            metadata: .current(appState: DebugDiagnosticExporter.appStateLabel(store: store)),
+            backend: backend
+        )
     }
+}
+
+/// `.sheet(item:)` needs identity; one model instance is one report.
+extension DebugReportSheetModel: Identifiable {
+    nonisolated var id: ObjectIdentifier { ObjectIdentifier(self) }
 }
 #endif

@@ -28,7 +28,7 @@ Always read the relevant docs before starting work:
 - `PersonalityModes.md` — detailed behavioral spec for Minimal/Normal/Playful personality modes and their LLM prompt rules.
 - `CODEBASE.md` — repo structure, module map, test commands. Read before navigating the codebase.
 - `docs/KnownIssues.md` — running log of deferred bugs, flaky tests, and cleanup items. Read when working in an area that may be affected.
-- `docs/BugTriage.md` — the in-app bug report backlog: how reports are filed from the phone, and the `backend/scripts/bugs.sh` commands for listing, reading, and resolving them. Read when the operator asks to pull or work through bug submissions.
+- `docs/BugTriage.md` — the in-app bug report backlog: how reports are filed from the phone, and the `backend/scripts/bugs.sh` commands for listing, reading, and resolving them. **Read its "what is NOT a bug" section before interpreting any diagnostic** — several honest quirks (a reconstructed prompt, two disagreeing timestamps, truncated captures) read like defects and are not. Read when the operator asks to pull or work through bug submissions.
 
 ---
 

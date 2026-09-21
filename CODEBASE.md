@@ -104,6 +104,8 @@
   - `Billing/BillingGate.swift` — **(Project 4)** pure, tested policy: `presentationForNewRecipe(entitlement:usage:)` → `.none/.paywall/.capReached`; `isVoiceAvailable(_:)` (false in trial + soft wall). Backend still hard-enforces; this drives proactive UI.
   - `Auth/SignInView.swift` — full-screen Sign in with Apple gate (`ASAuthorizationAppleIDButton` via `SignInWithAppleButton`)
   - `Debug/LLMDebugExport.swift` — Exports LLMDebugBundle for analysis
+  - `Debug/DebugDiagnosticExport.swift` — (DEBUG only) builds the full session diagnostic Markdown; `DebugTapExportModifier` counts 5 rapid taps and opens the bug report sheet. `share(markdown:)` is the original iOS share-sheet export, kept as the fallback
+  - `Debug/DebugReportSheet.swift` — (DEBUG only) "Report a Problem" sheet + `DebugReportSheetModel`: required description, optional expected behaviour, sends to `POST /bugs` via `SousAPIClient.submitBugReport`. Captures the diagnostic when the sheet opens; reuses one report id across retries so the backend dedupes. See `docs/BugTriage.md`
   - `Persistence/SessionSnapshot.swift` — Codable struct; schemaVersion, recipe, pendingPatchSet, chatMessages[], nextLLMContext, savedAt
   - `Persistence/SessionPersistence.swift` — Static helpers: save (atomic), load (nil on absent/corrupt), clear; all accept optional URL for test injection
   - `Preferences/UserPreferences.swift` — `UserPreferences` Codable struct (hardAvoids, servingSize, equipment, customInstructions) + `UserPreferencesPersistence` (UserDefaults-backed, injectable for tests)
@@ -139,7 +141,10 @@ Hosted on Railway. Run with `tsx` (no build step).
 | `scripts/backfill-deleted-account-hashes.ts` | One-off operator script: re-hashes any legacy plaintext `deleted_accounts.apple_sub` tombstones into HMACs. Idempotent; run once after deploying the deletion-purge change |
 | `routes/proxy.ts` | **(Project 3)** `POST /proxy/chat` + `/proxy/tts`: off-topic check, read-only recipe-cap enforcement (402), forward to OpenAI with server key, stream back verbatim, record `usage_events`, async abuse check. Does NOT increment the counter — that is `/usage/recipe`'s job |
 | `routes/usage.ts` | **(Project 3)** `POST /usage/recipe` (single recipe-count increment — period + trial counters — called by the client when a recipe is created), `POST /usage/request` (ack), `GET /usage/summary` (period usage + trial fields) |
-| `routes/admin.ts` | **(Project 3)** `GET /admin/dashboard` — operator-only aggregate; guarded by `ADMIN_API_KEY` via `X-Admin-Key` (constant-time, fail-closed) |
+| `routes/admin.ts` | **(Project 3)** `GET /admin/dashboard` — operator-only aggregate; guarded by `ADMIN_API_KEY` via `X-Admin-Key` (constant-time, fail-closed). Also bug triage: `GET /admin/bugs` (list, no diagnostic blob), `GET /admin/bugs/:ref` (one report; ref is short number or uuid), `PATCH /admin/bugs/:ref` (status/notes/resolution/tags; closing stamps `resolved_at`). No delete route by design |
+| `routes/bugs.ts` | `POST /bugs` — authenticated in-app bug submission. 413 over 512k diagnostic, idempotent on `clientReportId`, 20/hour per-user rate limit. See `docs/BugTriage.md` |
+| `scripts/bugs.sh` | Operator triage CLI (`list`, `show`, `triage`, `resolve`, `wontfix`, `dupe`, `tag`). Reads `ADMIN_API_KEY` from Railway, not `.env` |
+| `scripts/sql.sh` | Runs SQL against Supabase via the Management API (`-f file` or inline). Needs a scoped `SUPABASE_ACCESS_TOKEN` in `backend/.env`. This is how schema changes are applied |
 | `routes/sync.ts`, `referral.ts` | `sync/recipes` + referral endpoints stubbed (501) for Projects 3–4 |
 | `routes/stubs.ts` | `notImplemented(endpoint, project)` → 501 helper |
 | `middleware/auth.ts` | Bearer-token auth: JWT verify + sessions-table check (revoked/expired) → 401 |

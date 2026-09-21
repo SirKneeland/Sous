@@ -52,6 +52,7 @@ final class MockBackend: SousBackend, @unchecked Sendable {
     var fetchPreferencesResult: Result<UserPreferences, Error>?
     var fetchMemoriesResult: Result<[MemoryItem], Error>?
     var usageSummaryResult: Result<UsageSummary, Error>?
+    var bugReportResult: Result<BugReportReceipt, Error>?
 
     // Recorded calls
     private(set) var signInCalls: [(token: String, referral: String?)] = []
@@ -63,6 +64,7 @@ final class MockBackend: SousBackend, @unchecked Sendable {
     private(set) var fetchPreferencesCallCount = 0
     private(set) var fetchMemoriesCallCount = 0
     private(set) var recordRecipeUsageCallCount = 0
+    private(set) var submittedBugReports: [BugReportSubmission] = []
     private(set) var fetchUsageSummaryCallCount = 0
     private(set) var validateReceiptCalls: [String] = []
 
@@ -127,6 +129,13 @@ final class MockBackend: SousBackend, @unchecked Sendable {
 
     func recordRecipeUsage() async throws {
         recordRecipeUsageCallCount += 1
+    }
+
+    // MARK: SousDebugBackend
+
+    func submitBugReport(_ report: BugReportSubmission) async throws -> BugReportReceipt {
+        submittedBugReports.append(report)
+        return try unwrap(bugReportResult)
     }
 
     private func unwrap<T>(_ result: Result<T, Error>?) throws -> T {

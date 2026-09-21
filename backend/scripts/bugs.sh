@@ -139,7 +139,13 @@ case "$CMD" in
       "",
       "## Diagnostic",
       "",
-      .diagnostic'
+      .diagnostic,
+      "",
+      "---",
+      "",
+      "Before filing anything from this report, read the \"what is NOT a bug\" section",
+      "of docs/BugTriage.md. A reconstructed system prompt, two timestamps that",
+      "disagree, and a truncated capture are all expected — not defects."'
     ;;
 
   triage)  [[ $# -eq 2 ]] || usage; patch_bug "$1" "$(jq -n --arg n "$2" '{status:"triaged", triageNotes:$n}')" ;;

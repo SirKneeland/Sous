@@ -5,14 +5,67 @@ How in-app bug reports get from a phone into a backlog, and how we work through 
 ## How a report is filed
 
 In debug builds, tapping five times on the chat sheet (or the import error screen)
-opens **Report a problem**. The operator writes what went wrong, and the app sends
-that text plus the full diagnostic snapshot to the Sous backend. The old behaviour —
-export the diagnostic as a Markdown file and hand it to the iOS share sheet — is
-still there as **Share file…**, and is the fallback when a send fails.
+opens **Report a Problem**. The operator writes what went wrong, taps **Send to
+Backlog**, and the app sends that text plus the full diagnostic snapshot to the Sous
+backend; the sheet confirms with the short number (e.g. "Filed as BUG-17"). The old
+behaviour — export the diagnostic as a Markdown file and hand it to the iOS share
+sheet — is still there as **Share File…**, and is the fallback when a send fails.
+
+The diagnostic is captured the moment the gesture fires, not when Send is tapped, so
+nothing that happens while the report is being typed can change what gets recorded.
 
 The diagnostic is the same one `DebugDiagnosticExporter` has always produced:
 metadata, preferences, memories, the system prompt, the chat transcript, recipe
 state, and the last import attempt.
+
+## Reading a report — what is NOT a bug
+
+A diagnostic has several honest quirks that read like defects on first look. Check
+this list before you chase one. It applies to whoever is reading — a human, or an
+agent asked to triage the backlog.
+
+**"Reconstructed." above the system prompt.** The captured LLM request lives only in
+memory, so it is gone after a relaunch. When it is missing, the exporter rebuilds an
+equivalent request from the recipe, preferences, and transcript *as they stand at
+capture time* and says so. The prompt template wording is exact; the recipe and
+preference values in it may differ from those actually sent on the failing turn.
+**Do not treat a mismatch between that prompt and the reported symptom as evidence** —
+it usually just means the app was relaunched between the bug and the report. A report
+filed immediately after a bad response carries the real captured request instead.
+
+**Two timestamps that disagree.** `filed` is when the report reached the server.
+The `Timestamp` inside the diagnostic is when the 5-tap fired on the device. The gap
+is however long the person spent typing, and the device clock is the device's own.
+Neither is the time the bug happened.
+
+**The state shown is the state at the 5-tap, not at the bug.** The diagnostic is
+captured the instant the gesture fires — deliberately, so nothing that happens while
+the report is being typed can alter it. But anything the user did between hitting the
+bug and reaching for the 5-tap is already baked in. A step marked done, a dismissed
+patch, a new chat turn: all of that may post-date the problem.
+
+**`(no LLM call this session, and no state to reconstruct one from)`** means there was
+no canvas either — an exploration-state report. There is nothing missing.
+
+**`[truncated — N characters total, first 20000 shown]`** is the exporter's own cap
+(`DebugDiagnosticExporter.maxCapturedCharacters`), applied to long import inputs and
+model responses. Nothing was lost in transit, and the 512k submission ceiling was not
+involved. If the tail actually matters, raise the constant.
+
+**`(the photo itself is not included)`** — a photo import records the image
+*description* and the OCR text, never the image. A photo-import bug often cannot be
+fully reproduced from the report alone; ask for the original picture.
+
+**Mise en place says one of two different things.** `(not generated for this recipe)`
+means it was never produced. `(generated, but empty — no prep steps were found)` means
+it ran and found nothing. Those are different bugs, and the second is a real one.
+
+**The reporter may be a dev account.** With the debug sign-in bypass, `user_id` points
+at a `<handle>@example.test` account, not a real user. See `Debug/DebugSignIn.swift`.
+
+**Personality mode shapes tone, not correctness.** A response that reads as rude,
+chaotic, or sweary under `unhinged` is the spec working. See `PersonalityModes.md`
+before filing an LLM-voice bug.
 
 ## Working the backlog
 

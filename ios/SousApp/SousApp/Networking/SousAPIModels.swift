@@ -151,6 +151,32 @@ struct ProfileUpdateBody: Encodable {
     let displayName: String?
 }
 
+// MARK: - Bug reports
+
+/// Body of `POST /bugs`. Built from what the user typed plus the diagnostic the
+/// 5-tap exporter already produces. See docs/BugTriage.md.
+struct BugReportSubmission: Codable, Sendable, Equatable {
+    /// Stable across retries of the same report, so a resend cannot file twice.
+    let clientReportId: String
+    let description: String
+    let expectedBehavior: String?
+    let diagnostic: String
+    let appVersion: String?
+    let buildNumber: String?
+    let iosVersion: String?
+    let deviceModel: String?
+    let appState: String?
+}
+
+/// Returned by `POST /bugs`. `seq` is the short number an operator refers to
+/// ("BUG-17"); `alreadySubmitted` is true when a retry matched an existing report.
+struct BugReportReceipt: Codable, Sendable, Equatable {
+    let id: String
+    let seq: Int
+    let status: String
+    let alreadySubmitted: Bool
+}
+
 // MARK: - Internal decoding helpers
 
 extension PreferencesDTO {

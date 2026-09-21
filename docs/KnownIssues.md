@@ -24,6 +24,21 @@ Timing-sensitive test that fails occasionally in parallel CI runs but passes rel
 
 ---
 
+## AppStoreTests.test_noPatches_doesNotBlockFutureSends is flaky
+
+- **Area:** `ios/SousApp/SousAppTests/AppStoreTests.swift`
+- **Type:** Flaky test
+- **Flagged:** 2026-09-20
+
+Failed once in a full `xcodebuild test` run while landing the in-app bug report sheet,
+then passed in isolation and on a re-run of the full suite. That change does not touch
+the `AppStore` send path, so this is the same `drainMain()` timing sensitivity as
+`test_cancellation_preventsStateUpdates` above, surfacing in a second test. Same known
+fix applies; the better fix is replacing `drainMain()`'s fixed yield count with a
+deterministic wait, which would retire both entries at once.
+
+---
+
 ## Unused UIStateMachine transition: recipeOnly + patchReceived → patchProposed
 
 - **Area:** `ios/SousApp/SousApp/UIStateMachine/UIStateMachine.swift`

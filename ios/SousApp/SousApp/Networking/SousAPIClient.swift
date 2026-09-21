@@ -77,8 +77,16 @@ protocol SousSyncBackend: AnyObject {
     func recordRecipeUsage() async throws
 }
 
+/// Bug-report submission. Separate from sync because it is operator tooling, not
+/// user data: the 5-tap diagnostic posts here instead of only going to a share sheet.
+protocol SousDebugBackend: AnyObject {
+    /// File one bug report. `clientReportId` is stable across retries of the same
+    /// report, so a resend after a timeout returns the original instead of filing twice.
+    func submitBugReport(_ report: BugReportSubmission) async throws -> BugReportReceipt
+}
+
 /// The full backend surface. `SousAPIClient` is the single concrete implementation.
-typealias SousBackend = SousAuthBackend & SousSyncBackend
+typealias SousBackend = SousAuthBackend & SousSyncBackend & SousDebugBackend
 
 // MARK: - SousAPIClient
 
@@ -210,6 +218,13 @@ final class SousAPIClient: SousBackend {
 
     func recordRecipeUsage() async throws {
         _ = try await send(path: "usage/recipe", method: "POST", body: Optional<Empty>.none, authenticated: true)
+    }
+
+    // MARK: Bug reports
+
+    func submitBugReport(_ report: BugReportSubmission) async throws -> BugReportReceipt {
+        let data = try await send(path: "bugs", method: "POST", body: report, authenticated: true)
+        return try decode(BugReportReceipt.self, from: data)
     }
 
     // MARK: - Request plumbing
