@@ -244,6 +244,44 @@ build on every untouched view and turn an advisory into a blocker.
 
 ---
 
+## Design system: state of play
+
+Components live in `design/figma-components.js`, built by the local plugin (`figma/`) and
+verified by `node design/test-figma-plugin.js`. Every screen below is assembled only from
+components — if a screen can't be built from them, the components are wrong.
+
+**Built:** Checkbox, Button, Icon Button, Section Header, Ingredient Group Header, List Row,
+Recipe Title, Bottom Bar, Chat Bubble, Composer Bar, Chat Header, Wordmark, Recent Recipe Row.
+
+**Screens assembled:** Recipe Canvas, Chat, Zero State, Sidebar.
+
+**Screens: all nine built** — Recipe Canvas, Chat, Zero State, Sidebar, Settings,
+Change Suggestion, Voice Mode, Talk to a Recipe, Preferences.
+
+**A rule worth keeping:** iOS chrome stays iOS-shaped. Sheets, segmented pickers, toggles,
+steppers, the DONE pill and the back button are all rounded, and deliberately so — a square
+switch reads as broken, not consistent. Everything Sous draws itself stays square. Each of
+those components says so in its own notes.
+
+**Deferred deliberately:**
+- **Foundations pages** (colour swatches, type specimen, spacing bars).
+- **Light/dark in one collection** — needs a paid Figma plan; the plugin merges automatically
+  once modes are available.
+- **Publishing the library** to other files — also needs a paid plan.
+- **The paper texture** the app lays over the cream background is not reproduced in Figma.
+- **The blur-and-fade strip** at the top of the blank-state transcript is not reproduced.
+
+**App-code debt this work surfaced** is in `docs/KnownIssues.md`.
+
+**How Figma actually behaves** — hard-won, all encoded as tests in
+`design/test-figma-plugin.js`: a shared TEXT property forces one styling across every variant
+bound to it; attaching one flattens per-character styling; paint-level opacity is ignored on a
+variable-bound colour (tint the layer instead); an instance is named after the component set,
+not the variant; a page must be loaded before its children can be read; and text layers carry
+the line's leading, so a hugging layer sits high in a bar.
+
+---
+
 ## Still open
 
 **No destructive color token.** The "Delete Timer" button uses SwiftUI's system red at 80%

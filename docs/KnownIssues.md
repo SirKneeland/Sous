@@ -156,3 +156,111 @@ source photo — so the photo travels alongside the dump and can be dropped from
 it isn't wanted. `ImportDebugRecord` would need to retain the `UIImage` (or encoded JPEG
 data) rather than only its description, and `DebugDiagnosticExporter.export()` would need to
 write the second file and add it to `activityItems`. Debug builds only, as now.
+
+---
+
+## Buttons are hand-built on every screen — no shared SwiftUI button
+
+- **Area:** `ios/SousApp/SousApp/` — ~40 call sites across Views, Billing, Import
+- **Type:** Cleanup / consistency
+- **Flagged:** 2026-09-20 (surfaced while building the Figma Button component)
+
+There is no shared button view. Each screen assembles its own from `Font.sousButton`
+plus ad-hoc padding, fills and borders, which has produced five styles and three
+inconsistencies. The Figma **Button** component is the agreed target shape: Primary
+(burgundy fill), Inverse (ink fill, flips in dark mode), Secondary (ink border),
+Secondary Accent (burgundy border), Text (burgundy label only).
+
+To fix when the design system work is done:
+
+1. **Label colour on burgundy.** Decided: white in both modes (`text/onInverse`),
+   matching TALK TO SOUS. Still using the flipping background colour — which turns the
+   label near-black in dark mode — are `AdjustTimerSheet.swift:136` (START),
+   `DurationPickerSheet.swift:118` (START), `ServingsPickerSheet.swift:88` (SET) and
+   `ChatSheetView.swift:423` ("Make this recipe").
+2. **ALL CAPS rule.** Three labels break it: "Make this recipe"
+   (`ChatSheetView.swift:423`), "Reset Recipe" (`RecipeCanvasView.swift:482`) and
+   "Restore Original Recipe" (`RecipeCanvasView.swift:509`).
+3. **Letter-spacing.** Roughly 35 buttons use none; four add `kerning` 0.5 or 1.2
+   (`CapReachedView.swift:87` and `:100`, `PaywallView.swift:115`,
+   `SettingsView.swift:183`). The token — and the Figma component — use none.
+
+Also note only Inverse and Secondary have a disabled appearance in code; Primary,
+Secondary Accent and Text have none, so the Figma component deliberately omits them.
+
+---
+
+## The same checklist row is implemented three times
+
+- **Area:** `ios/SousApp/SousApp/Views/RecipeCanvasView.swift`
+- **Type:** Cleanup / consistency
+- **Flagged:** 2026-09-24 (surfaced while building the Figma List Row component)
+
+`IngredientRow` (line ~1223), `leafStepRowView` (~1009) and `mepFlatRowView` (~821)
+draw the same row — checkbox nudged down 2pt, `sousBody` text, 10pt vertical and 20pt
+side padding, iOS separator in `sousSeparator`. They differ only in state: ingredients
+tick without a strikethrough, steps and prep tasks mute and strike, steps add an inline
+timer and the pale-burgundy highlight, prep tasks nest. One shared row view with those
+as parameters is the code equivalent of the Figma **List Row** component.
+
+Two smaller mismatches to settle in the same pass:
+
+- **Indents disagree:** sub-steps indent 16pt per level (`stepFlatItemView`), nested
+  prep tasks 20pt (`NestedStepChildRow`). The Figma component uses 20pt.
+- **Group header letter-spacing:** the ingredient group header uses `kerning(1.0)`
+  while `Sous/Section Header` (and every other header) uses 1.2.
+
+---
+
+## No destructive colour token; voice bar uses raw white-opacity literals
+
+- **Area:** `ios/SousApp/SousApp/Views/AdjustTimerSheet.swift:158`, `Voice/VoiceBarView.swift`
+- **Type:** Cleanup
+- **Flagged:** 2026-09-20
+
+"Delete Timer" is drawn with SwiftUI's system red at 80% opacity. Sous has no red in
+its palette, so there is nothing in `design/tokens.json` for it, and
+`design/check-tokens.py` does not catch it — the check only rejects hand-built hex
+values, not system colours. Decide on a `status/destructive` token when a second
+destructive action appears (account deletion is the likely trigger).
+
+The voice bar similarly uses `Color.white.opacity(0.08 / 0.15 / 0.2)` directly for its
+button fills, borders and waveform. Only the 0.2 border is tokenised
+(`voice/exitBorder`); the rest are literals.
+
+---
+
+## Dark-mode contrast on burgundy buttons is 4.47:1, just under AA
+
+- **Area:** `ios/SousApp/SousApp/Views/SousTheme.swift` — `sousTerracotta` dark value
+- **Type:** Accessibility
+- **Flagged:** 2026-09-20
+
+White on the dark-mode burgundy (`#C45068`) measures 4.47:1, marginally below the
+4.5:1 WCAG AA threshold for normal text; 14pt semibold does not qualify as large text.
+It is still the best of the options — cream is 3.88:1 and the near-black alternative
+3.89:1 — so white was chosen deliberately. Fixing it properly means lightening the
+dark-mode burgundy, which changes the nav bar, CTAs and voice bar together. Worth a
+deliberate pass rather than a spot fix.
+
+Disabled filled buttons (cream on `#9A9590`) sit at about 2.6:1. WCAG exempts disabled
+controls, so this is recorded for awareness, not as a defect.
+
+---
+
+## ACCEPT on the change-review bar should be green, not ink
+
+- **Area:** `ios/SousApp/SousApp/Views/PatchReviewView.swift` — bottom action bar
+- **Type:** Design decision not yet in code
+- **Flagged:** 2026-09-24
+
+ACCEPT is currently filled with `Color.sousText` (ink). Decided while comparing the Figma
+Change Suggestion screen against the device: it should use the **added-green**
+(`Color.sousGreen`, `#2D6A4F`) — the same green the added lines already use — so the button and
+the thing it adds read as one idea. REJECT is unchanged: burgundy text on the page.
+
+The Figma **Review Bar** component already uses the green. Change the `.background(...)` on the
+ACCEPT button to `Color.sousGreen` when `isValid`; the disabled fill stays muted.
+
+Also decided: the bar should bleed to the bottom edge of the screen, with the labels staying in
+the top 56pt above the home indicator. The Figma component's **Safe area** variant shows this.

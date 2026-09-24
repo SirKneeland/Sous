@@ -53,7 +53,7 @@ these — `design/check-tokens.py` rejects any font size written inline in a vie
 
 | Token | Size | Weight | Case | Used for |
 |---|---|---|---|---|
-| `sousTitle` | 28pt | Bold | Title case | Recipe titles |
+| `sousTitle` | 28pt | Bold | Title case* | Recipe titles. *The recipe canvas uppercases the title string itself |
 | `sousLogotype` | 34pt | Bold | Title case | SOUS wordmark on the blank state |
 
 **SF Pro — structure and body**
@@ -114,7 +114,9 @@ An icon that looks wrong at every step usually wants different padding, not a ne
 | **Burgundy primary** | `#8B2E3F` | CTA buttons, active states, accent color |
 | Burgundy secondary bg | `#F7EAEC` | Highlighted rows, user chat bubble background, tag backgrounds |
 | Success / add | `#2D6A4F` | Added items in patch diff only |
-| Surface inverse | `#1A1A1A` | Ink fills that stay dark in both modes — history settings button, ACCEPT CHANGES |
+| Surface inverse | `#1A1A1A` | Ink fill that stays dark in both modes — history drawer settings button only |
+| Inverse (fill / label) | ink / cream | Inverse buttons (ACCEPT, OK, TALK TO A RECIPE) — **flips in dark mode** to cream fill, ink label |
+| Disabled fill | `#9A9590` | Filled buttons when disabled, with the inverse label color |
 | Scrim | `#757471` | Backdrop behind the photo acquisition sheet |
 
 ### Dark Mode
@@ -179,26 +181,25 @@ New views should use the scale from the start.
 
 ---
 
-## Navigation Bar
+## Canvas Chrome (there is no navigation bar)
 
-The burgundy nav bar spans the top of the screen, extending through the status bar area.
+The app has **no top navigation bar**. Earlier versions of this spec described a burgundy bar
+with three icons across the top; that bar does not exist in the app. What exists is:
 
-- **Background:** Burgundy primary (`#8B2E3F`)
-- **Status bar style:** Light content (white/cream icons and time)
-- **Icons:** `+` (new recipe), `books.vertical.fill` (history), `gear` (settings) — evenly distributed across the bar width, icon color cream (`#F2EFE9`)
-- **Icon border:** None. Icons are bare SF Symbols in cream.
+- **Hamburger button** — 44×44pt burgundy square at the top-left of the recipe canvas
+  (16pt from both edges), white `line.3.horizontal` icon. Opens the history drawer.
+- **History drawer** — holds the SOUS wordmark, the settings button (44×44pt, white
+  `gearshape.fill` on the ink fill) and a full-width burgundy NEW RECIPE button.
+- **Recipe title block** — the title is centred and **uppercased by the view**, with 76pt side
+  padding so a long title clears the hamburger, the burgundy servings chip lower-right, and a
+  divider beneath.
 
-### Collapse Behavior (Recipe Canvas only)
+### Hamburger Hide/Reveal (Recipe Canvas only)
 
-- Collapsed state: burgundy background on status bar area only, nav icons hidden
-- Revealed state: full bar with nav icons visible below status bar
-- Collapse trigger: scroll down past ~60pt from content top
-- Reveal triggers: scroll up any amount (with `distanceFromBottom > 40` guard to prevent rubber-band false positives); scroll position returns to top
-- Animation: `.animation(.easeInOut(duration: 0.2), value: navBarVisible)` attached directly to the bar view — not `withAnimation` inside the scroll callback
-
-### Always-Visible (Zero State, Exploration State)
-
-No collapse/reveal logic. Bar is always visible on screens with no scrollable content.
+- Hidden: scrolling down more than 10pt
+- Revealed: scrolling up, when more than 40pt from the bottom (guards against rubber-banding);
+  also whenever the scroll position is within 60pt of the top
+- The scroll handler sets the flag; the animation belongs to the button view
 
 ---
 
@@ -213,10 +214,13 @@ No collapse/reveal logic. Bar is always visible on screens with no scrollable co
 - Section headers (INGREDIENTS, PROCEDURE, MISE EN PLACE): SF Pro, 11pt, ALL CAPS, burgundy primary, letter-spaced 1.2
 - Ingredient rows: square bordered checkbox + SF Pro body text, ~16pt
   - Checked ingredients: checkbox filled burgundy, text **without** strikethrough (legibility preserved for reference use)
-- Step rows: numbered, SF Pro ~17pt body text
-  - Done steps: text struck through in muted color (`#9A9590`), checkbox or indicator filled burgundy
-  - Steps with timers: same SF Pro font as all other steps — do not deviate based on timer presence
-- Sub-steps: indented below parent step, independently checkable, same font at slightly smaller size
+- Step rows: **not numbered** — square checkbox + SF Pro 16pt body text (`sousBody`)
+  - Current step: bold
+  - Done steps: text struck through in muted color (`#9A9590`), checkbox filled burgundy; a done step hides its timer
+  - Steps with timers: same SF Pro font as all other steps — do not deviate based on timer presence. The duration and a `timer` SF Symbol are tinted burgundy inline (`timer.circle.fill` while running)
+  - Highlighted: pale burgundy row background, set when the user taps a timer banner to jump to its step
+- Parent steps (steps with sub-steps): text only, no checkbox
+- Sub-steps: indented 16pt per level below the parent step, independently checkable, same font and size
 - "Talk to Sous" button: pinned to bottom, full-width, filled burgundy (`#8B2E3F`), cream ALL CAPS SF Pro label
 - Voice mode mic button: near "Talk to Sous" button, Cook Mode only
 

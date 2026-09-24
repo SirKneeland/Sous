@@ -1,0 +1,17 @@
+{
+  "name": "Sous Design Tokens",
+  "id": "sous-design-tokens",
+  "api": "1.0.0",
+  "main": "code.js",
+  "editorType": [
+    "figma"
+  ],
+  "documentAccess": "dynamic-page",
+  "networkAccess": {
+    "allowedDomains": [
+      "none"
+    ],
+    "reasoning": "All token data is compiled into code.js. The plugin never makes a network request."
+  },
+  "ui": "ui.html"
+}

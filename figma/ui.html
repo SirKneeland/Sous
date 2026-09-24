@@ -1,0 +1,61 @@
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    margin: 0; padding: 16px;
+    font: 12px -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    background: #F2EFE9; color: #1A1A1A;
+    display: flex; flex-direction: column; height: 100vh; box-sizing: border-box;
+  }
+  h1 {
+    font: 600 11px/1 -apple-system, system-ui, sans-serif;
+    letter-spacing: 1.2px; text-transform: uppercase; color: #8B2E3F;
+    margin: 0 0 10px;
+  }
+  textarea {
+    flex: 1; width: 100%; box-sizing: border-box; resize: none;
+    font: 11px/1.5 ui-monospace, "SF Mono", Menlo, monospace;
+    color: #1A1A1A; background: #FFFFFF;
+    border: 1px solid #1A1A1A; border-radius: 0; padding: 10px;
+  }
+  .row { display: flex; gap: 8px; margin-top: 12px; }
+  button {
+    font: 600 11px/1 -apple-system, system-ui, sans-serif;
+    letter-spacing: 1px; text-transform: uppercase;
+    padding: 10px 14px; border-radius: 0; cursor: pointer;
+  }
+  #copy { background: #8B2E3F; color: #F2EFE9; border: 0; flex: 1; }
+  #close { background: transparent; color: #1A1A1A; border: 1px solid #1A1A1A; }
+  p.hint { margin: 10px 0 0; color: #9A9590; font-size: 11px; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #1A1A1A; color: #F2EFE9; }
+    h1 { color: #C45068; }
+    textarea { background: #222222; color: #F2EFE9; border-color: #F2EFE9; }
+    #copy { background: #C45068; color: #1A1A1A; }
+    #close { color: #F2EFE9; border-color: #F2EFE9; }
+  }
+</style>
+
+<h1>Import report</h1>
+<textarea id="report" readonly spellcheck="false">Running…</textarea>
+<div class="row">
+  <button id="copy">Copy report</button>
+  <button id="close">Close</button>
+</div>
+<p class="hint">Paste this back to Claude Code to confirm the import, or to get a fix if it failed.</p>
+
+<script>
+  const field = document.getElementById("report");
+  onmessage = (event) => {
+    const msg = event.data.pluginMessage;
+    if (msg && msg.report) field.value = msg.report;
+  };
+  document.getElementById("copy").onclick = () => {
+    field.select();
+    document.execCommand("copy");
+    const b = document.getElementById("copy");
+    b.textContent = "Copied";
+    setTimeout(() => (b.textContent = "Copy report"), 1400);
+  };
+  document.getElementById("close").onclick = () =>
+    parent.postMessage({ pluginMessage: "close" }, "*");
+</script>

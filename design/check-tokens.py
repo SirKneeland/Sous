@@ -11,6 +11,7 @@ Exits 0 when they match, 1 when they have drifted, and prints every mismatch.
 """
 
 import json
+import subprocess
 import pathlib
 import re
 import sys
@@ -18,6 +19,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 TOKENS = ROOT / "design" / "tokens.json"
 THEME = ROOT / "ios" / "SousApp" / "SousApp" / "Views" / "SousTheme.swift"
+PLUGIN = ROOT / "figma" / "code.js"
 
 # static let sousBackgroundUI = sousDynamic(light: 0xF2EFE9, dark: 0x1A1A1A)
 DECL = re.compile(
@@ -157,6 +159,19 @@ def main():
             )
         checked += 1
 
+    # The generated Figma plugin must match what its sources would produce today
+    # (tokens.json, the plugin template and the component builders).
+    if PLUGIN.exists():
+        stale = subprocess.run(
+            [sys.executable, str(ROOT / "design" / "build-figma-plugin.py"), "--check"],
+            capture_output=True, text=True,
+        )
+        if stale.returncode != 0:
+            problems.append(
+                "figma/code.js is out of date with its sources — "
+                "run: python3 design/build-figma-plugin.py"
+            )
+
     if problems:
         print(f"DRIFT DETECTED — {len(problems)} problem(s)\n")
         for p in problems:
@@ -167,6 +182,8 @@ def main():
     print(f"OK — {checked} tokens match SousTheme.swift.")
     print(f"     Icon scale: {sorted(theme_icon_sizes)}pt. "
           f"No hardcoded colors or inline font sizes in views.")
+    if PLUGIN.exists():
+        print("     Figma plugin is in sync with tokens.json.")
     return 0
 
 

@@ -27,7 +27,18 @@
 ├── design/                # Design system source of truth
 │   ├── tokens.json        # Canonical palette, type roles, spacing — feeds Swift and Figma
 │   ├── TOKEN-DECISIONS.md # Why each token has the value it has
-│   └── check-tokens.py    # Fails if tokens.json and SousTheme.swift drift apart
+│   ├── check-tokens.py    # Fails if Swift, tokens.json or the Figma plugin drift apart
+│   ├── build-figma-plugin.py      # Regenerates figma/code.js from tokens.json
+│   ├── figma-plugin-template.js   # The plugin source; tokens are injected into it
+│   ├── figma-components.js        # Component builders (Checkbox, Button, rows…) spliced in
+│   ├── sf-symbols.json            # SF Symbol name → Apple codepoint (the desktop plugin API
+│   │                              #   has no symbol lookup; see the file's $meta.howToAdd)
+│   └── test-figma-plugin.js       # Runs the plugin against a stubbed Figma API
+├── figma/                 # Figma plugin that imports tokens.json into a Figma file
+│   ├── manifest.json      # Load via Plugins > Development > Import plugin from manifest
+│   ├── code.js            # GENERATED — do not edit; run build-figma-plugin.py
+│   ├── ui.html            # The import report panel
+│   └── README.md          # How to load and run it
 ├── ios/
 │   ├── SousCore/          # Swift Package — core logic (no UI)
 │   │   ├── Package.swift
@@ -207,10 +218,20 @@ so re-registered (previously-deleted) users can be stored without a trial.
 
 - **UI tests:** `SousAppUITests` — Minimal coverage, launch tests only
 
-- **Design token check:** verifies `SousTheme.swift` still matches `design/tokens.json`,
-  and that no view hardcodes a color
+- **Design token check:** verifies the design system has not drifted — `SousTheme.swift`
+  matches `design/tokens.json`, no view hardcodes a color or an inline font size, the
+  `SousIconSize` scale matches, and `figma/code.js` was generated from the current tokens
   - Run with: `python3 design/check-tokens.py` (from the repo root)
-  - Run it after any palette change. No dependencies, no build required.
+  - Run it after any change to the palette, type scale or icon scale. No dependencies,
+    no build required.
+  - If it reports a stale Figma plugin: `python3 design/build-figma-plugin.py`
+
+- **Figma plugin tests:** runs `figma/code.js` against a stub of the Figma plugin API
+  - Location: `design/test-figma-plugin.js`
+  - Covers: paid vs Starter plan shapes, Mac vs browser fonts, idempotent re-runs, that
+    the plugin's own self-verification catches a bad write, and each component's variants,
+    token bindings, safe rebuild and in-use guard
+  - Run with: `node design/test-figma-plugin.js` (from the repo root)
 
 - **Backend tests:** Node.js built-in test runner (`node:test`) via `tsx`
   - Location: `backend/src/**/*.test.ts`
