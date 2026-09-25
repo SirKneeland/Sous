@@ -116,6 +116,15 @@ struct ContentView: View {
 #if DEBUG
             if let fixture = DebugFixture.requested() {
                 store.applyDebugFixture(fixture)
+                switch fixture {
+                case .paywall:
+                    billingPresentation = .paywall
+                case .capReached:
+                    capSummary = DebugFixture.cappedUsage()
+                    billingPresentation = .capReached
+                case .canvas, .review, .explore:
+                    break
+                }
             }
 #endif
         }

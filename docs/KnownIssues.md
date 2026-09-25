@@ -183,13 +183,45 @@ because they were visible defects rather than structural debt:
    component already specified `text/onInverse`.
 2. ~~**ALL CAPS rule.**~~ Fixed. "Make this recipe" → "MAKE THIS RECIPE", "Reset Recipe" →
    "RESET RECIPE", "Restore Original Recipe" → "RESTORE ORIGINAL RECIPE".
-3. **Letter-spacing — still open.** Roughly 35 buttons use none; four add `kerning` 0.5 or
-   1.2 (`CapReachedView.swift:87` and `:100`, `PaywallView.swift:115`,
-   `SettingsView.swift:183`). The token — and the Figma component — use none. Left for the
-   extraction itself, since all four sit on screens being redesigned against the system
-   (paywall, cap reached) and the kerning should come off as those screens are rebuilt.
+3. **Letter-spacing — mostly closed.** Three of the four came off with the Billing
+   migration (`CapReachedView` ×2, `PaywallView`). `SettingsView.swift:183` remains — it
+   is the OG badge's caption, not a button, so it belongs with whatever settles the badge.
 
-The extraction itself — one shared button view — is still outstanding.
+**The extraction is under way (2026-09-24).** `SousButton` / `SousButtonLabel` in
+`Views/SousButton.swift` carry the five Figma styles, with two sizing conventions (a fixed
+52pt for full-width CTAs, or hug-the-label with vertical padding) and a busy state the
+Figma component does not yet model.
+
+Migrated so far — Billing and Import's full-width buttons:
+
+| Site | Style | Verified |
+|---|---|---|
+| `PaywallView` CTA | Primary | fill and bounds byte-identical; only the label moved (kerning) |
+| `CapReachedView` MESSAGE JOHN | Primary | same |
+| `CapReachedView` SHARE SOUS | Secondary (inside a `ShareLink`) | same |
+| `RecipeImportSheet` IMPORT RECIPE | Inverse enabled / Secondary disabled | disabled pixel-identical; enabled shrank 0.33pt per edge |
+
+That last one is worth knowing. The old button stroked an ink border *over* an ink fill,
+and SwiftUI centres a stroke on the path edge — so half of it sat outside the frame and made
+the button imperceptibly larger than its stated size. The border was invisible (same colour
+as the fill) and is now gone, which is why the button is exactly 353 x 45 rather than a
+third of a point more. Deliberate.
+
+**Still to migrate:** roughly 37 sites, the bulk in `ChatSheetView` (11) and
+`RecipeImportSheet` (its compact TRY AGAIN / CANCEL / BACK TO IMPORT OPTIONS buttons), plus
+the canvas, settings and the picker sheets.
+
+Two clusters are expected **not** to fit, and should stay bespoke unless a reason appears:
+
+- **The picker sheets** (`AdjustTimerSheet`, `DurationPickerSheet`, `ServingsPickerSheet`)
+  put two buttons inside one shared bordered container with a divider — the container is the
+  component, not the buttons.
+- **The review bar** is two half-width halves with a hairline between them, which the Figma
+  **Review Bar** component already models separately.
+
+`RecipeImportSheet`'s CANCEL also uses a muted border with a muted label, which is not one of
+the five styles. That is a design decision — either it becomes Secondary, or the system gains
+a sixth style — not something to absorb silently.
 
 Also note only Inverse and Secondary have a disabled appearance in code; Primary,
 Secondary Accent and Text have none, so the Figma component deliberately omits them.

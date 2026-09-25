@@ -21,6 +21,8 @@ import SousCore
 ///   -sous-fixture canvas                  recipe on the canvas
 ///   -sous-fixture review                  recipe + pending patch, on the review screen
 ///   -sous-fixture explore                 no canvas, generate pill showing
+///   -sous-fixture paywall                 the subscription wall
+///   -sous-fixture capReached              the 100-a-month hard stop
 ///   -sous-fixture-entitlement byok        entitlement to fake (default: subscriber)
 enum DebugFixture {
 
@@ -32,6 +34,18 @@ enum DebugFixture {
         case review
         /// No canvas, mid-exploration, with the generate pill showing.
         case explore
+        /// The subscription wall, over a canvas.
+        case paywall
+        /// The 100-recipes-a-month hard stop, over a canvas.
+        case capReached
+    }
+
+    /// Canned usage for the cap-reached screen. Reaching it for real needs a paid
+    /// account that has actually spent 100 recipes, which no test account will have.
+    static func cappedUsage() -> UsageSummary {
+        UsageSummary(recipesUsed: 100, recipeCap: 100, billingPeriod: "2026-09",
+                     resetsInDays: 6, entitlement: "subscriber",
+                     trialRecipesUsed: nil, trialRecipeCap: nil, trialDaysRemaining: nil)
     }
 
     // MARK: Launch flags

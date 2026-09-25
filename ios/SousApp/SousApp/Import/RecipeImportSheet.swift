@@ -274,13 +274,15 @@ struct RecipeImportSheet: View {
                 mode = .loading
                 store.sendImportRequest(text: trimmed)
             } label: {
-                Text("IMPORT RECIPE")
-                    .font(.sousButton)
-                    .foregroundStyle(trimmed.isEmpty ? Color.sousMuted : Color.sousBackground)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(trimmed.isEmpty ? Color.clear : Color.sousText)
-                    .overlay(Rectangle().stroke(Color.sousText, lineWidth: 1))
+                // Enabled it fills ink; disabled it keeps the ink border and mutes the
+                // label — which is exactly Secondary Disabled, so the style swaps rather
+                // than the button carrying a bespoke disabled look.
+                SousButtonLabel(
+                    title: "IMPORT RECIPE",
+                    style: trimmed.isEmpty ? .secondary : .inverse,
+                    isEnabled: !trimmed.isEmpty,
+                    height: nil            // hugs the label with 14pt above and below
+                )
             }
             .buttonStyle(.plain)
             .disabled(trimmed.isEmpty)

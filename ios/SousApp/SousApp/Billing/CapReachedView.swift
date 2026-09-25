@@ -80,29 +80,15 @@ struct CapReachedView: View {
                 Spacer(minLength: 24)
 
                 // Primary: Message John — opens a pre-filled mail composer.
-                Button {
+                SousButton(title: "MESSAGE JOHN", style: .primary) {
                     if let url = mailtoURL() { openURL(url) }
-                } label: {
-                    Text("MESSAGE JOHN")
-                        .font(.sousButton)
-                        .kerning(0.5)
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 52)
-                        .background(Rectangle().fill(Color.sousTerracotta))
                 }
-                .buttonStyle(.plain)
                 .padding(.horizontal, 20)
 
                 // Secondary: share Sous with a friend.
+                // ShareLink supplies its own control, so it takes the label directly.
                 ShareLink(item: shareText) {
-                    Text("SHARE SOUS WITH A FRIEND")
-                        .font(.sousButton)
-                        .kerning(0.5)
-                        .foregroundStyle(Color.sousText)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 52)
-                        .overlay(Rectangle().stroke(Color.sousText, lineWidth: 1))
+                    SousButtonLabel(title: "SHARE SOUS WITH A FRIEND", style: .secondary)
                 }
                 .buttonStyle(.plain)
                 .padding(.horizontal, 20)

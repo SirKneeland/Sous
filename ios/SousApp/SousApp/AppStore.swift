@@ -660,6 +660,9 @@ final class AppStore: ObservableObject {
         ]
 
         switch fixture {
+        // The billing walls sit over a canvas; ContentView presents them.
+        case .paywall, .capReached:
+            uiState = .recipeOnly(recipe: recipe)
         case .explore:
             uiState = .chatOpen(
                 recipe: Recipe(id: UUID(), version: 1, title: "New Recipe"),

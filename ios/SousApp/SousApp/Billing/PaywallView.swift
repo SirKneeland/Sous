@@ -107,19 +107,7 @@ struct PaywallView: View {
                 Button {
                     Task { await storeKit.purchase() }
                 } label: {
-                    Group {
-                        if isWorking {
-                            ProgressView().tint(.white)
-                        } else {
-                            Text(ctaLabel)
-                                .font(.sousButton)
-                                .kerning(0.5)
-                                .foregroundStyle(.white)
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 52)
-                    .background(Rectangle().fill(Color.sousTerracotta))
+                    SousButtonLabel(title: ctaLabel, style: .primary, isBusy: isWorking)
                 }
                 .buttonStyle(.plain)
                 .disabled(isWorking)
