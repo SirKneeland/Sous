@@ -3252,6 +3252,9 @@ async function buildWordmark() {
     const mark = await textNode("Sous/Logotype", "SOUS", v("Sous Color", "text/primary"), "wordmark");
     c.appendChild(mark);
     mark.textAlignHorizontal = "CENTER";
+    // Settled 2026-09-25. The app drew its own name at three different trackings until
+    // building Sign In and Paywall put them side by side. Swift: SousType.wordmarkTracking.
+    mark.letterSpacing = { value: 2, unit: "PIXELS" };
     if (spec.tagline) {
       const tag = await textNode("Sous/Caption", "YOUR COOKING COMPANION",
         v("Sous Color", "text/muted"), "tagline");
@@ -3272,7 +3275,7 @@ async function buildWordmark() {
     cell, PAD, GAP, WORDMARK_SPECS.length, 1);
   const doc = await docPanel(page, v, "Wordmark", [
     ["Sous/Body",
-      "The only place the app states its own name. New York, capitals, centred — the serif is what stops the app reading as a generic utility.",
+      "The only place the app states its own name. New York, capitals, centred, tracked 2 — the serif is what stops the app reading as a generic utility, and the tracking stops the capitals crowding at 34pt.",
       "text/primary", "description"],
   ]);
   set.x = doc.x + doc.width + 80;
@@ -3295,6 +3298,8 @@ async function verifyWordmark() {
     check("Wordmark " + spec.name + " is the serif logotype",
       mark.fontName.family === "New York" || mark.fontName.family === "Inter", mark.fontName.family);
     check("Wordmark " + spec.name + " tagline", !!c.findOne((x) => x.name === "tagline") === spec.tagline);
+    check("Wordmark " + spec.name + " is tracked 2", mark.letterSpacing && mark.letterSpacing.value === 2,
+      mark.letterSpacing ? String(mark.letterSpacing.value) : "none");
   }
 }
 

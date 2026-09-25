@@ -68,7 +68,7 @@ struct PaywallView: View {
 
                 Text("SOUS")
                     .font(.sousLogotype)
-                    .kerning(3)
+                    .kerning(SousType.wordmarkTracking)
                     .foregroundStyle(Color.sousText)
 
                 Text("PRO")

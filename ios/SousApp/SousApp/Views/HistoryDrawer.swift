@@ -49,6 +49,7 @@ struct HistoryDrawer: View {
                         ZStack(alignment: .center) {
                             Text("SOUS")
                                 .font(.sousLogotype)
+                                .kerning(SousType.wordmarkTracking)
                                 .foregroundStyle(Color.sousText)
                                 .frame(maxWidth: .infinity)
                             HStack(spacing: 0) {

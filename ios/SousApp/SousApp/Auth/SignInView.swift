@@ -26,7 +26,7 @@ struct SignInView: View {
 
                 Text("SOUS")
                     .font(.sousLogotype)
-                    .kerning(2)
+                    .kerning(SousType.wordmarkTracking)
                     .foregroundStyle(Color.sousText)
 
                 Text("Your AI sous-chef. Cook with a living recipe that adapts as you go.")

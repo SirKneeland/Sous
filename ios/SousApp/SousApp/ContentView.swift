@@ -92,7 +92,7 @@ struct ContentView: View {
                     Color.sousBackground.ignoresSafeArea()
                     Text("SOUS")
                         .font(.sousLogotype)
-                        .kerning(2)
+                        .kerning(SousType.wordmarkTracking)
                         .foregroundStyle(Color.sousMuted)
                 }
             case .signedOut:

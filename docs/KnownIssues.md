@@ -350,7 +350,7 @@ controls, so this is recorded for awareness, not as a defect.
 
 ---
 
-## The SOUS wordmark is set at four different trackings
+## ~~The SOUS wordmark is set at four different trackings~~ — settled 2026-09-25
 
 - **Area:** `ios/SousApp/SousApp/` — `HistoryDrawer.swift:51`, `ChatSheetView.swift:105`,
   `ContentView.swift:94`, `Auth/SignInView.swift:28`, `Billing/PaywallView.swift:70`
@@ -372,7 +372,15 @@ Paywall screens were built from it — so those two screens currently show less 
 code does. Nothing is broken; the logotype is just inconsistent in a way you notice when the
 screens sit side by side.
 
-Picking a value is a design decision, not a reconciliation, so it was left alone. Worth settling
-in one pass: choose one tracking, put it in the Wordmark component, and make all five sites use
-it. At 34pt bold serif in capitals a little tracking usually reads better, so 2 is the likelier
-answer than 0 — but that is a judgement to make by looking, not by argument.
+**Settled at 2**, by looking at the three renderings side by side: 0 crowds the capitals at
+34pt, 3 reads like a luxury-brand mark rather than a cooking app, and 2 is what the first two
+screens a new user meets already used.
+
+All five sites now read `SousType.wordmarkTracking` (`SousTheme.swift`), so there is one value
+rather than five independent ones — the drift is not just fixed but prevented. The Figma
+**Wordmark** component tracks 2 to match, and the plugin's self-check asserts it.
+
+Three screens moved: the history drawer and chat blank state gained tracking, the paywall lost
+a point. Verified as confined to the wordmark — every pixel that changed on those three screens
+falls inside the wordmark's own band. The paywall's **PRO** keeps its own tracking of 3; it is a
+section-header label, not the wordmark.

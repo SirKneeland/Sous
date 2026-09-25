@@ -252,3 +252,17 @@ struct SousIconButton: View {
         .buttonStyle(.plain)
     }
 }
+
+
+// MARK: - Typography constants
+
+/// Values that are not fonts or colours but still belong to one decision.
+enum SousType {
+    /// Letter-spacing for the SOUS wordmark.
+    ///
+    /// One value, because the app drew its own name in five places at three different
+    /// trackings — 0 in the drawer and chat blank state, 2 on sign in and the loading
+    /// state, 3 on the paywall — until it was settled at 2 on 2026-09-25. Nobody had
+    /// chosen that spread; each screen picked its own as it was written.
+    static let wordmarkTracking: CGFloat = 2
+}

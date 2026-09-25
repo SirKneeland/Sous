@@ -103,6 +103,7 @@ struct ChatSheetView: View {
             VStack(spacing: 10) {
                 Text("SOUS")
                     .font(.sousLogotype)
+                    .kerning(SousType.wordmarkTracking)
                     .foregroundStyle(Color.sousText)
                 Text("YOUR COOKING COMPANION")
                     .font(.sousCaption)
