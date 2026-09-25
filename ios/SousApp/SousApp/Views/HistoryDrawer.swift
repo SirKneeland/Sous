@@ -81,17 +81,8 @@ struct HistoryDrawer: View {
                         Button {
                             snap(open: false) { onNewRecipe() }
                         } label: {
-                            HStack(spacing: 8) {
-                                Image(systemName: "plus.square.fill")
-                                    .font(.sousIcon(.large))
-                                    .foregroundStyle(.white)
-                                Text("NEW RECIPE")
-                                    .font(.sousButton)
-                                    .foregroundStyle(.white)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 52)
-                            .background(Color.sousTerracotta)
+                            SousButtonLabel(title: "NEW RECIPE", style: .primary,
+                                            icon: "plus.square.fill")
                         }
                         .buttonStyle(.plain)
                         .padding(.horizontal, 20)

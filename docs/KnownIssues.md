@@ -30,6 +30,11 @@ Timing-sensitive test that fails occasionally in parallel CI runs but passes rel
 - **Type:** Flaky test
 - **Flagged:** 2026-09-20
 
+`test_m21g_import_noConversionPrompt_whenUnitsMatch` joined them on 2026-09-24 — failed
+once in a full run during the shared-button migration, then passed in isolation and on a
+clean re-run. That change touched a view and a DEBUG-only branch, not the import send path,
+so it is the same timing sensitivity in a third test rather than a new fault.
+
 Failed once in a full `xcodebuild test` run while landing the in-app bug report sheet,
 then passed in isolation and on a re-run of the full suite. That change does not touch
 the `AppStore` send path, so this is the same `drainMain()` timing sensitivity as
@@ -200,6 +205,11 @@ Migrated so far — Billing and Import's full-width buttons:
 | `CapReachedView` MESSAGE JOHN | Primary | same |
 | `CapReachedView` SHARE SOUS | Secondary (inside a `ShareLink`) | same |
 | `RecipeImportSheet` IMPORT RECIPE | Inverse enabled / Secondary disabled | disabled pixel-identical; enabled shrank 0.33pt per edge |
+| `ChatSheetView` TALK TO A RECIPE | Inverse | shrank 0.33pt per edge; icon weight normalised to semibold |
+| `ChatSheetView` MAKE THIS RECIPE | Primary | shrank 0.33pt per edge; icon normalised from 11pt regular to 14pt semibold at 8pt spacing |
+| `RecipeCanvasView` RESET RECIPE | Secondary Accent, Primary while pressed | **pixel-identical** |
+| `RecipeCanvasView` RESTORE ORIGINAL RECIPE | Secondary Accent | **pixel-identical** |
+| `HistoryDrawer` NEW RECIPE | Primary | bounds identical; icon normalised from 16pt to 14pt semibold |
 
 That last one is worth knowing. The old button stroked an ink border *over* an ink fill,
 and SwiftUI centres a stroke on the path edge — so half of it sat outside the frame and made
@@ -207,9 +217,33 @@ the button imperceptibly larger than its stated size. The border was invisible (
 as the fill) and is now gone, which is why the button is exactly 353 x 45 rather than a
 third of a point more. Deliberate.
 
-**Still to migrate:** roughly 37 sites, the bulk in `ChatSheetView` (11) and
-`RecipeImportSheet` (its compact TRY AGAIN / CANCEL / BACK TO IMPORT OPTIONS buttons), plus
-the canvas, settings and the picker sheets.
+The chat sheet followed the same day. **Its "11 sites" turned out to be 2 buttons** —
+`TALK TO A RECIPE` (Inverse) and the `MAKE THIS RECIPE` pill (Primary). Of the other nine,
+three are section labels that merely borrow the button type token (`SOUS`, `SOUS SAYS...`,
+`REMEMBERING THIS`), five are memory-toast actions, and one is an inline `CLOSE`.
+
+**A correction to the count.** "About 40 call sites" counted every use of
+`Font.sousButton`. Classified by whether they actually draw a button shape, the 37 uses
+outside `SousButton.swift` itself split as **21 shaped buttons and 16 bare labels**. Only
+the first group is migration work; the second is text that happens to share a type token,
+and moving it under a button view would be wrong.
+
+**Still to migrate — 12 shaped buttons**, once the 9 already done are subtracted:
+`WindowButtonHost`'s TALK TO SOUS, the import sheet's compact buttons (BACK TO IMPORT
+OPTIONS, TRY AGAIN, CANCEL), `SettingsView`'s SAVE KEY, and the two ingredient-row swipe
+actions on the canvas.
+
+**The component forces full width**, which is what blocks the compact buttons — SAVE KEY
+pads 12 sides rather than filling, and the import sheet's three are inline. A width option
+is the next thing the shared view needs; it is deliberately not there yet, because adding
+it before three real callers existed would have been guesswork about what they need.
+
+`MemoriesView`'s CANCEL and SAVE are **not** migration work: they are `ToolbarItem`
+buttons, so iOS draws them, the same way the Apple sign-in button is Apple's.
+
+Two of the 16 bare labels are worth a separate look, since a label using the *button* type
+token is usually either a mislabelled button or the wrong token: `ChatSheetView`'s section
+headers, and `SettingsView.swift:183` (the OG badge caption that still carries letter-spacing).
 
 Two clusters are expected **not** to fit, and should stay bespoke unless a reason appears:
 

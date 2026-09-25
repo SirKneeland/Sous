@@ -475,17 +475,10 @@ struct RecipeCanvasView: View {
                     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                     showingResetConfirmation = true
                 } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "arrowshape.turn.up.backward.fill")
-                            .font(.sousIcon(.medium, weight: .semibold))
-                        Text("RESET RECIPE")
-                            .font(.sousButton)
-                    }
-                    .foregroundStyle(resetButtonPressed ? Color.white : Color.sousTerracotta)
-                    .frame(maxWidth: .infinity)
-                    .frame(minHeight: 44)
-                    .background(resetButtonPressed ? Color.sousTerracotta : Color.clear)
-                    .overlay(Rectangle().stroke(Color.sousTerracotta, lineWidth: 1))
+                    // Pressed, it fills burgundy with a white label — which is Primary.
+                    SousButtonLabel(title: "RESET RECIPE",
+                                    style: resetButtonPressed ? .primary : .secondaryAccent,
+                                    height: 44, icon: "arrowshape.turn.up.backward.fill")
                 }
                 .buttonStyle(.plain)
                 .contentShape(Rectangle())
@@ -502,17 +495,8 @@ struct RecipeCanvasView: View {
                         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                         showingRestoreOriginalConfirmation = true
                     } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "arrowshape.turn.up.backward.2.fill")
-                                .font(.sousIcon(.medium, weight: .semibold))
-                            Text("RESTORE ORIGINAL RECIPE")
-                                .font(.sousButton)
-                        }
-                        .foregroundStyle(Color.sousTerracotta)
-                        .frame(maxWidth: .infinity)
-                        .frame(minHeight: 44)
-                        .background(Color.clear)
-                        .overlay(Rectangle().stroke(Color.sousTerracotta, lineWidth: 1))
+                        SousButtonLabel(title: "RESTORE ORIGINAL RECIPE", style: .secondaryAccent,
+                                        height: 44, icon: "arrowshape.turn.up.backward.2.fill")
                     }
                     .buttonStyle(.plain)
                     .contentShape(Rectangle())

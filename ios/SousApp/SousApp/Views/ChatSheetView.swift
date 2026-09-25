@@ -117,17 +117,8 @@ struct ChatSheetView: View {
                 Button {
                     onOpenImport()
                 } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "doc.viewfinder")
-                            .font(.sousIcon(.medium))
-                        Text("TALK TO A RECIPE")
-                            .font(.sousButton)
-                    }
-                    .foregroundStyle(Color.sousBackground)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(Color.sousText)
-                    .overlay(Rectangle().stroke(Color.sousText, lineWidth: 1))
+                    SousButtonLabel(title: "TALK TO A RECIPE", style: .inverse,
+                                    height: nil, icon: "doc.viewfinder")
                 }
                 .buttonStyle(.plain)
                 .padding(.horizontal, 20)
@@ -416,18 +407,8 @@ struct ChatSheetView: View {
             Button {
                 store.sendGenerateRecipeSilently()
             } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "wand.and.stars")
-                        .font(.sousIcon(.small))
-                    Text("MAKE THIS RECIPE")
-                        .font(.sousButton)
-                }
-                .foregroundStyle(Color.white)
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(Color.sousTerracotta)
-                .overlay(Rectangle().stroke(Color.sousTerracotta, lineWidth: 1))
+                SousButtonLabel(title: "MAKE THIS RECIPE", style: .primary,
+                                height: nil, verticalPadding: 8, icon: "wand.and.stars")
             }
             .buttonStyle(.plain)
             // 16 (composerBar outer padding) + 44 (camera/send button) + 8 (HStack spacing)
