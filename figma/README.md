@@ -34,8 +34,9 @@ the app window** (an in-app menu, not the macOS menu bar) → **Plugins → Deve
    report. Hit **Copy report** and paste it back to Claude Code — that's the confirmation
    that the import actually worked.
 
-A good report ends with `VERIFIED — all 85 checks passed.` A bad one says `FAILED` and names
-every token that's wrong, which is enough to fix it without any guesswork.
+A good report ends with `VERIFIED — all N checks passed.` The count grows as components are
+added, so compare it with the previous run rather than a fixed number. A bad one says `FAILED`
+and names every token or variant that's wrong, which is enough to fix it without any guesswork.
 
 ## What it creates
 
@@ -55,13 +56,15 @@ every token that's wrong, which is enough to fix it without any guesswork.
 | **Bottom Bar** | Voice Yes / No — TALK TO SOUS, the mic button, and the pull-down chevron. |
 | **Icon Button** | Accent (44pt burgundy hamburger), Inverse (44pt ink settings), Bordered (32pt). |
 | **Recipe Title** | Servings Yes / No. Properties: Title, Servings. |
-| **Screens** | Recipe Canvas, Chat, Zero State, Sidebar, Settings, Change Suggestion, Voice Mode, Talk to a Recipe, Preferences — all on the **Screens** page, assembled only from components. |
+| **Screens** | Recipe Canvas, Chat, Zero State, Sidebar, Settings, Change Suggestion, Voice Mode, Talk to a Recipe, Preferences, Sign In, Paywall — all on the **Screens** page, assembled only from components. |
 | **Form Kit** | Text Field, Text Area, Toggle, Stepper, Back Button. |
 | **Voice Bar** | Ready, Listening, Thinking, Speaking, Patch pending. |
 | **Diff Row / Review Bar** | Removed / Added; Ready / Invalid × Safe area. |
 | **Chat Bubble / Composer Bar / Chat Header** | The chat sheet. |
 | **Settings Row / Segmented Control / Badge** | Settings and its pickers. |
 | **Recent Recipe Row / Wordmark / Import Option Row** | Sidebar and import. |
+| **Apple Sign In Button** | Scheme Light / Dark. Apple's own control at Sous's size and shape (345 × 50, square via Apple's `cornerRadius` API) — a reserved space, never a redrawn Apple mark. |
+| **Benefit Row** | One paywall claim: burgundy tick plus body text, top-aligned. Property: Benefit. |
 | **Checkbox** | Unchecked, Checked × Default (20pt), Small (18pt). Built only if missing, so an existing one is never replaced. |
 | **Button** | Primary, Inverse, Secondary, Secondary Accent, Text — plus Disabled for Inverse and Secondary. Properties: Label, Icon. |
 | **Section Header** | Expanded, Collapsed, Static. Property: Title. |

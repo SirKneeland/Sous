@@ -31,6 +31,13 @@ struct SousAppApp: App {
     /// argument) is present, and only if bootstrap left us signed out — an
     /// existing real session is never disturbed.
     private func autoSignInIfRequested() async {
+        // A UI fixture signs in offline — no backend, no Keychain, no LLM spend.
+        // Checked first so a fixture run never depends on the network.
+        if DebugFixture.requested() != nil {
+            guard authState.status == .signedOut else { return }
+            authState.debugSignInOffline(entitlement: DebugFixture.entitlement())
+            return
+        }
         guard let handle = DebugSignIn.launchHandle() else { return }
         guard authState.status == .signedOut else { return }
         await authState.signIn(

@@ -113,6 +113,11 @@ struct ContentView: View {
             authState.onSignInHydrate = { [weak store] in
                 await store?.hydrateFromBackend()
             }
+#if DEBUG
+            if let fixture = DebugFixture.requested() {
+                store.applyDebugFixture(fixture)
+            }
+#endif
         }
     }
 

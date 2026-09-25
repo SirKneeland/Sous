@@ -2,7 +2,7 @@
 //
 // GENERATED FILE. Do not edit by hand.
 // Regenerate with:  python3 design/build-figma-plugin.py
-// tokens.json digest: a88550595f36b16f
+// tokens.json digest: ac5575bff515da96
 //
 // Running this creates (or updates) the Sous variable collections and text
 // styles in the current Figma file. It is safe to run repeatedly — variables are
@@ -138,7 +138,7 @@ const TOKENS = {
         "a": 1.0
       },
       "hex": "#2D6A4F",
-      "description": "Muted success green. Patch-diff additions only."
+      "description": "Muted success green. Patch-diff additions and the ACCEPT fill on the review bar."
     },
     "blush/100": {
       "rgba": {
@@ -1182,7 +1182,7 @@ function modeIdNamed(collection, name) {
 function buildReport(result) {
   const lines = [];
   lines.push("SOUS DESIGN TOKENS — import report");
-  lines.push("tokens.json digest: a88550595f36b16f");
+  lines.push("tokens.json digest: ac5575bff515da96");
   lines.push("");
   lines.push("Created: " + log.join(", ") + ".");
   lines.push("Components: " + (COMPONENT_LOG.length ? COMPONENT_LOG.join(", ") : "none rebuilt") + ".");
@@ -1586,7 +1586,7 @@ async function buildButton() {
   set.name = "Button";
   set.description =
     "Square, full width by default. Primary = burgundy fill (main action). Inverse = ink fill " +
-    "that flips to cream in dark mode (ACCEPT, OK). Secondary = 1pt ink border. Secondary " +
+    "that flips to cream in dark mode (OK, confirm). Secondary = 1pt ink border. Secondary " +
     "Accent = 1pt burgundy border. Text = burgundy label only (Cancel, Reject). Labels always " +
     "ALL CAPS; labels on burgundy are white in both modes.\n\n" +
     "Swift: no shared button yet — each view draws its own with Font.sousButton.";
@@ -1608,13 +1608,13 @@ async function buildButton() {
 
   const doc = await docPanel(page, v, "Button", [
     ["Sous/Body",
-      "Square corners, full width by default (353 × 52 on a 393pt iPhone). Five styles: Primary — burgundy fill, the main action. Inverse — ink fill that flips to cream in dark mode, for confirming (ACCEPT, OK). Secondary — 1pt ink border. Secondary Accent — 1pt burgundy border. Text — burgundy label only, for Cancel and Reject.",
+      "Square corners, full width by default (353 × 52 on a 393pt iPhone). Five styles: Primary — burgundy fill, the main action. Inverse — ink fill that flips to cream in dark mode, for confirming. Secondary — 1pt ink border. Secondary Accent — 1pt burgundy border. Text — burgundy label only, for Cancel and Reject. ACCEPT on the review bar is its own case — see the Review Bar component.",
       "text/primary", "description"],
     ["Sous/Body",
       "Labels are always ALL CAPS. Labels on burgundy are white in both modes. Only Inverse and Secondary have a disabled look in the app today; the others have none yet. Toggle Icon to show a leading SF Symbol, as TALK TO SOUS does.",
       "text/primary", "usage"],
     ["Sous/Body",
-      'Not yet true in code: there is no shared SwiftUI button — each screen draws its own. "Make this recipe", "Reset Recipe" and "Restore Original Recipe" break the ALL CAPS rule. START, SET and "Make this recipe" still use a label that turns dark in dark mode instead of white.',
+      'Not yet true in code: there is no shared SwiftUI button — each screen draws its own. The ALL CAPS rule and the white-on-burgundy label now hold everywhere (fixed 2026-09-24); four buttons still add letter-spacing the token does not: CapReachedView ×2, PaywallView, SettingsView.',
       "text/muted", "code-debt"],
   ]);
   set.x = doc.x + doc.width + 80 + 152;
@@ -4430,8 +4430,8 @@ async function buildReviewBar() {
     "ACCEPT is filled with the same green the added lines use, and greys out when the change " +
     "cannot be applied (the recipe moved on underneath it). Safe area=Yes bleeds the colour " +
     "under the home indicator, which is how it sits on a real screen.\n\n" +
-    "Swift: PatchReviewView bottom bar — still ink-filled there; the green is a design decision " +
-    "for the code to follow (docs/KnownIssues.md).";
+    "Swift: PatchReviewView bottom bar — green landed in code 2026-09-24. The Safe area variant's " +
+    "bleed under the home indicator has not (docs/KnownIssues.md).";
   const PAD = 32, GAP = 20, cell = { w: ROW_W, h: 96 };
   layoutGrid(set, () => 0, (c) => REVIEW_BAR_SPECS.findIndex((sp) => sp.name === c.name),
     cell, PAD, GAP, 1, REVIEW_BAR_SPECS.length);
@@ -5875,6 +5875,422 @@ async function verifyRecipeCanvas() {
   }
 }
 
+// ------------------------------------------------- Apple Sign In Button
+//
+// Source: SignInView's SignInWithAppleButton — Apple's own control, 50pt tall
+// inside a 24pt gutter, black on light and white on dark.
+//
+// Square, like everything else Sous draws. The corner radius is Apple's own public
+// API (ASAuthorizationAppleIDButton.cornerRadius — "Set a custom corner radius to
+// be used by this button"), so squaring it is sanctioned, not a hack. What Apple's
+// guidelines protect is the mark and the wording, and both are untouched.
+//
+// The mark itself is deliberately NOT redrawn here: Apple renders it, and
+// reproducing it in Figma would be inaccurate. This component reserves the right
+// space and states the geometry.
+
+const APPLE_BUTTON_SPECS = [
+  { name: "Scheme=Light", fill: { r: 0, g: 0, b: 0 }, label: { r: 1, g: 1, b: 1 } },
+  { name: "Scheme=Dark",  fill: { r: 1, g: 1, b: 1 }, label: { r: 0, g: 0, b: 0 } },
+];
+const APPLE_BTN_W = 345;   // 393 - 2x24pt gutter
+const APPLE_BTN_H = 50;    // .frame(height: 50)
+
+async function buildAppleSignInButton() {
+  const page = await ensurePage("Apple Sign In Button");
+  const owned = ["Apple Sign In Button / Documentation"]
+    .concat(APPLE_BUTTON_SPECS.map((s) => "applebtn/row/" + s.name.replace("Scheme=", "")));
+  if (!(await clearOwned(page, "Apple Sign In Button", owned))) return;
+  const v = await colorVars();
+  const comps = [];
+  for (const spec of APPLE_BUTTON_SPECS) {
+    const c = figma.createComponent();
+    c.name = spec.name;
+    c.layoutMode = "HORIZONTAL";
+    c.primaryAxisAlignItems = "CENTER";
+    c.counterAxisAlignItems = "CENTER";
+    c.itemSpacing = 8;
+    c.resize(APPLE_BTN_W, APPLE_BTN_H);
+    c.primaryAxisSizingMode = "FIXED";
+    c.counterAxisSizingMode = "FIXED";
+    c.fills = [{ type: "SOLID", color: spec.fill }];
+    // Square, via Apple's own cornerRadius API. The radius is Sous's decision, so
+    // it binds to the Sous token; the fill stays Apple's black/white.
+    for (const k of ["topLeftRadius", "topRightRadius", "bottomLeftRadius", "bottomRightRadius"]) {
+      c.setBoundVariable(k, v("Sous Border", "radius/square"));
+    }
+    const label = await textNode("Sous/Body", "Sign in with Apple",
+      v("Sous Color", "text/primary"), "label");
+    c.appendChild(label);
+    label.fills = [{ type: "SOLID", color: spec.label }];
+    page.appendChild(c);
+    comps.push(c);
+  }
+  const set = figma.combineAsVariants(comps, page);
+  set.name = "Apple Sign In Button";
+  set.description =
+    "Apple's Sign in with Apple control, at the size and shape Sous gives it: 345 x 50 inside " +
+    "a 24pt gutter, square, black on light and white on dark.\n\n" +
+    "Square is Apple-sanctioned — ASAuthorizationAppleIDButton exposes cornerRadius as a public " +
+    "property. The mark and the wording are what their guidelines protect, and neither is " +
+    "altered. Do not redraw the Apple mark.\n\n" +
+    "Swift: SignInView's AppleSignInButton, a UIViewRepresentable around the UIKit control " +
+    "(SwiftUI's SignInWithAppleButton offers no corner radius).";
+  const PAD = 32, GAP = 24, cell = { w: APPLE_BTN_W, h: APPLE_BTN_H };
+  layoutGrid(set, () => 0, (c) => APPLE_BUTTON_SPECS.findIndex((s) => s.name === c.name),
+    cell, PAD, GAP, 1, APPLE_BUTTON_SPECS.length);
+  const doc = await docPanel(page, v, "Apple Sign In Button", [
+    ["Sous/Body",
+      "The only control in Sous the app does not draw — but it still follows the house rule. Apple exposes a corner radius on this button, so it is square like everything else here. The toggle and the DONE pill stay rounded because squaring them would read as broken; a square sign-in button does not.",
+      "text/primary", "description"],
+    ["Sous/Body",
+      "The mark is intentionally absent: Apple renders it, and reproducing it in Figma would be inaccurate. Size, shape and placement are what this component is for.",
+      "text/muted", "usage"],
+  ]);
+  set.x = doc.x + doc.width + 80;
+  set.y = doc.y + 40;
+  await gridLabels(page, v, set, [], APPLE_BUTTON_SPECS.map((s) => s.name.replace("Scheme=", "")),
+    cell, PAD, GAP, "applebtn");
+  COMPONENT_LOG.push("Apple Sign In Button (" + set.children.length + " variants)");
+}
+
+async function verifyAppleSignInButton() {
+  const page = figma.root.children.find((p) => p.name === "Apple Sign In Button");
+  if (!page) return check("component Apple Sign In Button", false, "page missing");
+  await figma.setCurrentPageAsync(page);
+  const set = page.children.find((x) => x.type === "COMPONENT_SET" && x.name === "Apple Sign In Button");
+  if (!set) return check("component Apple Sign In Button", false, "component set missing");
+  for (const spec of APPLE_BUTTON_SPECS) {
+    const c = set.children.find((x) => x.name === spec.name);
+    if (!c) { check("Apple Sign In Button " + spec.name, false, "missing"); continue; }
+    check("Apple Sign In Button " + spec.name + " is 345x50",
+      Math.round(c.width) === APPLE_BTN_W && Math.round(c.height) === APPLE_BTN_H,
+      c.width + "x" + c.height);
+    // The radii are bound to radius/square, so read the corner field rather than the
+    // combined `cornerRadius` shorthand, which Figma leaves unset once bound.
+    check("Apple Sign In Button " + spec.name + " is square",
+      c.topLeftRadius === 0 && !!(c.boundVariables && c.boundVariables.topLeftRadius),
+      String(c.topLeftRadius));
+    const fill = c.fills[0];
+    check("Apple Sign In Button " + spec.name + " uses Apple's own colour, not a Sous token",
+      !!fill && fill.type === "SOLID" && !(fill.boundVariables && fill.boundVariables.color));
+  }
+}
+
+// ------------------------------------------------------------- Benefit Row
+//
+// Source: PaywallView's benefit list — a burgundy checkmark and a line of body
+// text, top-aligned so a wrapped second line sits under the first word, not
+// under the tick.
+
+const BENEFIT_ROW_W = 337;   // 393 - 2x28pt gutter
+
+async function buildBenefitRow() {
+  const page = await ensurePage("Benefit Row");
+  if (!(await clearOwned(page, "Benefit Row", ["Benefit Row / Documentation"]))) return;
+  const v = await colorVars();
+  const c = figma.createComponent();
+  c.name = "Benefit Row";
+  c.layoutMode = "HORIZONTAL";
+  c.counterAxisAlignItems = "MIN";           // HStack(alignment: .top)
+  c.itemSpacing = 12;                        // spacing: 12
+  c.resize(BENEFIT_ROW_W, 24);
+  c.primaryAxisSizingMode = "FIXED";
+  c.counterAxisSizingMode = "AUTO";
+  c.fills = [];
+  const tick = figma.createText();
+  tick.name = "check";
+  tick.fontName = await loadIconFont();
+  tick.characters = sfSymbol("checkmark");
+  tick.setBoundVariable("fontSize", v("Sous Icon Sizes", "icon/medium"));
+  tick.fills = [boundPaint(v("Sous Color", "accent/primary"))];
+  c.appendChild(tick);
+  tick.y = 2;                                // .padding(.top, 2)
+  const label = await textNode("Sous/Body", "Unlimited cooking conversations with Sous",
+    v("Sous Color", "text/primary"), "label");
+  c.appendChild(label);
+  label.layoutSizingHorizontal = "FILL";
+  label.textAutoResize = "HEIGHT";
+  page.appendChild(c);
+  const key = c.addComponentProperty("Benefit", "TEXT", "Unlimited cooking conversations with Sous");
+  label.componentPropertyReferences = { characters: key };
+  c.description =
+    "One line of what the subscription buys. Burgundy tick, body text, top-aligned so a " +
+    "wrapped line starts under the words rather than under the tick.\n\nSwift: PaywallView.";
+  const doc = await docPanel(page, v, "Benefit Row", [
+    ["Sous/Body",
+      "The tick is the only burgundy on the row — it marks the claim as included rather than decorating it. Rows stack 16pt apart.",
+      "text/primary", "description"],
+  ]);
+  c.x = doc.x + doc.width + 80;
+  c.y = doc.y + 40;
+  COMPONENT_LOG.push("Benefit Row");
+}
+
+async function verifyBenefitRow() {
+  const page = figma.root.children.find((p) => p.name === "Benefit Row");
+  if (!page) return check("component Benefit Row", false, "page missing");
+  await figma.setCurrentPageAsync(page);
+  const c = page.children.find((x) => x.type === "COMPONENT" && x.name === "Benefit Row");
+  if (!c) return check("component Benefit Row", false, "component missing");
+  const tick = c.findOne((x) => x.name === "check");
+  check("Benefit Row tick is burgundy", !!tick && (await varNameOf(tick.fills[0])) === "accent/primary");
+  check("Benefit Row is top-aligned", c.counterAxisAlignItems === "MIN", c.counterAxisAlignItems);
+  check("Benefit Row has a Benefit text property",
+    Object.keys(c.componentPropertyDefinitions || {}).some((k) => k.startsWith("Benefit")));
+}
+
+// ------------------------------------------------------------- Sign In screen
+
+async function buildSignInScreen() {
+  const page = await ensurePage("Screens");
+  const v = await colorVars();
+  const screen = await newScreen(page, "Sign In", "background/canvas", v);
+  screen.x = 40 + 600 + 120 + (CANVAS_W + 80) * 9;
+  screen.y = 40;
+
+  // The wordmark and its sentence-case line sit in the optical centre.
+  const lockup = autoLayout("VERTICAL");
+  lockup.name = "lockup";
+  lockup.itemSpacing = 20;                   // VStack(spacing: 20)
+  lockup.primaryAxisAlignItems = "CENTER";
+  lockup.counterAxisAlignItems = "CENTER";
+  lockup.fills = [];
+  screen.appendChild(lockup);
+  lockup.resize(CANVAS_W, lockup.height);
+
+  const wordmark = (await getVariant("Wordmark", "Wordmark", "Tagline=No")).createInstance();
+  await figma.setCurrentPageAsync(page);
+  wordmark.name = "wordmark";
+  lockup.appendChild(wordmark);
+  wordmark.layoutSizingHorizontal = "FILL";
+
+  const tagline = await textNode("Sous/Body",
+    "Your AI sous-chef. Cook with a living recipe that adapts as you go.",
+    v("Sous Color", "text/muted"), "tagline");
+  lockup.appendChild(tagline);
+  tagline.layoutSizingHorizontal = "FILL";
+  tagline.textAlignHorizontal = "CENTER";
+  tagline.textAutoResize = "HEIGHT";
+  lockup.paddingLeft = lockup.paddingRight = 40;   // .padding(.horizontal, 40)
+  lockup.x = 0;
+  lockup.y = Math.round((CANVAS_H - lockup.height) / 2) - 60;
+
+  // Apple's button, then the legal line, anchored to the bottom.
+  const apple = (await getVariant("Apple Sign In Button", "Apple Sign In Button", "Scheme=Light")).createInstance();
+  await figma.setCurrentPageAsync(page);
+  apple.name = "apple-signin";
+  screen.appendChild(apple);
+  apple.x = 24;                              // .padding(.horizontal, 24)
+
+  const legal = await textNode("Sous/Caption",
+    "By continuing, you agree to our Terms of Service and Privacy Policy.",
+    v("Sous Color", "text/muted"), "legal");
+  screen.appendChild(legal);
+  legal.textAutoResize = "HEIGHT";
+  legal.resize(CANVAS_W - 48, legal.height);
+  legal.textAlignHorizontal = "CENTER";
+  legal.x = 24;
+  legal.y = CANVAS_H - SAFE_BOTTOM - 32 - legal.height;   // .padding(.bottom, 32)
+  apple.y = legal.y - 12 - APPLE_BTN_H;                   // .padding(.bottom, 12)
+
+  await safeAreaGuides(screen, v);
+  COMPONENT_LOG.push("Sign In screen");
+}
+
+async function verifySignInScreen() {
+  const page = figma.root.children.find((p) => p.name === "Screens");
+  if (!page) return check("Sign In screen", false, "Screens page missing");
+  await figma.setCurrentPageAsync(page);
+  const screen = page.children.find((x) => x.name === "Sign In");
+  if (!screen) return check("Sign In screen", false, "missing");
+  check("Sign In is iPhone-sized", screen.width === CANVAS_W && screen.height === CANVAS_H);
+  check("Sign In sits on the canvas colour", (await varNameOf(screen.fills[0])) === "background/canvas");
+  const names = [];
+  for (const i of screen.findAll((n) => n.type === "INSTANCE")) {
+    const m = await i.getMainComponentAsync();
+    names.push(m ? (m.parent && m.parent.type === "COMPONENT_SET" ? m.parent.name : m.name) : "detached");
+  }
+  check("Sign In is built from components", !names.includes("detached"), names.join(", "));
+  check("Sign In has the wordmark and Apple's button",
+    names.filter((n) => n === "Wordmark").length === 1 &&
+    names.filter((n) => n === "Apple Sign In Button").length === 1, names.join(", "));
+  const apple = screen.findOne((x) => x.name === "apple-signin");
+  check("Apple's button sits in the 24pt gutter", !!apple && apple.x === 24, apple ? String(apple.x) : "missing");
+  const legal = screen.findOne((x) => x.name === "legal");
+  check("the legal line clears the home indicator",
+    !!legal && legal.y + legal.height <= CANVAS_H - SAFE_BOTTOM,
+    legal ? String(Math.round(legal.y + legal.height)) : "missing");
+  check("Apple's button sits above the legal line",
+    !!apple && !!legal && apple.y + apple.height <= legal.y);
+  // Text is measured with the real faces here, so this is the check that catches a
+  // tagline wrapping to an extra line and pushing the lockup into the button.
+  const lockup = screen.findOne((x) => x.name === "lockup");
+  check("the wordmark block clears Apple's button",
+    !!lockup && !!apple && lockup.y + lockup.height <= apple.y,
+    lockup && apple ? Math.round(lockup.y + lockup.height) + " vs " + Math.round(apple.y) : "missing");
+}
+
+// ------------------------------------------------------------- Paywall screen
+
+const PAYWALL_BENEFITS = [
+  "Unlimited cooking conversations with Sous",
+  "Up to 100 new recipes every month",
+  "Hands-free voice mode while you cook",
+  "Your recipes, memories & preferences synced",
+];
+
+async function buildPaywallScreen() {
+  const page = await ensurePage("Screens");
+  const v = await colorVars();
+  const screen = await newScreen(page, "Paywall", "background/canvas", v);
+  screen.x = 40 + 600 + 120 + (CANVAS_W + 80) * 10;
+  screen.y = 40;
+
+  // Close is present only from Settings; drawn here because the variant with it
+  // is the more constrained layout.
+  const close = (await getVariant("Icon Button", "Icon Button", "Style=Bordered")).createInstance();
+  await figma.setCurrentPageAsync(page);
+  close.name = "close";
+  screen.appendChild(close);
+  close.x = CANVAS_W - 20 - close.width;     // .padding(.horizontal, 20)
+  close.y = SAFE_TOP + 12;                   // .padding(.top, 12)
+  const closeIcon = close.findOne((x) => x.name === "icon");
+  if (closeIcon) {
+    await figma.loadFontAsync(closeIcon.fontName);
+    closeIcon.characters = sfSymbol("xmark");
+  }
+
+  // SOUS over PRO — the wordmark, then a burgundy section-header label 4pt under it.
+  const lockup = autoLayout("VERTICAL");
+  lockup.name = "lockup";
+  lockup.itemSpacing = 4;                    // .padding(.top, 4)
+  lockup.primaryAxisAlignItems = "CENTER";
+  lockup.counterAxisAlignItems = "CENTER";
+  lockup.fills = [];
+  screen.appendChild(lockup);
+  lockup.resize(CANVAS_W, lockup.height);
+  const wordmark = (await getVariant("Wordmark", "Wordmark", "Tagline=No")).createInstance();
+  await figma.setCurrentPageAsync(page);
+  wordmark.name = "wordmark";
+  lockup.appendChild(wordmark);
+  wordmark.layoutSizingHorizontal = "FILL";
+  const pro = await textNode("Sous/Section Header", "PRO", v("Sous Color", "text/accent"), "pro");
+  lockup.appendChild(pro);
+  pro.letterSpacing = { value: 3, unit: "PIXELS" };   // .kerning(3)
+  pro.textAlignHorizontal = "CENTER";
+  lockup.x = 0;
+  lockup.y = SAFE_TOP + 120;
+
+  const benefits = autoLayout("VERTICAL");
+  benefits.name = "benefits";
+  benefits.itemSpacing = 16;                 // VStack(spacing: 16)
+  benefits.counterAxisAlignItems = "MIN";
+  benefits.fills = [];
+  screen.appendChild(benefits);
+  benefits.resize(BENEFIT_ROW_W, benefits.height);
+  const benefitSet = await getVariant2("Benefit Row", "Benefit Row");
+  await figma.setCurrentPageAsync(page);
+  for (let i = 0; i < PAYWALL_BENEFITS.length; i++) {
+    const row = benefitSet.createInstance();
+    await figma.setCurrentPageAsync(page);
+    row.name = "benefit-" + (i + 1);
+    benefits.appendChild(row);
+    row.layoutSizingHorizontal = "FILL";
+    // Benefit Row is a plain component, not a variant set, so its text is written
+    // on the layer rather than through setProperties — same as every other
+    // non-variant instance here.
+    const label = row.findOne((x) => x.name === "label");
+    if (label) {
+      await figma.loadFontAsync(label.fontName);
+      label.characters = PAYWALL_BENEFITS[i];
+    }
+  }
+  benefits.x = 28;                           // .padding(.horizontal, 28)
+  benefits.y = lockup.y + lockup.height + 40;   // .padding(.top, 40)
+
+  // Footer: CTA, restore, legal — anchored up from the home indicator.
+  const legal = await textNode("Sous/Caption", "Privacy Policy   ·   Terms of Service",
+    v("Sous Color", "text/muted"), "legal");
+  screen.appendChild(legal);
+  legal.textAutoResize = "HEIGHT";
+  legal.resize(CANVAS_W - 40, legal.height);
+  legal.textAlignHorizontal = "CENTER";
+  legal.x = 20;
+  legal.y = CANVAS_H - SAFE_BOTTOM - 24 - legal.height;   // .padding(.bottom, 24)
+
+  const restore = await textNode("Sous/Caption", "RESTORE PURCHASES",
+    v("Sous Color", "text/primary"), "restore");
+  screen.appendChild(restore);
+  restore.textAutoResize = "HEIGHT";
+  restore.resize(CANVAS_W - 40, restore.height);
+  restore.textAlignHorizontal = "CENTER";
+  restore.letterSpacing = { value: 1, unit: "PIXELS" };   // .kerning(1)
+  restore.x = 20;
+  restore.y = legal.y - 18 - restore.height;              // .padding(.top, 18)
+
+  const cta = (await getVariant("Button", "Button", "Style=Primary, State=Default")).createInstance();
+  await figma.setCurrentPageAsync(page);
+  cta.name = "cta";
+  const btnSet = (await getVariant("Button", "Button", "Style=Primary, State=Default")).parent;
+  await figma.setCurrentPageAsync(page);
+  screen.appendChild(cta);
+  cta.resize(CANVAS_W - 40, BUTTON_H);       // .padding(.horizontal, 20), height 52
+  cta.setProperties({ [propKey(btnSet, "Label")]: "START SOUS PRO — $4.99/MONTH" });
+  cta.x = 20;
+  cta.y = restore.y - 16 - BUTTON_H;         // .padding(.top, 16) above restore
+
+  await safeAreaGuides(screen, v);
+  COMPONENT_LOG.push("Paywall screen");
+}
+
+async function verifyPaywallScreen() {
+  const page = figma.root.children.find((p) => p.name === "Screens");
+  if (!page) return check("Paywall screen", false, "Screens page missing");
+  await figma.setCurrentPageAsync(page);
+  const screen = page.children.find((x) => x.name === "Paywall");
+  if (!screen) return check("Paywall screen", false, "missing");
+  check("Paywall is iPhone-sized", screen.width === CANVAS_W && screen.height === CANVAS_H);
+  check("Paywall sits on the canvas colour", (await varNameOf(screen.fills[0])) === "background/canvas");
+  const names = [];
+  for (const i of screen.findAll((n) => n.type === "INSTANCE")) {
+    const m = await i.getMainComponentAsync();
+    names.push(m ? (m.parent && m.parent.type === "COMPONENT_SET" ? m.parent.name : m.name) : "detached");
+  }
+  check("Paywall is built from components", !names.includes("detached"), names.join(", "));
+  check("Paywall has four benefit rows",
+    names.filter((n) => n === "Benefit Row").length === 4, names.join(", "));
+  check("Paywall has the wordmark, a close button and the CTA",
+    names.filter((n) => n === "Wordmark").length === 1 &&
+    names.filter((n) => n === "Icon Button").length === 1 &&
+    names.filter((n) => n === "Button").length === 1, names.join(", "));
+  const cta = screen.findOne((x) => x.name === "cta");
+  const main = cta && (await cta.getMainComponentAsync());
+  check("the CTA is the Primary style", !!main && main.name === "Style=Primary, State=Default",
+    main ? main.name : "missing");
+  check("the CTA is 52pt tall in a 20pt gutter",
+    !!cta && Math.round(cta.height) === BUTTON_H && cta.x === 20,
+    cta ? cta.height + " @ " + cta.x : "missing");
+  const pro = screen.findOne((x) => x.name === "pro");
+  check("PRO is burgundy", !!pro && (await varNameOf(pro.fills[0])) === "text/accent");
+  const legal = screen.findOne((x) => x.name === "legal");
+  check("the legal line clears the home indicator",
+    !!legal && legal.y + legal.height <= CANVAS_H - SAFE_BOTTOM,
+    legal ? String(Math.round(legal.y + legal.height)) : "missing");
+  // The benefits stack downward from the lockup and the footer stacks upward from the
+  // home indicator. With the real faces a wrapped benefit can close that gap, so this
+  // is the check that catches it — not the eye.
+  const benefitsBlock = screen.findOne((x) => x.name === "benefits");
+  check("the benefits clear the CTA",
+    !!benefitsBlock && !!cta && benefitsBlock.y + benefitsBlock.height <= cta.y,
+    benefitsBlock && cta
+      ? Math.round(benefitsBlock.y + benefitsBlock.height) + " vs " + Math.round(cta.y)
+      : "missing");
+  const lockupBlock = screen.findOne((x) => x.name === "lockup");
+  check("the benefits start below the SOUS PRO lockup",
+    !!lockupBlock && !!benefitsBlock && lockupBlock.y + lockupBlock.height <= benefitsBlock.y);
+}
+
 // ----------------------------------------------------------------- registry
 
 // Order matters: a component may only be built after everything it nests. The
@@ -5918,6 +6334,10 @@ const COMPONENTS = [
     build: buildSegmentedControl, verify: verifySegmentedControl },
   { name: "Settings Row", page: "Settings Row", sets: ["Settings Row"],
     build: buildSettingsRow, verify: verifySettingsRow },
+  { name: "Apple Sign In Button", page: "Apple Sign In Button", sets: ["Apple Sign In Button"],
+    build: buildAppleSignInButton, verify: verifyAppleSignInButton },
+  { name: "Benefit Row", page: "Benefit Row", sets: ["Benefit Row"],
+    build: buildBenefitRow, verify: verifyBenefitRow },
   { name: "Recipe Canvas", page: "Screens", sets: [], build: buildRecipeCanvas, verify: verifyRecipeCanvas },
   { name: "Chat", page: "Screens", sets: [], build: buildChatScreen, verify: verifyChatScreen },
   { name: "Zero State", page: "Screens", sets: [], build: buildZeroStateScreen, verify: verifyZeroStateScreen },
@@ -5931,13 +6351,17 @@ const COMPONENTS = [
     build: buildImportScreen, verify: verifyImportScreen },
   { name: "Preferences", page: "Screens", sets: [],
     build: buildPreferencesScreen, verify: verifyPreferencesScreen },
+  { name: "Sign In", page: "Screens", sets: [],
+    build: buildSignInScreen, verify: verifySignInScreen },
+  { name: "Paywall", page: "Screens", sets: [],
+    build: buildPaywallScreen, verify: verifyPaywallScreen },
 ];
 
 // Generated screens are rebuilt from the library on every run, so they are
 // cleared first: otherwise their instances would mark every component "in use"
 // and block the component rebuilds. Anything you want to keep, duplicate — a
 // copy is not generated, so it is never touched.
-const GENERATED_SCREENS = ["Recipe Canvas", "Chat", "Zero State", "Sidebar", "Settings", "Change Suggestion", "Voice Mode", "Talk to a Recipe", "Preferences"];
+const GENERATED_SCREENS = ["Recipe Canvas", "Chat", "Zero State", "Sidebar", "Settings", "Change Suggestion", "Voice Mode", "Talk to a Recipe", "Preferences", "Sign In", "Paywall"];
 
 async function clearGeneratedScreens() {
   const page = figma.root.children.find((p) => p.name === "Screens");

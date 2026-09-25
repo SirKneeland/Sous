@@ -45,12 +45,11 @@ struct SignInView: View {
                         .padding(.horizontal, 24)
                 }
 
-                SignInWithAppleButton(.signIn) { request in
-                    request.requestedScopes = [.fullName, .email]
-                } onCompletion: { result in
-                    handleCompletion(result)
-                }
-                .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
+                AppleSignInButton(
+                    style: colorScheme == .dark ? .white : .black,
+                    onRequest: { request in request.requestedScopes = [.fullName, .email] },
+                    onCompletion: handleCompletion
+                )
                 .frame(height: 50)
                 .padding(.horizontal, 24)
                 .padding(.bottom, 12)
@@ -142,5 +141,67 @@ struct SignInView: View {
         let formatter = PersonNameComponentsFormatter()
         let name = formatter.string(from: components).trimmingCharacters(in: .whitespaces)
         return name.isEmpty ? nil : name
+    }
+}
+
+// MARK: - AppleSignInButton
+
+/// Apple's Sign in with Apple control, drawn square so it matches the rest of Sous.
+///
+/// SwiftUI's `SignInWithAppleButton` gives no way to set the corner radius, but the
+/// UIKit control underneath exposes `cornerRadius` as a public, Apple-sanctioned
+/// property (`ASAuthorizationAppleIDButton.h`: "Set a custom corner radius to be used
+/// by this button"). So this is Apple's own button with Apple's own API — the mark,
+/// the wording and the behaviour are untouched, which is what their guidelines
+/// actually protect.
+private struct AppleSignInButton: UIViewRepresentable {
+    let style: ASAuthorizationAppleIDButton.Style
+    let onRequest: (ASAuthorizationAppleIDRequest) -> Void
+    let onCompletion: (Result<ASAuthorization, Error>) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeUIView(context: Context) -> ASAuthorizationAppleIDButton {
+        let button = ASAuthorizationAppleIDButton(authorizationButtonType: .signIn,
+                                                 authorizationButtonStyle: style)
+        button.cornerRadius = 0
+        button.addTarget(context.coordinator, action: #selector(Coordinator.tapped), for: .touchUpInside)
+        return button
+    }
+
+    func updateUIView(_ uiView: ASAuthorizationAppleIDButton, context: Context) {
+        context.coordinator.parent = self
+    }
+
+    final class Coordinator: NSObject, ASAuthorizationControllerDelegate,
+                             ASAuthorizationControllerPresentationContextProviding {
+        var parent: AppleSignInButton
+        init(_ parent: AppleSignInButton) { self.parent = parent }
+
+        @objc func tapped() {
+            let request = ASAuthorizationAppleIDProvider().createRequest()
+            parent.onRequest(request)
+            let controller = ASAuthorizationController(authorizationRequests: [request])
+            controller.delegate = self
+            controller.presentationContextProvider = self
+            controller.performRequests()
+        }
+
+        func authorizationController(controller: ASAuthorizationController,
+                                     didCompleteWithAuthorization authorization: ASAuthorization) {
+            parent.onCompletion(.success(authorization))
+        }
+
+        func authorizationController(controller: ASAuthorizationController,
+                                     didCompleteWithError error: Error) {
+            parent.onCompletion(.failure(error))
+        }
+
+        func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+            UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .flatMap(\.windows)
+                .first { $0.isKeyWindow } ?? ASPresentationAnchor()
+        }
     }
 }

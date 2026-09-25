@@ -134,7 +134,7 @@ struct AdjustTimerSheet: View {
                 } label: {
                     Text("START")
                         .font(.sousButton)
-                        .foregroundStyle(Color.sousBackground)
+                        .foregroundStyle(Color.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
                         .background(Color.sousTerracotta)

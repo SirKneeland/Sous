@@ -144,6 +144,10 @@ final class AppStore: ObservableObject {
     /// Write-once snapshot of the recipe as it looked when the canvas was first created.
     /// Nil for legacy sessions (loaded from disk before v6). Never updated after initial set.
     @Published var originalRecipe: Recipe? = nil
+#if DEBUG
+    /// Guards `applyDebugFixture` so a re-run `.task` cannot clobber live edits.
+    private var hasAppliedDebugFixture = false
+#endif
 
     /// Tracks the most recently opened IngredientGroup during streaming recipe creation.
     private var streamingCurrentGroupId: UUID? = nil
@@ -636,6 +640,52 @@ final class AppStore: ObservableObject {
     }
 
     // MARK: - New Session
+
+#if DEBUG
+    /// Loads a debug UI fixture straight into `uiState`, bypassing the LLM. Used for
+    /// unattended simulator verification — see `DebugFixture`. Idempotent: a second
+    /// call with the same fixture is a no-op, so it is safe to call from a `.task`
+    /// that may re-run.
+    func applyDebugFixture(_ fixture: DebugFixture.Kind) {
+        guard !hasAppliedDebugFixture else { return }
+        hasAppliedDebugFixture = true
+
+        let recipe = DebugFixture.recipe()
+        hasCanvas = fixture != .explore
+        canGenerateRecipe = fixture == .explore
+        originalRecipe = fixture == .explore ? nil : DebugFixture.originalRecipe()
+        chatTranscript = [
+            ChatMessage(role: .assistant,
+                        text: "Fixture loaded. This recipe came from DebugFixture, not the model.")
+        ]
+
+        switch fixture {
+        case .explore:
+            uiState = .chatOpen(
+                recipe: Recipe(id: UUID(), version: 1, title: "New Recipe"),
+                draftUserText: "",
+                hidden: HiddenContext()
+            )
+        case .canvas:
+            uiState = .recipeOnly(recipe: recipe)
+        case .review:
+            let patchSet = DebugFixture.patchSet()
+            // The validator runs for real — a bad fixture shows up as an invalid
+            // patch rather than a review screen that lies about being applicable.
+            let validation = PatchValidator.validate(
+                patchSet: patchSet,
+                recipe: recipe,
+                hardAvoids: userPreferences.hardAvoids
+            )
+            uiState = .patchReview(
+                recipe: recipe,
+                patchSet: patchSet,
+                validation: validation,
+                hidden: HiddenContext()
+            )
+        }
+    }
+#endif
 
     /// Clears the current session and returns to the blank starting state.
     /// The previous recipe stays on disk so it appears in Recent Recipes.

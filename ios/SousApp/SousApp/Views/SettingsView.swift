@@ -338,7 +338,7 @@ struct SettingsView: View {
                 if isBYOK {
                     Text("OG")
                         .font(.sousCaption)
-                        .foregroundStyle(Color.sousBackground)
+                        .foregroundStyle(Color.white)
                         .kerning(0.5)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)

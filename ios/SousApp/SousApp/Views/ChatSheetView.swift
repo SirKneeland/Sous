@@ -419,10 +419,10 @@ struct ChatSheetView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "wand.and.stars")
                         .font(.sousIcon(.small))
-                    Text("Make this recipe")
+                    Text("MAKE THIS RECIPE")
                         .font(.sousButton)
                 }
-                .foregroundStyle(Color.sousBackground)
+                .foregroundStyle(Color.white)
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)

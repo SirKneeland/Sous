@@ -210,6 +210,25 @@ final class AuthState: ObservableObject {
         profile = nil
     }
 
+#if DEBUG
+    /// Debug-only offline sign-in for simulator verification. Unlike `DebugSignIn`,
+    /// this never touches the network or the Keychain — it applies a signed-in status
+    /// directly, so UI work can be checked without a backend. See `DebugFixture`.
+    func debugSignInOffline(entitlement: Entitlement) {
+        applySignedIn(
+            userId: "debug-fixture-user",
+            entitlement: entitlement,
+            profile: UserProfile(
+                userId: "debug-fixture-user",
+                email: "fixture@example.test",
+                displayName: "Debug (fixture)",
+                referralCode: nil,
+                isByokEligible: entitlement == .byok
+            )
+        )
+    }
+#endif
+
     private func applySignedIn(userId: String, entitlement: Entitlement, profile: UserProfile?) {
         self.profile = profile
         self.status = .signedIn(userId: userId, entitlement: entitlement)

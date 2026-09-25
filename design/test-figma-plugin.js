@@ -523,6 +523,31 @@ function expect(label, condition, detail) {
 
     expect("report lists the chrome components",
       /Icon Button \(3 variants\)/.test(report) && /Recipe Title \(2 variants\)/.test(report), report);
+
+    // Sign In / Paywall — the billing-and-onboarding pair, added 2026-09-24.
+    expect("report lists the sign-in and paywall pieces",
+      /Apple Sign In Button \(2 variants\)/.test(report) && /Benefit Row/.test(report) &&
+      /Sign In screen/.test(report) && /Paywall screen/.test(report), report);
+    const screensPage = figma.root.children.find((p) => p.name === "Screens");
+    const signIn = screensPage.children.find((x) => x.name === "Sign In");
+    const paywall = screensPage.children.find((x) => x.name === "Paywall");
+    expect("Sign In and Paywall are both on the Screens page", !!signIn && !!paywall,
+      screensPage.children.map((c) => c.name).join(", "));
+    const appleSet = figma.root.children.find((p) => p.name === "Apple Sign In Button").children
+      .find((n) => n.type === "COMPONENT_SET");
+    const light = appleSet.children.find((c) => c.name === "Scheme=Light");
+    expect("Apple's button is square, at Sous's size, in Apple's own colour",
+      light.width === 345 && light.height === 50 && light.topLeftRadius === 0 &&
+      !!(light.boundVariables && light.boundVariables.topLeftRadius) &&
+      !(light.fills[0].boundVariables && light.fills[0].boundVariables.color),
+      light.width + "x" + light.height + " r" + light.topLeftRadius);
+    expect("Paywall lists four benefits",
+      paywall.findAll((n) => /^benefit-\d+$/.test(n.name)).length === 4,
+      String(paywall.findAll((n) => /^benefit-\d+$/.test(n.name)).length));
+    const ctaNode = paywall.findOne((x) => x.name === "cta");
+    expect("Paywall CTA is 52pt tall in the 20pt gutter",
+      !!ctaNode && Math.round(ctaNode.height) === 52 && ctaNode.x === 20,
+      ctaNode ? ctaNode.height + " @ " + ctaNode.x : "missing");
     const ib = figma.root.children.find((p) => p.name === "Icon Button").children
       .find((n) => n.type === "COMPONENT_SET");
     const accent = ib.children.find((c) => c.name === "Style=Accent");

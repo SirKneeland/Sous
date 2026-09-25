@@ -128,7 +128,7 @@ struct RecipeCanvasView: View {
                 Text(header.uppercased())
                     .font(.sousSectionHeader)
                     .foregroundStyle(Color.sousMuted)
-                    .kerning(1.0)
+                    .kerning(1.2)
                     .padding(.horizontal, 20)
                     .padding(.top, 12)
                     .padding(.bottom, 4)
@@ -478,7 +478,7 @@ struct RecipeCanvasView: View {
                     HStack(spacing: 8) {
                         Image(systemName: "arrowshape.turn.up.backward.fill")
                             .font(.sousIcon(.medium, weight: .semibold))
-                        Text("Reset Recipe")
+                        Text("RESET RECIPE")
                             .font(.sousButton)
                     }
                     .foregroundStyle(resetButtonPressed ? Color.white : Color.sousTerracotta)
@@ -505,7 +505,7 @@ struct RecipeCanvasView: View {
                         HStack(spacing: 8) {
                             Image(systemName: "arrowshape.turn.up.backward.2.fill")
                                 .font(.sousIcon(.medium, weight: .semibold))
-                            Text("Restore Original Recipe")
+                            Text("RESTORE ORIGINAL RECIPE")
                                 .font(.sousButton)
                         }
                         .foregroundStyle(Color.sousTerracotta)
@@ -828,17 +828,10 @@ struct RecipeCanvasView: View {
                     handleMarkMEPDone(row.id)
                 }
             } label: {
-                HStack(alignment: .top, spacing: 12) {
-                    SousCheckbox(isChecked: isDone)
-                        .padding(.top, 2)
-                    Text(instruction)
-                        .font(.sousBody)
-                        .fontWeight(row.id == currentStepId ? .bold : nil)
+                SousChecklistRow(isChecked: isDone) {
+                    SousChecklistText(text: instruction, isDone: isDone,
+                                      isCurrent: row.id == currentStepId)
                         .animation(.easeInOut(duration: 0.2), value: currentStepId)
-                        .foregroundStyle(isDone ? Color.sousMuted : Color.sousText)
-                        .strikethrough(isDone, color: Color.sousMuted)
-                        .multilineTextAlignment(.leading)
-                    Spacer()
                 }
                 .padding(.vertical, 10)
             }
@@ -852,17 +845,10 @@ struct RecipeCanvasView: View {
                     for id in incompleteIds { handleMarkMEPDone(id) }
                 }
             } label: {
-                HStack(alignment: .top, spacing: 12) {
-                    SousCheckbox(isChecked: isDone)
-                        .padding(.top, 2)
-                    Text(vesselName)
-                        .font(.sousBody)
-                        .fontWeight(row.id == currentStepId ? .bold : nil)
+                SousChecklistRow(isChecked: isDone) {
+                    SousChecklistText(text: vesselName, isDone: isDone,
+                                      isCurrent: row.id == currentStepId)
                         .animation(.easeInOut(duration: 0.2), value: currentStepId)
-                        .foregroundStyle(isDone ? Color.sousMuted : Color.sousText)
-                        .strikethrough(isDone, color: Color.sousMuted)
-                        .multilineTextAlignment(.leading)
-                    Spacer()
                 }
                 .padding(.vertical, 10)
             }
@@ -966,7 +952,7 @@ struct RecipeCanvasView: View {
 
     @ViewBuilder
     private func stepFlatItemView(_ item: StepFlatItem) -> some View {
-        let indentPad: CGFloat = 20 + CGFloat(item.indentLevel) * 16
+        let indentPad: CGFloat = 20 + CGFloat(item.indentLevel) * SousChecklistRow<EmptyView>.nestedIndent
         switch item.content {
         case .parentStep(let step):
             parentStepRowView(step: step, indentPad: indentPad)
@@ -1012,8 +998,9 @@ struct RecipeCanvasView: View {
         if !isDone || stepsCompletedExpanded || collapsePhase != nil {
             let isHighlighted = !isDone && highlightedStepId == step.id
             VStack(alignment: .leading, spacing: 0) {
-                HStack(alignment: .top, spacing: 12) {
-                    Button {
+                SousChecklistRow(
+                    isChecked: isDone,
+                    onToggleCheckbox: {
                         if collapsePhase == .draining {
                             stepCollapseStates.removeValue(forKey: step.id.uuidString)
                             stepDrainScales.removeValue(forKey: step.id.uuidString)
@@ -1023,12 +1010,8 @@ struct RecipeCanvasView: View {
                         if step.status == .todo {
                             handleMarkStepDone(step.id)
                         }
-                    } label: {
-                        SousCheckbox(isChecked: isDone)
-                            .padding(.top, 2)
                     }
-                    .buttonStyle(.plain)
-
+                ) {
                     if let tm = timerManager, !isDone {
                         TimerAffordanceText(
                             step: step,
@@ -1043,13 +1026,9 @@ struct RecipeCanvasView: View {
                             }
                         )
                     } else {
-                        Text(step.text)
-                            .font(.sousBody)
-                            .fontWeight(step.id == currentStepId ? .bold : nil)
+                        SousChecklistText(text: step.text, isDone: isDone,
+                                          isCurrent: step.id == currentStepId)
                             .animation(.easeInOut(duration: 0.2), value: currentStepId)
-                            .foregroundStyle(isDone ? Color.sousMuted : Color.sousText)
-                            .strikethrough(isDone, color: Color.sousMuted)
-                            .multilineTextAlignment(.leading)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .onTapGesture {
                                 withAnimation(.easeInOut(duration: 0.3)) {
@@ -1194,23 +1173,15 @@ private enum StepCollapsePhase { case draining, fading }
 private struct NestedStepChildRow: View {
     let text: String
     let isDone: Bool
-    var indentWidth: CGFloat = 20
+    var indentWidth: CGFloat = SousChecklistRow<EmptyView>.nestedIndent
     let onTap: () -> Void
 
     var body: some View {
         Button {
             if !isDone { onTap() }
         } label: {
-            HStack(alignment: .top, spacing: 12) {
-                Color.clear.frame(width: indentWidth, height: 20)
-                SousCheckbox(isChecked: isDone)
-                    .padding(.top, 2)
-                Text(text)
-                    .font(.sousBody)
-                    .foregroundStyle(isDone ? Color.sousMuted : Color.sousText)
-                    .strikethrough(isDone, color: Color.sousMuted)
-                    .multilineTextAlignment(.leading)
-                Spacer()
+            SousChecklistRow(isChecked: isDone, indent: indentWidth) {
+                SousChecklistText(text: text, isDone: isDone)
             }
             .padding(.vertical, 10)
         }
@@ -1228,14 +1199,8 @@ private struct IngredientRow: View {
     let onAskSous: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            SousCheckbox(isChecked: isChecked)
-                .padding(.top, 2)
-            Text(ingredient.text)
-                .font(.sousBody)
-                .foregroundStyle(Color.sousText)
-                .multilineTextAlignment(.leading)
-            Spacer()
+        SousChecklistRow(isChecked: isChecked) {
+            SousChecklistText(text: ingredient.text, strikesWhenDone: false)
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 20)

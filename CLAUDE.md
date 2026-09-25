@@ -4,12 +4,12 @@
 
 The operator is a non-technical Product Manager. They cannot read Swift or evaluate code directly. They verify work through:
 - Tests passing
-- Behavioral checklists they can run on their phone
+- **Your** report of what you observed running the app in the Simulator
 - App behavior matching the PRD and UserStories.md
 
 This means:
 - Your plans must be understood by a non-engineer
-- Your test checklists must be behavioral ("tap X, expect Y"), not code-level
+- You verify behavior yourself in the Simulator — see "Verification" below
 - You are the only one who can catch implementation errors — do not assume the operator will
 
 ---
@@ -182,18 +182,64 @@ The Sous repo has a live LLM eval suite at `/evals`. Claude Code must treat eval
 
 ---
 
+## Verification
+
+**You verify your own work in the iOS Simulator.** Do not hand the operator a checklist for
+anything you can drive yourself — that workflow predates Simulator access and is retired.
+
+**Getting past the sign-in gate.** Every screen sits behind Sign in with Apple, and most
+need a recipe on the canvas. `DebugFixture` (DEBUG only) supplies both offline — no backend,
+no Keychain, no LLM spend:
+
+```
+xcrun simctl launch <udid> com.donutindustries.SousApp -sous-fixture canvas
+```
+
+- `-sous-fixture canvas` — recipe on the canvas (servings picker, a single-value timer, a
+  ranged timer, RESET / RESTORE ORIGINAL buttons)
+- `-sous-fixture review` — recipe + pending patch, landing on the change-review screen
+- `-sous-fixture explore` — no canvas, generate pill showing
+- `-sous-fixture-entitlement byok|subscriber|trialing|grace|soft_wall` — defaults to
+  `subscriber`; drives the OG badge and the billing walls
+
+The fixture never fakes a `PatchValidationResult` — the validator runs for real, so a bad
+fixture surfaces as an invalid patch rather than a review screen that lies.
+
+Use the `mcp__Claude_Code_iOS_Simulator__*` tools:
+- Call `attach` **first**, before building, so the operator can watch.
+- `build` → `launch`, then drive the app: `tap`, `swipe`, `text`, `screenshot`, `inspect`.
+- Prefer `inspect` over `screenshot` for reading labels, control state, and what's on screen.
+  Use `screenshot` for colour, layout and anything visual.
+- **Check both light and dark mode** for any visual change (`xcrun simctl ui <udid>
+  appearance dark|light`). Sous has tokens that deliberately do not invert (green, voice
+  palette, white-on-burgundy labels), so dark mode is where colour bugs actually surface.
+- **`inspect` is unavailable** in this app build, so there is no accessibility tree to read:
+  locate controls by capturing `xcrun simctl io <udid> screenshot out.png` and measuring
+  pixels. The capture is @3x, so **device points = pixels ÷ 3**. Eyeballing fractions off a
+  scaled screenshot mis-taps; measuring the target's bounding box does not. Sampling pixel
+  colours this way also verifies a token exactly (`#2D6A4F`) rather than "looks green".
+
+**Escalate to the operator only for what the Simulator genuinely cannot do:** real Sign in
+with Apple, StoreKit sandbox purchases, camera capture, haptics, Siri/Realtime voice against
+live audio, and anything needing their own account data or a physical device. Say which of
+these blocked you rather than listing it as a task for them.
+
+---
+
 ## Definition of Done
 
 A task is complete when:
 
 1. `swift test` passes (all tests, no skips)
 2. You have manually traced the happy path in your reasoning and it holds
-3. The operator has a behavioral checklist they can execute on device
+3. **You have run the change in the iOS Simulator and seen it work** — not reasoned that it
+   should. Anything the Simulator cannot reach is named explicitly, with why.
 
 **Not done if:**
 - Tests pass but you know an edge case isn't handled
 - You've commented out a test to make the build green
-- The checklist requires the operator to read code
+- You are asking the operator to verify something the Simulator could have verified
+- You report what *should* happen rather than what you *saw*
 
 ---
 
@@ -203,7 +249,9 @@ After completing any task, provide:
 
 **Summary** — plain English, one short paragraph, what changed and why
 
-**What to verify on device** — numbered behavioral steps ("1. Open app. 2. Type 'make it spicier'. 3. Expect a patch review banner to appear.")
+**What you verified** — what you actually ran in the Simulator and what you saw, including
+both light and dark mode for any visual change. Then, separately, **what you could not
+verify and why** — the short list of things needing the operator's own device or accounts.
 
 **Assumptions made** — anything you decided without explicit instruction
 - Write assumptions in plain English for a non-technical PM — no Swift syntax, no framework jargon. If a technical concept is unavoidable, add a one-sentence plain English explanation in parentheses.

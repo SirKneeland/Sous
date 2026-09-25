@@ -251,17 +251,67 @@ verified by `node design/test-figma-plugin.js`. Every screen below is assembled 
 components — if a screen can't be built from them, the components are wrong.
 
 **Built:** Checkbox, Button, Icon Button, Section Header, Ingredient Group Header, List Row,
-Recipe Title, Bottom Bar, Chat Bubble, Composer Bar, Chat Header, Wordmark, Recent Recipe Row.
+Recipe Title, Bottom Bar, Chat Bubble, Composer Bar, Chat Header, Wordmark, Recent Recipe Row,
+Apple Sign In Button, Benefit Row.
 
 **Screens assembled:** Recipe Canvas, Chat, Zero State, Sidebar.
 
-**Screens: all nine built** — Recipe Canvas, Chat, Zero State, Sidebar, Settings,
-Change Suggestion, Voice Mode, Talk to a Recipe, Preferences.
+**Screens: eleven built** — Recipe Canvas, Chat, Zero State, Sidebar, Settings,
+Change Suggestion, Voice Mode, Talk to a Recipe, Preferences, **Sign In**, **Paywall**.
+
+### 14. Apple's sign-in button is square, and its mark is not redrawn (2026-09-24)
+
+**Square.** `ASAuthorizationAppleIDButton` exposes `cornerRadius` as a public, documented
+property — *"Set a custom corner radius to be used by this button."* So squaring it is
+sanctioned by Apple, not a workaround, and the button now matches the rest of Sous. What
+Apple's guidelines actually protect is the mark and the wording, and neither is touched.
+
+SwiftUI's `SignInWithAppleButton` offers no way to set the radius, so `SignInView` wraps the
+UIKit control in a small `UIViewRepresentable` (`AppleSignInButton`). Verified on device:
+354 × 50pt at a 24pt gutter, all four corners filled.
+
+This corrects an earlier draft of this decision, which claimed Apple's guidelines forbade
+altering the button's proportions and specified an 8pt radius on that basis. They do not.
+
+**The mark is still not redrawn.** Apple renders it; reproducing it in Figma would be
+inaccurate. There is also a practical limit: `apple.logo` is not in `design/sf-symbols.json`,
+and the desktop plugin API cannot look a symbol up by name — adding it would spend one of a
+very small monthly allowance of Figma MCP calls to draw something we would not alter anyway.
+The component reserves the space and states the geometry; Apple supplies the glyph.
+
+---
 
 **A rule worth keeping:** iOS chrome stays iOS-shaped. Sheets, segmented pickers, toggles,
 steppers, the DONE pill and the back button are all rounded, and deliberately so — a square
 switch reads as broken, not consistent. Everything Sous draws itself stays square. Each of
 those components says so in its own notes.
+
+**Coverage audit (2026-09-24)** — every user-facing surface in the app, and whether the
+design system covers it. Done as a deliberate step: the nine screens built so far came from
+the operator's list, not from a sweep of the codebase.
+
+*Covered:* recipe canvas, chat sheet, zero state, history drawer, settings, patch review,
+voice bar, import chooser, preferences, **sign in**, **paywall**.
+
+*Not yet in the library — worth a pass, roughly in order of how often a user meets them:*
+
+| Screen / surface | Source | Why it matters |
+|---|---|---|
+| **Cap reached** | `Billing/CapReachedView.swift` | The hard stop at 100 recipes/month. Next in line: it reuses the paywall's CTA, close button and legal footer, so most of its parts now exist |
+| **Memories** | `Views/MemoriesView.swift` | Reached from Settings; a list with edit and swipe-delete |
+| **Timer sheets** | `AdjustTimerSheet`, `DurationPickerSheet`, `ServingsPickerSheet` | Three near-identical wheel pickers — likely one component, the same way the three row types were |
+| **Timer banners** | `TimerBannerStack`, `TimerDoneBanner` | The only monospace readouts outside the canvas |
+| **Import: the other modes** | `Import/RecipeImportSheet.swift` | Camera, library, paste, loading and error states — only the chooser is built |
+| **Photo acquisition** | `Acquisition/PhotoAcquisitionSheet.swift` | Camera/library picker sheet |
+| **Mise en place confirmation** | `RecipeCanvasView` (modal) | Small modal, uses the Small checkbox that nothing else uses |
+| **In-chat furniture** | `ChatSheetView` | Memory proposal toast, attachment strip, quoted-context chip, generate pill, thinking/streaming bubbles |
+| **API key callout** | `Views/APIKeyCallout.swift` | Onboarding nudge for BYOK users |
+
+*Deliberately out of scope:* everything under `Debug/` and `RowLayoutDebugPreview` — developer
+tools, not product surfaces.
+
+The timer sheets and the in-chat furniture are the two clusters most likely to collapse into
+shared components, as the three list rows did.
 
 **Deferred deliberately:**
 - **Foundations pages** (colour swatches, type specimen, spacing bars).

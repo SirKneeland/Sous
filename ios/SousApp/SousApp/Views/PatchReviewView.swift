@@ -145,9 +145,9 @@ struct PatchReviewView: View {
                 } label: {
                     Text("ACCEPT")
                         .font(.sousButton)
-                        .foregroundStyle(Color.sousBackground)
+                        .foregroundStyle(Color.white)
                         .frame(maxWidth: .infinity, minHeight: 56)
-                        .background(isValid ? Color.sousText : Color.sousMuted)
+                        .background(isValid ? Color.sousGreen : Color.sousMuted)
                 }
                 .buttonStyle(.plain)
                 .disabled(!isValid)

@@ -171,44 +171,60 @@ inconsistencies. The Figma **Button** component is the agreed target shape: Prim
 (burgundy fill), Inverse (ink fill, flips in dark mode), Secondary (ink border),
 Secondary Accent (burgundy border), Text (burgundy label only).
 
-To fix when the design system work is done:
+Two of the three inconsistencies were fixed on **2026-09-24**, ahead of the extraction,
+because they were visible defects rather than structural debt:
 
-1. **Label colour on burgundy.** Decided: white in both modes (`text/onInverse`),
-   matching TALK TO SOUS. Still using the flipping background colour — which turns the
-   label near-black in dark mode — are `AdjustTimerSheet.swift:136` (START),
-   `DurationPickerSheet.swift:118` (START), `ServingsPickerSheet.swift:88` (SET) and
-   `ChatSheetView.swift:423` ("Make this recipe").
-2. **ALL CAPS rule.** Three labels break it: "Make this recipe"
-   (`ChatSheetView.swift:423`), "Reset Recipe" (`RecipeCanvasView.swift:482`) and
-   "Restore Original Recipe" (`RecipeCanvasView.swift:509`).
-3. **Letter-spacing.** Roughly 35 buttons use none; four add `kerning` 0.5 or 1.2
-   (`CapReachedView.swift:87` and `:100`, `PaywallView.swift:115`,
-   `SettingsView.swift:183`). The token — and the Figma component — use none.
+1. ~~**Label colour on burgundy.**~~ Fixed. START (`AdjustTimerSheet`,
+   `DurationPickerSheet`), SET (`ServingsPickerSheet`) and the generate pill
+   (`ChatSheetView`) now use `Color.white` (`text/onInverse`) instead of the flipping
+   background colour that turned the label near-black in dark mode. A fifth site this
+   entry had missed — the **OG badge** in `SettingsView` — had the same defect and was
+   fixed with it; at 11pt it measured 3.89:1 in dark mode, and the Figma **Badge**
+   component already specified `text/onInverse`.
+2. ~~**ALL CAPS rule.**~~ Fixed. "Make this recipe" → "MAKE THIS RECIPE", "Reset Recipe" →
+   "RESET RECIPE", "Restore Original Recipe" → "RESTORE ORIGINAL RECIPE".
+3. **Letter-spacing — still open.** Roughly 35 buttons use none; four add `kerning` 0.5 or
+   1.2 (`CapReachedView.swift:87` and `:100`, `PaywallView.swift:115`,
+   `SettingsView.swift:183`). The token — and the Figma component — use none. Left for the
+   extraction itself, since all four sit on screens being redesigned against the system
+   (paywall, cap reached) and the kerning should come off as those screens are rebuilt.
+
+The extraction itself — one shared button view — is still outstanding.
 
 Also note only Inverse and Secondary have a disabled appearance in code; Primary,
 Secondary Accent and Text have none, so the Figma component deliberately omits them.
 
 ---
 
-## The same checklist row is implemented three times
+## ~~The same checklist row is implemented three times~~ — done 2026-09-24
 
-- **Area:** `ios/SousApp/SousApp/Views/RecipeCanvasView.swift`
-- **Type:** Cleanup / consistency
-- **Flagged:** 2026-09-24 (surfaced while building the Figma List Row component)
+- **Area:** `ios/SousApp/SousApp/Views/RecipeCanvasView.swift`,
+  `ios/SousApp/SousApp/Views/SousChecklistRow.swift`
+- **Type:** Cleanup / consistency — **resolved**
 
-`IngredientRow` (line ~1223), `leafStepRowView` (~1009) and `mepFlatRowView` (~821)
-draw the same row — checkbox nudged down 2pt, `sousBody` text, 10pt vertical and 20pt
-side padding, iOS separator in `sousSeparator`. They differ only in state: ingredients
-tick without a strikethrough, steps and prep tasks mute and strike, steps add an inline
-timer and the pale-burgundy highlight, prep tasks nest. One shared row view with those
-as parameters is the code equivalent of the Figma **List Row** component.
+`SousChecklistRow` and `SousChecklistText` now carry the shared part: the checkbox nudged
+2pt down, 12pt from `sousBody` text that mutes and strikes when done and bolds when
+current. Five call sites use them (ingredients, leaf steps, mise en place solo, group
+header and component). Verified as a pixel-for-pixel no-op on the canvas — 0 of 3,017,412
+pixels changed.
 
-Two smaller mismatches to settle in the same pass:
+**The extraction is deliberately narrower than this entry originally proposed.** Only the
+*appearance* is shared. Swipe actions, list-row insets, the timer-highlight fill and the
+drain-and-collapse animation genuinely differ per section and stayed at the call sites;
+folding them in would have meant one view with about a dozen flags, which is harder to
+read than the callers it replaced. The rows agree on how they look and disagree on how
+they behave, and only the first half is worth centralising.
 
-- **Indents disagree:** sub-steps indent 16pt per level (`stepFlatItemView`), nested
-  prep tasks 20pt (`NestedStepChildRow`). The Figma component uses 20pt.
-- **Group header letter-spacing:** the ingredient group header uses `kerning(1.0)`
-  while `Sous/Section Header` (and every other header) uses 1.2.
+**The indent mismatch was mis-diagnosed here.** The original note compared *declared*
+values — 16pt per level for sub-steps, 20pt for nested prep tasks. The rendered gap was
+bigger: the prep task's indent was a spacer *inside* the row's `HStack`, so it also picked
+up the 12pt item spacing, putting its checkbox at 52pt against the sub-step's 36pt. Making
+both declare 20 would have left them 12pt apart. `SousChecklistRow` applies the indent as
+leading padding instead, and both now measure 39.7pt on device against 19.7pt for a
+top-level row.
+
+Group header letter-spacing is fixed too: the ingredient group header now uses `kerning(1.2)`
+like every other header.
 
 ---
 
@@ -246,21 +262,32 @@ deliberate pass rather than a spot fix.
 Disabled filled buttons (cream on `#9A9590`) sit at about 2.6:1. WCAG exempts disabled
 controls, so this is recorded for awareness, not as a defect.
 
+
 ---
 
-## ACCEPT on the change-review bar should be green, not ink
+## The SOUS wordmark is set at four different trackings
 
-- **Area:** `ios/SousApp/SousApp/Views/PatchReviewView.swift` — bottom action bar
-- **Type:** Design decision not yet in code
-- **Flagged:** 2026-09-24
+- **Area:** `ios/SousApp/SousApp/` — `HistoryDrawer.swift:51`, `ChatSheetView.swift:105`,
+  `ContentView.swift:94`, `Auth/SignInView.swift:28`, `Billing/PaywallView.swift:70`
+- **Type:** Cleanup / consistency
+- **Flagged:** 2026-09-24 (surfaced while building the Figma Sign In and Paywall screens)
 
-ACCEPT is currently filled with `Color.sousText` (ink). Decided while comparing the Figma
-Change Suggestion screen against the device: it should use the **added-green**
-(`Color.sousGreen`, `#2D6A4F`) — the same green the added lines already use — so the button and
-the thing it adds read as one idea. REJECT is unchanged: burgundy text on the page.
+The app draws its own name five times, at three different letter-spacings:
 
-The Figma **Review Bar** component already uses the green. Change the `.background(...)` on the
-ACCEPT button to `Color.sousGreen` when `isValid`; the disabled fill stays muted.
+| Where | Kerning |
+|---|---|
+| History drawer header | none |
+| Chat blank state | none |
+| Loading state (`ContentView`) | 2 |
+| Sign in | 2 |
+| Paywall | 3 |
 
-Also decided: the bar should bleed to the bottom edge of the screen, with the labels staying in
-the top 56pt above the home indicator. The Figma component's **Safe area** variant shows this.
+The Figma **Wordmark** component uses none, matching the two oldest sites, and the Sign In and
+Paywall screens were built from it — so those two screens currently show less tracking than the
+code does. Nothing is broken; the logotype is just inconsistent in a way you notice when the
+screens sit side by side.
+
+Picking a value is a design decision, not a reconciliation, so it was left alone. Worth settling
+in one pass: choose one tracking, put it in the Wordmark component, and make all five sites use
+it. At 34pt bold serif in capitals a little tracking usually reads better, so 2 is the likelier
+answer than 0 — but that is a judgement to make by looking, not by argument.

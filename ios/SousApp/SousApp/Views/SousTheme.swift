@@ -50,13 +50,13 @@ extension UIColor {
     /// White (light) / dark surface (dark) — chat sheet, input fields
     static let sousSurfaceUI = sousDynamic(light: 0xFFFFFF, dark: 0x222222)
 
-    /// Ink fill that stays dark in both modes — history settings button, ACCEPT fill
+    /// Ink fill that stays dark in both modes — history settings button
     static let sousSurfaceInverseUI = sousDynamic(light: 0x1A1A1A, dark: 0x1A1A1A)
 
     /// Backdrop behind the photo acquisition sheet
     static let sousScrimUI = sousDynamic(light: 0x757471, dark: 0x757471)
 
-    /// Muted green — added items in patch diff only
+    /// Muted green — added items in patch diff, and the ACCEPT fill on the review bar
     static let sousGreenUI = sousDynamic(light: 0x2D6A4F, dark: 0x2D6A4F)
 
     /// Thin separator / divider line
