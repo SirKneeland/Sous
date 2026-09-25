@@ -210,6 +210,10 @@ Migrated so far — Billing and Import's full-width buttons:
 | `RecipeCanvasView` RESET RECIPE | Secondary Accent, Primary while pressed | **pixel-identical** |
 | `RecipeCanvasView` RESTORE ORIGINAL RECIPE | Secondary Accent | **pixel-identical** |
 | `HistoryDrawer` NEW RECIPE | Primary | bounds identical; icon normalised from 16pt to 14pt semibold |
+| `SettingsView` SAVE KEY | Inverse, compact | disabled fill verified back at `#9A9590` (see the dimming note) |
+| `RecipeImportSheet` loading CANCEL | Secondary Accent, compact | renders as before |
+| `RecipeImportSheet` TRY AGAIN | Secondary Accent, compact | renders as before |
+| `RecipeImportSheet` error CANCEL | Text | deliberate redesign — see the note below |
 
 That last one is worth knowing. The old button stroked an ink border *over* an ink fill,
 and SwiftUI centres a stroke on the path edge — so half of it sat outside the frame and made
@@ -228,15 +232,23 @@ outside `SousButton.swift` itself split as **21 shaped buttons and 16 bare label
 the first group is migration work; the second is text that happens to share a type token,
 and moving it under a button view would be wrong.
 
-**Still to migrate — 12 shaped buttons**, once the 9 already done are subtracted:
-`WindowButtonHost`'s TALK TO SOUS, the import sheet's compact buttons (BACK TO IMPORT
-OPTIONS, TRY AGAIN, CANCEL), `SettingsView`'s SAVE KEY, and the two ingredient-row swipe
-actions on the canvas.
+**Still to migrate — 9 shaped buttons**, once the 12 already done are subtracted:
+`WindowButtonHost`'s TALK TO SOUS, the two ingredient-row swipe actions on the canvas, a
+debug-only texture preview, and the deliberate exceptions below.
 
-**The component forces full width**, which is what blocks the compact buttons — SAVE KEY
-pads 12 sides rather than filling, and the import sheet's three are inline. A width option
-is the next thing the shared view needs; it is deliberately not there yet, because adding
-it before three real callers existed would have been guesswork about what they need.
+**A width option was added** once four real callers needed it: `fillsWidth: false` with a
+`horizontalPadding`, alongside the existing fixed-height / hug-the-label sizing.
+
+**Chrome lives outside the button, and must stay there.** SwiftUI's `.disabled()` dims a
+button's *label*. When the fill briefly sat inside the label, a disabled SAVE KEY rendered at
+`#C6C2BC` instead of the `#9A9590` the Figma Inverse Disabled style specifies — the style
+already encodes the disabled look, so the dimming doubled up on it. `SousButton` now applies
+sizing, fill and border as a modifier outside the `Button`, which is what the original
+hand-built code did by accident of ordering. `PaywallView`'s CTA had the same latent fault
+(its burgundy fill would have washed out mid-purchase) and was moved onto `SousButton` too.
+
+Caught only because the disabled state was on screen and got diffed. Worth remembering when
+migrating anything with a disabled appearance.
 
 `MemoriesView`'s CANCEL and SAVE are **not** migration work: they are `ToolbarItem`
 buttons, so iOS draws them, the same way the Apple sign-in button is Apple's.
@@ -253,9 +265,16 @@ Two clusters are expected **not** to fit, and should stay bespoke unless a reaso
 - **The review bar** is two half-width halves with a hairline between them, which the Figma
   **Review Bar** component already models separately.
 
-`RecipeImportSheet`'s CANCEL also uses a muted border with a muted label, which is not one of
-the five styles. That is a design decision — either it becomes Secondary, or the system gains
-a sixth style — not something to absorb silently.
+`RecipeImportSheet`'s error-screen CANCEL still uses a muted border with a muted label, which
+is not one of the five styles, so it was left alone.
+
+**Settled 2026-09-25.** Seeing it beside the migrated TRY AGAIN made the problem plain: grey
+border and grey label is how the app draws a *disabled* control, so a live escape hatch was
+wearing the disabled costume — on the one screen where something has already gone wrong and
+the user most needs a way out. It is now **Text style** (burgundy label, no border), matching
+how Cancel and Reject read everywhere else in Sous, and the two actions **stack vertically**
+rather than sitting side by side: a bordered button next to a bare label read as lopsided,
+and stacking puts the recovery path first with the way out beneath it.
 
 Also note only Inverse and Secondary have a disabled appearance in code; Primary,
 Secondary Accent and Text have none, so the Figma component deliberately omits them.

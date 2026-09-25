@@ -104,13 +104,10 @@ struct PaywallView: View {
                 }
 
                 // Primary CTA — filled burgundy rectangle.
-                Button {
+                SousButton(title: ctaLabel, style: .primary, isEnabled: !isWorking,
+                           isBusy: isWorking) {
                     Task { await storeKit.purchase() }
-                } label: {
-                    SousButtonLabel(title: ctaLabel, style: .primary, isBusy: isWorking)
                 }
-                .buttonStyle(.plain)
-                .disabled(isWorking)
                 .padding(.horizontal, 20)
 
                 Button {

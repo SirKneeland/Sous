@@ -59,20 +59,19 @@ enum SousButtonStyle {
 /// Separate from `SousButton` because some call sites supply their own control —
 /// `ShareLink` on the cap-reached screen, for one — and still need to look like a
 /// button. Labels are always ALL CAPS; the type token carries no letter-spacing.
-struct SousButtonLabel: View {
+/// Just the icon and words — no fill, no border, no sizing.
+///
+/// Split out from the chrome because SwiftUI's `.disabled()` dims a button's *label*.
+/// Since the style already encodes the disabled look (a muted fill, a muted label), letting
+/// the dimming land on the fill too washes it out — which is exactly what happened when the
+/// fill briefly lived inside the label. Chrome therefore wraps the button; the label does not
+/// carry it.
+private struct SousButtonContent: View {
     let title: String
-    var style: SousButtonStyle = .primary
-    var isEnabled: Bool = true
-    /// Fixed height — 52pt for the full-width CTAs. Pass nil to hug the label with
-    /// `verticalPadding` instead, which is how the import sheet sizes its buttons.
-    var height: CGFloat? = 52
-    /// Used only when `height` is nil.
-    var verticalPadding: CGFloat = 14
-    /// An optional leading SF Symbol, as TALK TO SOUS uses.
-    var icon: String? = nil
-    /// Swaps the label for a spinner while work is in flight — the paywall's
-    /// purchase button. The Figma component has no Busy variant yet; it should.
-    var isBusy: Bool = false
+    let style: SousButtonStyle
+    let isEnabled: Bool
+    let icon: String?
+    let isBusy: Bool
 
     var body: some View {
         HStack(spacing: 8) {
@@ -88,29 +87,77 @@ struct SousButtonLabel: View {
             }
         }
         .foregroundStyle(style.label(enabled: isEnabled))
-        .frame(maxWidth: .infinity)
-        .modifier(SousButtonSizing(height: height, verticalPadding: verticalPadding))
-        .background(style.fill(enabled: isEnabled))
-        .overlay {
-            if let border = style.border(enabled: isEnabled) {
-                Rectangle().stroke(border, lineWidth: 1)
-            }
-        }
     }
 }
 
-/// Applies whichever sizing convention the caller asked for. Split out because a
-/// `ViewModifier` can branch where a chain of modifiers cannot.
-private struct SousButtonSizing: ViewModifier {
+/// Sizing, fill and border. Applied outside the button so `.disabled()` cannot dim it.
+private struct SousButtonChrome: ViewModifier {
+    let style: SousButtonStyle
+    let isEnabled: Bool
     let height: CGFloat?
     let verticalPadding: CGFloat
+    let fillsWidth: Bool
+    let horizontalPadding: CGFloat
 
     func body(content: Content) -> some View {
+        sized(width(content))
+            .background(style.fill(enabled: isEnabled))
+            .overlay {
+                if let border = style.border(enabled: isEnabled) {
+                    Rectangle().stroke(border, lineWidth: 1)
+                }
+            }
+    }
+
+    @ViewBuilder
+    private func width<V: View>(_ content: V) -> some View {
+        if fillsWidth {
+            content.frame(maxWidth: .infinity)
+        } else {
+            content.padding(.horizontal, horizontalPadding)
+        }
+    }
+
+    @ViewBuilder
+    private func sized<V: View>(_ content: V) -> some View {
         if let height {
             content.frame(height: height)
         } else {
             content.padding(.vertical, verticalPadding)
         }
+    }
+}
+
+struct SousButtonLabel: View {
+    let title: String
+    var style: SousButtonStyle = .primary
+    var isEnabled: Bool = true
+    /// Fixed height — 52pt for the full-width CTAs. Pass nil to hug the label with
+    /// `verticalPadding` instead, which is how the import sheet sizes its buttons.
+    var height: CGFloat? = 52
+    /// Used only when `height` is nil.
+    var verticalPadding: CGFloat = 14
+    /// Full-width by default. Compact buttons — SAVE KEY, the import sheet's inline
+    /// actions — hug their label with `horizontalPadding` on each side instead.
+    var fillsWidth: Bool = true
+    /// Used only when `fillsWidth` is false.
+    var horizontalPadding: CGFloat = 16
+    /// An optional leading SF Symbol, as TALK TO SOUS uses.
+    var icon: String? = nil
+    /// Swaps the label for a spinner while work is in flight — the paywall's
+    /// purchase button. The Figma component has no Busy variant yet; it should.
+    var isBusy: Bool = false
+
+    var body: some View {
+        SousButtonContent(title: title, style: style, isEnabled: isEnabled,
+                          icon: icon, isBusy: isBusy)
+            .modifier(chrome)
+    }
+
+    fileprivate var chrome: SousButtonChrome {
+        SousButtonChrome(style: style, isEnabled: isEnabled, height: height,
+                         verticalPadding: verticalPadding, fillsWidth: fillsWidth,
+                         horizontalPadding: horizontalPadding)
     }
 }
 
@@ -124,15 +171,22 @@ struct SousButton: View {
     var isEnabled: Bool = true
     var height: CGFloat? = 52
     var verticalPadding: CGFloat = 14
+    var fillsWidth: Bool = true
+    var horizontalPadding: CGFloat = 16
     var icon: String? = nil
+    var isBusy: Bool = false
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            SousButtonLabel(title: title, style: style, isEnabled: isEnabled,
-                            height: height, verticalPadding: verticalPadding, icon: icon)
+            SousButtonContent(title: title, style: style, isEnabled: isEnabled,
+                              icon: icon, isBusy: isBusy)
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled)
+        // Chrome outside the button, so `.disabled()` dims only the words.
+        .modifier(SousButtonChrome(style: style, isEnabled: isEnabled, height: height,
+                                   verticalPadding: verticalPadding, fillsWidth: fillsWidth,
+                                   horizontalPadding: horizontalPadding))
     }
 }

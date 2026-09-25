@@ -156,21 +156,18 @@ struct SettingsView: View {
                         .textInputAutocapitalization(.never)
 
                     HStack {
-                        Button("SAVE KEY") {
+                        SousButton(
+                            title: "SAVE KEY",
+                            style: .inverse,
+                            isEnabled: !keyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                            height: nil, verticalPadding: 8,
+                            fillsWidth: false, horizontalPadding: 12
+                        ) {
                             store.keyProvider.setKey(keyInput)
                             keyInput = ""
                             keyIsPresent = store.keyProvider.currentKey() != nil
                             store.hasAPIKey = keyIsPresent
                         }
-                        .font(.sousButton)
-                        .foregroundStyle(Color.sousBackground)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(keyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                    ? Color.sousMuted
-                                    : Color.sousText)
-                        .buttonStyle(.plain)
-                        .disabled(keyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
                         Spacer()
 

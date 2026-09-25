@@ -329,18 +329,14 @@ struct RecipeImportSheet: View {
             .padding(.horizontal, 40)
             .animation(.spring(response: 0.5, dampingFraction: 0.9), value: importProgress)
 
-            Button("CANCEL") {
+            SousButton(title: "CANCEL", style: .secondaryAccent,
+                       height: nil, verticalPadding: 10,
+                       fillsWidth: false, horizontalPadding: 24) {
                 store.cancelLiveLLM()
                 store.importError = nil
                 store.importLoadingStage = .llm
                 mode = .chooser
             }
-            .font(.sousButton)
-            .foregroundStyle(Color.sousTerracotta)
-            .buttonStyle(.plain)
-            .padding(.horizontal, 24)
-            .padding(.vertical, 10)
-            .overlay(Rectangle().stroke(Color.sousTerracotta, lineWidth: 1))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         // Drive the progress crawl while loading
@@ -375,25 +371,24 @@ struct RecipeImportSheet: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
 
-            HStack(spacing: 16) {
-                Button("TRY AGAIN") {
+            // Stacked, not side by side: a bordered button next to a bare label reads as
+            // lopsided, and stacking puts the recovery path first and the way out beneath it.
+            VStack(spacing: 8) {
+                SousButton(title: "TRY AGAIN", style: .secondaryAccent,
+                           height: nil, verticalPadding: 10,
+                           fillsWidth: false, horizontalPadding: 16) {
                     store.importError = nil
                     mode = .chooser
                 }
-                .font(.sousButton)
-                .foregroundStyle(Color.sousTerracotta)
-                .buttonStyle(.plain)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .overlay(Rectangle().stroke(Color.sousTerracotta, lineWidth: 1))
 
-                Button("CANCEL") { onCancel() }
-                    .font(.sousButton)
-                    .foregroundStyle(Color.sousMuted)
-                    .buttonStyle(.plain)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .overlay(Rectangle().stroke(Color.sousMuted, lineWidth: 1))
+                // Text style, not a muted border: grey-on-grey is how the app draws a
+                // disabled control, and this one is live. Quieter than TRY AGAIN without
+                // looking broken — the same treatment REJECT gets on the review bar.
+                SousButton(title: "CANCEL", style: .text,
+                           height: nil, verticalPadding: 10,
+                           fillsWidth: false, horizontalPadding: 16) {
+                    onCancel()
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
