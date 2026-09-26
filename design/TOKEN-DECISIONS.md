@@ -293,13 +293,12 @@ the operator's list, not from a sweep of the codebase.
 
 *Covered:* recipe canvas, chat sheet, zero state, history drawer, settings, patch review,
 voice bar, import chooser, preferences, **sign in**, **paywall**, **cap reached**,
-**the three wheel sheets** (one **Picker Sheet** component).
+**the three wheel sheets** (one **Picker Sheet** component), **memories** (full and empty).
 
 *Not yet in the library — worth a pass, roughly in order of how often a user meets them:*
 
 | Screen / surface | Source | Why it matters |
 |---|---|---|
-| **Memories** | `Views/MemoriesView.swift` | Reached from Settings; a list with edit and swipe-delete |
 | **Timer banners** | `TimerBannerStack`, `TimerDoneBanner` | The only monospace readouts outside the canvas |
 | **Import: the other modes** | `Import/RecipeImportSheet.swift` | Camera, library, paste, loading and error states — only the chooser is built |
 | **Photo acquisition** | `Acquisition/PhotoAcquisitionSheet.swift` | Camera/library picker sheet |
@@ -309,6 +308,38 @@ voice bar, import chooser, preferences, **sign in**, **paywall**, **cap reached*
 
 *Deliberately out of scope:* everything under `Debug/` and `RowLayoutDebugPreview` — developer
 tools, not product surfaces.
+
+### 15. List Row generalises off the canvas — and found a gutter split (2026-09-25)
+
+Memories was built to test whether **List Row** works away from the recipe canvas. It does:
+with its Checkbox switch off, the row is a line of body text with a separator under it, which
+is exactly what a memory is. No new component, no new variant.
+
+**What it did not carry over is density.** The canvas draws its own rows and keeps them
+compact — 10pt above and below the text, about 39pt a row. `MemoriesView` hands layout to
+iOS, which gives a row more air: measured at **53.3pt pitch on device**. List Row now has a
+**Roomy** switch that adds ~7pt either side, off by default because the canvas is where the
+row mostly lives. Structure is shared; density is not, and the component says so.
+
+**It also surfaced two list gutters.** The canvas sets its own 20pt
+(`listRowInsets(EdgeInsets())` plus 20pt padding); `MemoriesView` uses a plain `List`, so it
+inherits iOS's default 16pt. Measured on device: memory text and separators both start at
+16pt against the canvas's 20pt.
+
+**Settled 2026-09-26: the app moved to 20pt.** `MemoriesView` now sets
+`listRowInsets(EdgeInsets(top: 16, leading: 20, bottom: 16, trailing: 20))`, so its text and
+separators line up with every other list. Verified on device: both now start at 20.0pt.
+
+Both values are on the spacing scale, per decision 13's rule that spacing you touch snaps to
+the nearest step. Worth knowing for anyone tuning this later: **15pt and 16pt vertical insets
+both measured a 52.0pt row**, so iOS is rounding or clamping somewhere and the inset is not
+the binding constraint. 16 was chosen because it is a scale step, not because it measured
+differently.
+
+The row is now 52.0pt against the 53.3 iOS had been giving it — 1.3pt tighter, and
+imperceptible.
+
+---
 
 **The timer sheets did collapse (2026-09-25)**, as predicted — three sheets into one **Picker
 Sheet** with a `Wheels=One / Two` variant, plus Title, Left, Right, Readout and Footer as

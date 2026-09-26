@@ -1954,6 +1954,19 @@ async function checklistRow(v, opts) {
   c.itemSpacing = 0;
   c.fills = opts.highlighted ? [boundPaint(v("Sous Color", "background/highlight"))] : [];
 
+  // Roomy: the looser density Settings-style lists use. The canvas keeps its rows
+  // compact at 10pt either side; Memories sets 16pt insets for a ~52pt row. It started
+  // as whatever iOS gave a plain List and is now an explicit choice, but the two
+  // densities are real either way. Hidden by default — the canvas is where this row
+  // mostly lives.
+  const airTop = figma.createFrame();
+  airTop.name = "air-top";
+  airTop.resize(ROW_W, 7);
+  airTop.fills = [];
+  c.appendChild(airTop);
+  airTop.layoutSizingHorizontal = "FILL";
+  airTop.visible = false;
+
   const body = autoLayout("VERTICAL");
   body.name = "body";
   body.itemSpacing = 0;
@@ -2019,6 +2032,14 @@ async function checklistRow(v, opts) {
   note.layoutSizingHorizontal = "FILL";
   note.textAutoResize = "HEIGHT";
   notes.visible = false;
+
+  const airBottom = figma.createFrame();
+  airBottom.name = "air-bottom";
+  airBottom.resize(ROW_W, 7);
+  airBottom.fills = [];
+  c.appendChild(airBottom);
+  airBottom.layoutSizingHorizontal = "FILL";
+  airBottom.visible = false;
 
   // The separator starts under the text, as iOS lists do. Its leading spacers
   // mirror the indent and checkbox switches, so it re-aligns automatically.
@@ -2125,18 +2146,24 @@ async function buildListRow() {
     "Highlighted appears after tapping a timer banner. Switches: Checkbox off for a parent " +
     "step, Nested for a task inside a vessel, Timer for an inline duration, Notes for a " +
     "muted note beneath.\n\n" +
+    "Roomy is the looser density Settings-style lists use — the canvas keeps its own " +
+    "compact rows, Memories sets 16pt insets for about 52pt. Structure is shared; density " +
+    "is not.\n\n" +
     "Swift: IngredientRow, leafStepRowView + TimerAffordanceText, mepFlatRowView — three " +
-    "implementations of this one row.";
+    "implementations of this one row — and MemoriesView, which uses it Roomy.";
 
   // No TEXT property here, deliberately. Binding one across variants forces a
   // single styling on every bound layer: it wiped the Done row's strikethrough,
   // then leaked that strikethrough onto To Do / Checked and flattened Current's
   // bold (device reports, 2026-09-24). Row text is edited on the instance instead.
   const boxKey = set.addComponentProperty("Checkbox", "BOOLEAN", true);
+  const roomyKey = set.addComponentProperty("Roomy", "BOOLEAN", false);
   const nestedKey = set.addComponentProperty("Nested", "BOOLEAN", false);
   const notesKey = set.addComponentProperty("Notes", "BOOLEAN", false);
   for (const variant of set.children) {
     variant.findOne((x) => x.name === "checkbox-slot").componentPropertyReferences = { visible: boxKey };
+    variant.findOne((x) => x.name === "air-top").componentPropertyReferences = { visible: roomyKey };
+    variant.findOne((x) => x.name === "air-bottom").componentPropertyReferences = { visible: roomyKey };
     variant.findOne((x) => x.name === "sep-checkbox").componentPropertyReferences = { visible: boxKey };
     variant.findOne((x) => x.name === "indent").componentPropertyReferences = { visible: nestedKey };
     variant.findOne((x) => x.name === "sep-indent").componentPropertyReferences = { visible: nestedKey };
@@ -5586,7 +5613,9 @@ async function buildPreferencesScreen() {
   await figma.setCurrentPageAsync(page);
   back.name = "back";
   nav.appendChild(back);
-  const navTitle = await textNode("Sous/Button", "PREFERENCES", v("Sous Color", "text/primary"), "nav-title");
+  // Same 16pt as Memories — this had been drawn at the Button style's 14pt, 2pt shy of
+  // what the app renders.
+  const navTitle = await navBarTitle(v, "PREFERENCES", "nav-title");
   nav.appendChild(navTitle);
   navTitle.layoutSizingHorizontal = "FILL";
   navTitle.textAlignHorizontal = "CENTER";
@@ -7054,6 +7083,226 @@ async function verifyMemoryToast() {
     !!proposed && !!proposed.findOne((x) => x.name === "countdown-fill"));
 }
 
+// The navigation bar title. Not a Sous text style, because the app does not use one
+// either: `SousAppApp.configureNavigationBar()` sets it with a raw
+// `UIFont.systemFont(ofSize: 16, weight: .semibold)`. Drawing it at 16 here keeps the
+// library honest; the missing token is recorded in docs/KnownIssues.md.
+async function navBarTitle(v, label, name) {
+  const t = figma.createText();
+  t.name = name;
+  let font = { family: "SF Pro", style: "Semibold" };
+  try { await figma.loadFontAsync(font); }
+  catch (e) { font = { family: "Inter", style: "Regular" }; await figma.loadFontAsync(font); }
+  t.fontName = font;
+  t.characters = label;
+  t.fontSize = 16;
+  t.fills = [boundPaint(v("Sous Color", "text/primary"))];
+  return t;
+}
+
+// ----------------------------------------------------------- Memories screens
+//
+// Source: MemoriesView, pushed inside the Settings sheet. Two states worth drawing:
+// the list once Sous has learned something, and the empty state before it has.
+//
+// The rows are List Row with its checkbox switched off — which is the first time
+// that component has been used away from the recipe canvas, and it fits: a memory
+// is a line of body text with a separator under it, which is what the row is once
+// the checkbox goes.
+//
+// One divergence, deliberate. These rows are drawn in Sous's 20pt gutter like every
+// other list in the library. The app currently draws them at iOS's default 16pt,
+// because MemoriesView uses a plain List without listRowInsets. See KnownIssues.
+
+const MEMORY_SAMPLES = [
+  "You cook on induction",
+  "You avoid cilantro",
+  "You cook for two, most nights",
+];
+
+// The Settings sheet this screen is pushed inside — same shape Preferences uses.
+async function memoriesSheet(page, v, name, x) {
+  const screen = await newScreen(page, name, "background/canvas", v);
+  screen.x = x;
+  screen.y = 40;
+
+  const dim = figma.createRectangle();
+  dim.name = "dimmed app";
+  dim.resize(CANVAS_W, CANVAS_H);
+  dim.fills = [boundPaint(v("Sous Color", "text/primary"))];
+  dim.opacity = 0.35;
+  screen.appendChild(dim);
+  dim.x = 0; dim.y = 0;
+
+  const SHEET_TOP = 105;
+  const sheet = figma.createFrame();
+  sheet.name = "sheet";
+  sheet.resize(CANVAS_W, CANVAS_H - SHEET_TOP);
+  sheet.fills = [boundPaint(v("Sous Color", "background/canvas"))];
+  sheet.clipsContent = true;
+  sheet.topLeftRadius = sheet.topRightRadius = 20;
+  screen.appendChild(sheet);
+  sheet.x = 0; sheet.y = SHEET_TOP;
+
+  const column = autoLayout("VERTICAL");
+  column.name = "content";
+  column.itemSpacing = 0;
+  column.fills = [];
+  sheet.appendChild(column);
+  column.resize(CANVAS_W, column.height);
+  column.x = 0; column.y = 0;
+
+  const nav = hFrame("nav");
+  nav.counterAxisAlignItems = "CENTER";
+  bindPadding(nav, v, { left: "space/gutter", right: "space/gutter", top: "space/md", bottom: "space/md" });
+  column.appendChild(nav);
+  nav.layoutSizingHorizontal = "FILL";
+  const back = (await getVariant2("Form Kit", "Back Button")).createInstance();
+  await figma.setCurrentPageAsync(page);
+  back.name = "back";
+  nav.appendChild(back);
+  const navTitle = await navBarTitle(v, "MEMORIES", "nav-title");
+  nav.appendChild(navTitle);
+  navTitle.layoutSizingHorizontal = "FILL";
+  navTitle.textAlignHorizontal = "CENTER";
+  const balance = figma.createFrame();
+  balance.name = "balance";
+  balance.resize(40, 40);
+  balance.fills = [];
+  nav.appendChild(balance);
+
+  const navRule = hairlineRow(v, "nav-rule");
+  column.appendChild(navRule.row);
+  navRule.row.layoutSizingHorizontal = "FILL";
+  navRule.hair.layoutSizingHorizontal = "FILL";
+
+  return { screen, column };
+}
+
+async function buildMemoriesScreen() {
+  const page = await ensurePage("Screens");
+  const v = await colorVars();
+  const { screen, column } = await memoriesSheet(
+    page, v, "Memories", 40 + 600 + 120 + (CANVAS_W + 80) * 12);
+
+  const rowVariant = await getVariant("List Row", "List Row", "State=To Do, Timer=No");
+  const rowSet = rowVariant.parent;
+  await figma.setCurrentPageAsync(page);
+
+  for (let i = 0; i < MEMORY_SAMPLES.length; i++) {
+    const row = rowVariant.createInstance();
+    await figma.setCurrentPageAsync(page);
+    row.name = "memory-" + (i + 1);
+    column.appendChild(row);
+    row.layoutSizingHorizontal = "FILL";
+    // Checkbox off: a memory is not something you tick, it is something Sous knows.
+    // Roomy on: Memories runs looser than the canvas — 52pt a row on device against
+    // the canvas's ~39.
+    row.setProperties({
+      [propKey(rowSet, "Checkbox")]: false,
+      [propKey(rowSet, "Roomy")]: true,
+    });
+    await setRowText(row, MEMORY_SAMPLES[i]);
+  }
+
+  // iOS puts real air between a section's last row and its footer. Measured on device:
+  // the last separator sits at 291pt and the hint starts at 313.7 — 22.7pt of it.
+  const footerGap = figma.createFrame();
+  footerGap.name = "footer-gap";
+  footerGap.resize(CANVAS_W, 23);
+  footerGap.fills = [];
+  column.appendChild(footerGap);
+  footerGap.layoutSizingHorizontal = "FILL";
+
+  const hint = await textNode("Sous/Caption", "TAP TO EDIT  ·  SWIPE LEFT TO DELETE",
+    v("Sous Color", "text/muted"), "hint");
+  column.appendChild(hint);
+  hint.layoutSizingHorizontal = "FILL";
+  hint.textAlignHorizontal = "CENTER";
+  hint.letterSpacing = { value: 0.5, unit: "PIXELS" };   // .kerning(0.5)
+  const hintPad = figma.createFrame();
+  hintPad.name = "hint-pad";
+  hintPad.resize(CANVAS_W, 16);
+  hintPad.fills = [];
+  column.appendChild(hintPad);
+  hintPad.layoutSizingHorizontal = "FILL";
+
+  await safeAreaGuides(screen, v);
+  COMPONENT_LOG.push("Memories screen");
+}
+
+async function buildMemoriesEmptyScreen() {
+  const page = await ensurePage("Screens");
+  const v = await colorVars();
+  const { screen, column } = await memoriesSheet(
+    page, v, "Memories Empty", 40 + 600 + 120 + (CANVAS_W + 80) * 13);
+
+  // Centred in what is left of the sheet, not pinned under the nav.
+  const empty = autoLayout("VERTICAL");
+  empty.name = "empty-state";
+  empty.itemSpacing = 12;                    // VStack(spacing: 12)
+  empty.counterAxisAlignItems = "CENTER";
+  empty.primaryAxisAlignItems = "CENTER";
+  empty.fills = [];
+  column.appendChild(empty);
+  empty.layoutSizingHorizontal = "FILL";
+  empty.resize(CANVAS_W, 360);
+  empty.primaryAxisSizingMode = "FIXED";
+
+  const head = await textNode("Sous/Caption", "NO MEMORIES SAVED YET",
+    v("Sous Color", "text/muted"), "empty-head");
+  empty.appendChild(head);
+  head.letterSpacing = { value: 1.0, unit: "PIXELS" };   // .kerning(1.0)
+
+  const body = await textNode("Sous/Body", "Sous will propose memories as you chat.",
+    v("Sous Color", "text/muted"), "empty-body");
+  empty.appendChild(body);
+  body.textAlignHorizontal = "CENTER";
+  body.textAutoResize = "HEIGHT";
+  body.resize(CANVAS_W - 64, body.height);   // .padding(.horizontal, 32)
+
+  await safeAreaGuides(screen, v);
+  COMPONENT_LOG.push("Memories Empty screen");
+}
+
+async function verifyMemoriesScreen() {
+  const page = figma.root.children.find((p) => p.name === "Screens");
+  if (!page) return check("Memories screen", false, "Screens page missing");
+  await figma.setCurrentPageAsync(page);
+  const screen = page.children.find((x) => x.name === "Memories");
+  if (!screen) return check("Memories screen", false, "missing");
+  const names = [];
+  for (const i of screen.findAll((n) => n.type === "INSTANCE")) {
+    const m = await i.getMainComponentAsync();
+    names.push(m ? (m.parent && m.parent.type === "COMPONENT_SET" ? m.parent.name : m.name) : "detached");
+  }
+  check("Memories is built from components", !names.includes("detached"), names.join(", "));
+  check("Memories reuses List Row — the first time it has left the canvas",
+    names.filter((n) => n === "List Row").length === MEMORY_SAMPLES.length, names.join(", "));
+  // A memory is not something you tick.
+  for (let i = 1; i <= MEMORY_SAMPLES.length; i++) {
+    const row = screen.findOne((x) => x.name === "memory-" + i);
+    const box = row && row.findOne((x) => x.name === "checkbox-slot");
+    check("memory-" + i + " has no checkbox", !!row && (!box || box.visible === false));
+  }
+  check("Memories keeps the tap-to-edit hint", !!screen.findOne((x) => x.name === "hint"));
+  check("the hint is not crowding the last row — iOS gives a footer ~23pt of air",
+    !!screen.findOne((x) => x.name === "footer-gap"));
+  // iOS lays this list out, so the rows carry more air than the canvas draws.
+  for (let i = 1; i <= MEMORY_SAMPLES.length; i++) {
+    const row = screen.findOne((x) => x.name === "memory-" + i);
+    const air = row && row.findOne((x) => x.name === "air-top");
+    check("memory-" + i + " is roomy, as iOS lays it out", !!air && air.visible === true);
+  }
+
+  const empty = page.children.find((x) => x.name === "Memories Empty");
+  if (!empty) return check("Memories Empty screen", false, "missing");
+  check("Memories Empty says what will fill it",
+    !!empty.findOne((x) => x.name === "empty-head") && !!empty.findOne((x) => x.name === "empty-body"));
+  check("Memories Empty has no rows",
+    empty.findAll((n) => n.name.indexOf("memory-") === 0).length === 0);
+}
+
 // ----------------------------------------------------------------- registry
 
 // Order matters: a component may only be built after everything it nests. The
@@ -7124,13 +7373,17 @@ const COMPONENTS = [
     build: buildPaywallScreen, verify: verifyPaywallScreen },
   { name: "Cap Reached", page: "Screens", sets: [],
     build: buildCapReachedScreen, verify: verifyCapReachedScreen },
+  { name: "Memories", page: "Screens", sets: [],
+    build: buildMemoriesScreen, verify: verifyMemoriesScreen },
+  { name: "Memories Empty", page: "Screens", sets: [],
+    build: buildMemoriesEmptyScreen, verify: () => {} },
 ];
 
 // Generated screens are rebuilt from the library on every run, so they are
 // cleared first: otherwise their instances would mark every component "in use"
 // and block the component rebuilds. Anything you want to keep, duplicate — a
 // copy is not generated, so it is never touched.
-const GENERATED_SCREENS = ["Recipe Canvas", "Chat", "Zero State", "Sidebar", "Settings", "Change Suggestion", "Voice Mode", "Talk to a Recipe", "Preferences", "Sign In", "Paywall", "Cap Reached"];
+const GENERATED_SCREENS = ["Recipe Canvas", "Chat", "Zero State", "Sidebar", "Settings", "Change Suggestion", "Voice Mode", "Talk to a Recipe", "Preferences", "Sign In", "Paywall", "Cap Reached", "Memories", "Memories Empty"];
 
 async function clearGeneratedScreens() {
   const page = figma.root.children.find((p) => p.name === "Screens");

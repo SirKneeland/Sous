@@ -32,7 +32,12 @@ struct MemoriesView: View {
                                 .font(.sousBody)
                                 .foregroundStyle(Color.sousText)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.vertical, 2)
+                                // 20pt is the app's gutter everywhere else; a plain List
+                                // would inherit iOS's 16. Both values are on the spacing
+                                // scale (decision 13: snap what you touch), and 16 keeps
+                                // the roomier row height iOS had been giving these.
+                                .listRowInsets(EdgeInsets(top: 16, leading: 20,
+                                                          bottom: 16, trailing: 20))
                                 .contentShape(Rectangle())
                                 .opacity(pressedMemoryID == item.id ? 0.4 : 1.0)
                                 .onTapGesture {

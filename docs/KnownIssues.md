@@ -509,3 +509,38 @@ the slot SKIP vacated. The empty middle is EDIT's own slot, spent.
 Vertical position still shifts between the states, because the text field is taller than the
 two lines it replaces. Left as is — padding the field to match would be contorting the layout
 to hide a genuine mode change.
+
+---
+
+## The navigation bar's type is not tokenised, and the token check cannot see it
+
+- **Area:** `ios/SousApp/SousApp/SousAppApp.swift:55` and `:68`, `design/check-tokens.py`
+- **Type:** Cleanup / gap in enforcement
+- **Flagged:** 2026-09-26 (surfaced while building the Memories screen in Figma)
+
+`configureNavigationBar()` sets two type sizes with raw UIKit values:
+
+- the title — `UIFont.systemFont(ofSize: 16, weight: .semibold)`
+- the bar buttons — `UIFont.systemFont(ofSize: 14, weight: .semibold)`
+
+Neither is a Sous type token, and **`check-tokens.py` does not catch them**: its `RAW_FONT`
+pattern is `\.system\(size:`, which matches the SwiftUI form but not `UIFont.systemFont(ofSize:)`.
+So the one place the app sets type outside the token system is also the one place the guard
+is blind.
+
+This surfaced the wrong way round: the Figma screens drew their nav title with `Sous/Button`
+(14pt) because that was the closest existing style, and it rendered 2pt small against the app.
+Memories, Memories Empty and Preferences now draw it at a literal 16pt semibold, matching what
+ships — correct, but unbound to any style, which is exactly the problem restated in Figma.
+
+Two things to do, in either order:
+
+1. **Widen the check** to catch `UIFont.systemFont(ofSize:)` as well. One line; it would have
+   caught this years-equivalent earlier.
+2. **Give the nav bar its type roles** — a 16pt semibold title and a 14pt semibold bar button
+   in `tokens.json` and `SousTheme.swift`, applied through `UIFont` in
+   `configureNavigationBar()`. Then the Figma screens can bind to a style instead of a
+   literal, and the check has something to enforce.
+
+Worth noting the bar-button size (14 semibold) is identical to `Sous/Button`, so that one may
+already have a home.

@@ -43,6 +43,17 @@ enum DebugFixture {
         case memoryToast
     }
 
+    /// A few saved memories, so the Memories screen has something in it. Normally these
+    /// accumulate from real model turns.
+    static func memories() -> [MemoryItem] {
+        [
+            MemoryItem(text: "You cook on induction", firstPersonText: "I cook on induction"),
+            MemoryItem(text: "You avoid cilantro", firstPersonText: "I avoid cilantro"),
+            MemoryItem(text: "You cook for two, most nights",
+                       firstPersonText: "I cook for two, most nights"),
+        ]
+    }
+
     /// Canned usage for the cap-reached screen. Reaching it for real needs a paid
     /// account that has actually spent 100 recipes, which no test account will have.
     static func cappedUsage() -> UsageSummary {

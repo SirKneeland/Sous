@@ -56,7 +56,7 @@ and names every token or variant that's wrong, which is enough to fix it without
 | **Bottom Bar** | Voice Yes / No — TALK TO SOUS, the mic button, and the pull-down chevron. |
 | **Icon Button** | Accent (44pt burgundy hamburger), Inverse (44pt ink settings), Bordered (32pt). |
 | **Recipe Title** | Servings Yes / No. Properties: Title, Servings. |
-| **Screens** | Recipe Canvas, Chat, Zero State, Sidebar, Settings, Change Suggestion, Voice Mode, Talk to a Recipe, Preferences, Sign In, Paywall — all on the **Screens** page, assembled only from components. |
+| **Screens** | Recipe Canvas, Chat, Zero State, Sidebar, Settings, Change Suggestion, Voice Mode, Talk to a Recipe, Preferences, Sign In, Paywall, Cap Reached, Memories, Memories Empty — all on the **Screens** page, assembled only from components. |
 | **Form Kit** | Text Field, Text Area, Toggle, Stepper, Back Button. |
 | **Voice Bar** | Ready, Listening, Thinking, Speaking, Patch pending. |
 | **Diff Row / Review Bar** | Removed / Added; Ready / Invalid × Safe area. |
@@ -69,7 +69,7 @@ and names every token or variant that's wrong, which is enough to fix it without
 | **Checkbox** | Unchecked, Checked × Default (20pt), Small (18pt). Built only if missing, so an existing one is never replaced. |
 | **Button** | Primary, Inverse, Secondary, Secondary Accent, Text — plus Disabled for Inverse and Secondary. Properties: Label, Icon. |
 | **Section Header** | Expanded, Collapsed, Static. Property: Title. |
-| **List Row** | The row behind ingredients, steps and mise en place: To Do, Checked, Current, Done, Highlighted, plus three Timer variants. Switches: Checkbox, Nested, Timer, Notes. Plus **Ingredient Group Header**. |
+| **List Row** | The row behind ingredients, steps and mise en place — and, Roomy, the Memories list. To Do, Checked, Current, Done, Highlighted, plus three Timer variants. Switches: Checkbox, Nested, Timer, Notes, Roomy. Plus **Ingredient Group Header**. |
 
 Re-running rebuilds a component from scratch **only while nothing uses it**. Once you've placed
 an instance of it anywhere, the plugin leaves it alone and says so in the report, because

@@ -651,6 +651,9 @@ final class AppStore: ObservableObject {
         hasAppliedDebugFixture = true
 
         let recipe = DebugFixture.recipe()
+        // Memories are real user context, so every fixture carries a few — it keeps the
+        // Memories screen reachable and the LLM context realistic.
+        if memories.isEmpty { memories = DebugFixture.memories() }
         hasCanvas = fixture != .explore && fixture != .memoryToast
         canGenerateRecipe = fixture == .explore
         originalRecipe = (fixture == .explore || fixture == .memoryToast)

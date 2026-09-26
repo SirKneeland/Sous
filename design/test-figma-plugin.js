@@ -554,6 +554,21 @@ function expect(label, condition, detail) {
 
     // Picker Sheet — the three wheel sheets collapsed into one component.
     expect("report lists the Picker Sheet", /Picker Sheet \(2 variants\)/.test(report), report);
+
+    // List Row's Roomy switch — the canvas keeps its compact rows, iOS-laid-out lists
+    // get more air. Structure is shared; density is not.
+    const lrSet = figma.root.children.find((p) => p.name === "List Row").children
+      .find((n) => n.type === "COMPONENT_SET");
+    const lrDefs = Object.keys(lrSet.componentPropertyDefinitions || {});
+    expect("List Row exposes Roomy", lrDefs.some((k) => k === "Roomy" || k.indexOf("Roomy#") === 0),
+      lrDefs.join(", "));
+    const lrVariant = lrSet.children[0];
+    expect("Roomy is off by default — the canvas is where this row mostly lives",
+      lrVariant.findOne((x) => x.name === "air-top").visible === false);
+    const memScreen = screensPage.children.find((x) => x.name === "Memories");
+    expect("Memories turns Roomy on",
+      !!memScreen && memScreen.findOne((x) => x.name === "memory-1")
+        .findOne((x) => x.name === "air-top").visible === true);
     const pickerSet = figma.root.children.find((p) => p.name === "Picker Sheet").children
       .find((n) => n.type === "COMPONENT_SET");
     const one = pickerSet.children.find((c) => c.name === "Wheels=One");
