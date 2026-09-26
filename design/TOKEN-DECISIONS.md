@@ -304,7 +304,7 @@ voice bar, import chooser, preferences, **sign in**, **paywall**, **cap reached*
 | **Import: the other modes** | `Import/RecipeImportSheet.swift` | Camera, library, paste, loading and error states — only the chooser is built |
 | **Photo acquisition** | `Acquisition/PhotoAcquisitionSheet.swift` | Camera/library picker sheet |
 | **Mise en place confirmation** | `RecipeCanvasView` (modal) | Small modal, uses the Small checkbox that nothing else uses |
-| **In-chat furniture** | `ChatSheetView` | Memory proposal toast, attachment strip, quoted-context chip, generate pill, thinking/streaming bubbles |
+| **In-chat furniture — part done** | `ChatSheetView` | The memory toast is its own component and the thinking/streaming bubbles became Chat Bubble variants (2026-09-25). The generate pill is now a Primary Button. **Left: the attachment strip and the quoted-context chip.** |
 | **API key callout** | `Views/APIKeyCallout.swift` | Onboarding nudge for BYOK users |
 
 *Deliberately out of scope:* everything under `Debug/` and `RowLayoutDebugPreview` — developer
@@ -351,7 +351,9 @@ pass quietly.
   It also settled the nesting indent, which the original note had mis-diagnosed: sub-steps and
   nested prep tasks now both sit at 39.7pt against 19.7pt for a top-level row.
 - **`SousButton` / `SousButtonLabel`** — the five styles from the **Button** component, across
-  13 call sites.
+  14 call sites.
+- **`SousBottomBar`** — the TALK TO SOUS / mic row, matching the **Bottom Bar** component's
+  Voice Yes / Voice No variants. Pixel-identical in both states.
 
 Both are deliberately narrower than "one view for everything". The rows share how they *look*
 and differ in how they *behave* (swipe actions, list insets, the timer highlight), so only the

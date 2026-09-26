@@ -424,7 +424,7 @@ section-header label, not the wordmark.
 
 ---
 
-## The bottom bar is hand-built; Figma already models it as one component
+## ~~The bottom bar is hand-built; Figma already models it as one component~~ — done 2026-09-25
 
 - **Area:** `ios/SousApp/SousApp/WindowButtonHost.swift` — the TALK TO SOUS / mic row
 - **Type:** Cleanup / consistency
@@ -440,13 +440,26 @@ variants matching the `voiceEnabled` branch that hides the mic during the trial 
 soft wall. When the mic goes, TALK TO SOUS expands to full width and the divider disappears —
 bar-level layout, not button state.
 
-The shape to build is a `SousBottomBar` view taking `voiceEnabled` and the two actions, the
-same way `SousChecklistRow` and `SousButton` now own their patterns. Nothing depends on it;
-worth doing whenever the bottom zone is next opened up.
+**Done.** `Views/SousBottomBar.swift` takes `voiceEnabled` and the two actions, matching the
+Figma component's Voice Yes / Voice No variants. Verified as a pixel-for-pixel no-op in both
+states — 0 of 3,017,412 pixels changed either way.
 
-One thing to carry over: the bar uses `Color.white.opacity(0.25)` for the divider and
-`HapticOnPressStyle()` for both halves. The opacity literal is part of the untokenised
-white-opacity set already recorded under the destructive-colour entry.
+`BottomZoneView` keeps what is genuinely its own: the timer banners above, the ThumbDrop
+chevron below, the drag offset and the height reporting. The bar is the visual unit; the zone
+is the assembly around it.
+
+Two things moved with it:
+
+- **TALK TO SOUS is now a `SousButtonLabel(.primary)`.** It was recorded as "not button work",
+  and that was right as far as it went — it is not a *standalone* button. It is button work
+  inside bar work, and extracting the bar is what made it reachable.
+- **`HapticOnPressStyle` moved out of `WindowButtonHost`**, where it was private, and lives
+  with the bar. Its two buttons are the only things that use it.
+
+The divider is still `Color.white.opacity(0.25)`, part of the untokenised white-opacity set
+recorded under the destructive-colour entry. Left raw deliberately: it belongs to the seam
+between the two halves rather than to either of them, and tokenising it would mean deciding
+what that seam *is* before there is a second one.
 
 ---
 

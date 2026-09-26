@@ -1,17 +1,6 @@
 import SwiftUI
 import UIKit
 
-// MARK: - HapticOnPressStyle
-
-private struct HapticOnPressStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .onChange(of: configuration.isPressed) { _, pressed in
-                if pressed { UIImpactFeedbackGenerator(style: .medium).impactOccurred() }
-            }
-    }
-}
-
 // MARK: - Keyboard Prewarm
 
 /// A zero-footprint UITextField kept in the view hierarchy while the recipe canvas is visible.
@@ -80,46 +69,14 @@ struct BottomZoneView: View {
                 TimerBannerStack(timerManager: timerManager, onTapBanner: onTimerBannerTap)
                     .allowsHitTesting(true)
             }
-            SousRule()
-            // Chat + mic buttons side by side
-            HStack(spacing: 0) {
-                Button {
+            SousBottomBar(
+                voiceEnabled: voiceEnabled,
+                onTalk: {
                     onPrewarmKeyboard()
                     onOpenChat()
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "message")
-                            .font(.sousIcon(.medium, weight: .semibold))
-                        Text("TALK TO SOUS")
-                            .font(.sousButton)
-                    }
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 52)
-                    .background(Color.sousTerracotta)
-                }
-                .buttonStyle(HapticOnPressStyle())
-
-                if voiceEnabled {
-                    Rectangle()
-                        .fill(Color.white.opacity(0.25))
-                        .frame(width: 1, height: 52)
-
-                    Button {
-                        onOpenVoiceMode()
-                    } label: {
-                        Image(systemName: "mic.fill")
-                            .font(.sousIcon(.large, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(width: 60, height: 52)
-                            .background(Color.sousTerracotta)
-                    }
-                    .buttonStyle(HapticOnPressStyle())
-                }
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
-            .background(Color.sousBackground)
+                },
+                onVoice: onOpenVoiceMode
+            )
             .offset(y: dragOffset)
             .zIndex(1)
             // ThumbDrop affordance hint
