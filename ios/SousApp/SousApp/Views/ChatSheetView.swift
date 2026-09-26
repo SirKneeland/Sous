@@ -731,6 +731,10 @@ private struct MemoryProposalToast: View {
     private let ticker = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
     private let countdownDuration: TimeInterval = 6.0
 
+    /// Left inset that clears the hamburger: its 16pt leading padding, its 44pt width,
+    /// and 8pt of air. See the note on the toast's padding below.
+    private static let hamburgerClearance: CGFloat = 16 + 44 + 8
+
     init(text: String, onSave: @escaping (String, String?, MemorySaveTrigger) -> Void, onComplete: @escaping () -> Void, onDismiss: @escaping () -> Void, onNavigateToMemories: @escaping () -> Void) {
         self.text = text
         self.onSave = onSave
@@ -759,11 +763,21 @@ private struct MemoryProposalToast: View {
                             .focused($isFieldFocused)
                             .onSubmit { commitSave() }
                     }
-                    HStack(spacing: 12) {
+                    // Same three columns as the proposed row, so SAVE does not move when
+                    // you tap EDIT — it stays in the first third, and CANCEL takes the slot
+                    // SKIP just vacated, which is already the "back out" position. The empty
+                    // middle is EDIT's own slot, spent by the fact that you are editing.
+                    HStack(spacing: 0) {
                         Button("SAVE") { commitSave() }
                             .font(.sousButton)
                             .foregroundStyle(Color.white)
                             .buttonStyle(.plain)
+                            .frame(maxWidth: .infinity)
+
+                        Color.clear
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 1)
+
                         Button("CANCEL") {
                             isFieldFocused = false
                             editStreamTask?.cancel()
@@ -774,16 +788,19 @@ private struct MemoryProposalToast: View {
                             editText = text
                         }
                         .font(.sousButton)
-                        .foregroundStyle(Color.sousBackground)
+                        .foregroundStyle(Color.white)
                         .buttonStyle(.plain)
+                        .frame(maxWidth: .infinity)
                     }
                 }
                 .padding(12)
             } else {
                 VStack(alignment: .leading, spacing: 0) {
+                    // Everything on this toast is white: the burgundy behind it does not
+                    // invert, so a label that did would go near-black in dark mode.
                     Text("REMEMBERING THIS")
                         .font(.sousButton)
-                        .foregroundStyle(Color.sousBackground)
+                        .foregroundStyle(Color.white)
                         .padding(.horizontal, 12)
                         .padding(.top, 10)
                         .padding(.bottom, 6)
@@ -795,7 +812,7 @@ private struct MemoryProposalToast: View {
                     } else {
                         Text(displayText)
                             .font(.sousBody)
-                            .foregroundStyle(Color.sousBackground)
+                            .foregroundStyle(Color.white)
                             .lineLimit(2)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 12)
@@ -845,7 +862,7 @@ private struct MemoryProposalToast: View {
                         .frame(maxWidth: .infinity)
                         Button("SKIP") { hasCompleted = true; onDismiss() }
                             .font(.sousButton)
-                            .foregroundStyle(Color.sousBackground)
+                            .foregroundStyle(Color.white)
                             .buttonStyle(.plain)
                             .frame(maxWidth: .infinity)
                     }
@@ -865,7 +882,14 @@ private struct MemoryProposalToast: View {
         }
         .background(Color.sousTerracotta)
         .overlay(Rectangle().stroke(Color.sousTerracotta, lineWidth: 1))
-        .padding(.horizontal, 16)
+        // The hamburger is a 44pt burgundy square drawn in an outer overlay, so it sits
+        // *above* this toast. Same burgundy, so it does not look like an overlap — it
+        // silently paints over the first 44pt of every line ("REMEMBERING THIS" arrived
+        // as "EMBERING THIS"). Starting past it is the fix that keeps the menu tappable;
+        // covering it would work visually but steal the tap, since tapping the toast
+        // opens Memories.
+        .padding(.leading, Self.hamburgerClearance)
+        .padding(.trailing, 16)
         .onTapGesture { onNavigateToMemories() }
         .gesture(DragGesture(minimumDistance: 20).onEnded { _ in
             hasCompleted = true

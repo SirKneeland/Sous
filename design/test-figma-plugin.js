@@ -548,6 +548,46 @@ function expect(label, condition, detail) {
     expect("Paywall CTA is 52pt tall in the 20pt gutter",
       !!ctaNode && Math.round(ctaNode.height) === 52 && ctaNode.x === 20,
       ctaNode ? ctaNode.height + " @ " + ctaNode.x : "missing");
+
+    // Cap Reached — built entirely from the Paywall's parts, which is the point of it.
+    expect("report lists the Cap Reached screen", /Cap Reached screen/.test(report), report);
+
+    // Picker Sheet — the three wheel sheets collapsed into one component.
+    expect("report lists the Picker Sheet", /Picker Sheet \(2 variants\)/.test(report), report);
+    const pickerSet = figma.root.children.find((p) => p.name === "Picker Sheet").children
+      .find((n) => n.type === "COMPONENT_SET");
+    const one = pickerSet.children.find((c) => c.name === "Wheels=One");
+    const two = pickerSet.children.find((c) => c.name === "Wheels=Two");
+    expect("Picker Sheet has a one-wheel and a two-wheel variant", !!one && !!two,
+      pickerSet.children.map((c) => c.name).join(", "));
+    expect("one wheel counts people, two count hours and minutes",
+      one.findAll((n) => n.name.indexOf("wheel ") === 0).length === 1 &&
+      two.findAll((n) => n.name.indexOf("wheel ") === 0).length === 2);
+    const pickerActions = two.findOne((x) => x.name === "actions");
+    expect("both actions sit inside one ink border, not two buttons",
+      !!pickerActions && pickerActions.strokes.length === 1 &&
+      state.variables.find((v) => v.id === pickerActions.strokes[0].boundVariables.color.id).name === "border/strong");
+    expect("the readout and footer are off by default",
+      two.findOne((x) => x.name === "readout").visible === false &&
+      two.findOne((x) => x.name === "footer").visible === false);
+    const cap = screensPage.children.find((x) => x.name === "Cap Reached");
+    expect("Cap Reached is on the Screens page", !!cap,
+      screensPage.children.map((c) => c.name).join(", "));
+    const capMains = [];
+    for (const i of cap.findAll((n) => n.type === "INSTANCE")) {
+      const m = i.mainComponent;
+      capMains.push(m ? (m.parent && m.parent.type === "COMPONENT_SET" ? m.parent.name : m.name) : "detached");
+    }
+    expect("Cap Reached adds no new components — two Buttons, an Icon Button, a Section Header",
+      capMains.filter((n) => n === "Button").length === 2 &&
+      capMains.filter((n) => n === "Icon Button").length === 1 &&
+      capMains.filter((n) => n === "Section Header").length === 1 &&
+      !capMains.includes("detached"), capMains.join(", "));
+    const capNote = cap.findOne((x) => x.name === "body");
+    const capMsg = cap.findOne((x) => x.name === "message");
+    expect("Cap Reached note clears its buttons",
+      !!capNote && !!capMsg && capNote.y + capNote.height <= capMsg.y,
+      capNote && capMsg ? Math.round(capNote.y + capNote.height) + " vs " + Math.round(capMsg.y) : "missing");
     const ib = figma.root.children.find((p) => p.name === "Icon Button").children
       .find((n) => n.type === "COMPONENT_SET");
     const accent = ib.children.find((c) => c.name === "Style=Accent");

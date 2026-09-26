@@ -1475,6 +1475,15 @@ async function verifyBottomBar() {
 const BUBBLE_SPECS = [
   { name: "Role=User", fill: "background/inverse", text: "text/inverse", align: "MAX" },
   { name: "Role=Assistant", fill: "background/canvas", text: "text/primary", align: "MIN" },
+  // The two transient states Sous's side passes through before it settles. Variants
+  // rather than components of their own: same bubble, same gutter, same padding —
+  // only the border and what is inside differ.
+  { name: "Role=Thinking", fill: "background/canvas", text: "text/muted", align: "MIN",
+    border: "border/subtle", spinner: true,
+    body: "Thinking..." },
+  { name: "Role=Streaming", fill: "background/canvas", text: "text/primary", align: "MIN",
+    cursor: true,
+    body: "Sear them skin-side down first" },
 ];
 const BUBBLE_MAX_W = 313;   // 393 - 2x16 transcript padding - 48 minimum gutter
 
@@ -1498,20 +1507,56 @@ async function buildChatBubble() {
     bubble.name = "bubble";
     bindPadding(bubble, v, { left: "space/md", right: "space/md", top: "space/sm", bottom: "space/sm" });
     bubble.fills = [boundPaint(v("Sous Color", spec.fill))];
-    bubble.strokes = [boundPaint(v("Sous Color", "border/strong"))];
+    // Thinking is outlined in the quiet separator colour; the rest take the ink border.
+    bubble.strokes = [boundPaint(v("Sous Color", spec.border || "border/strong"))];
     bubble.strokeAlign = "INSIDE";
     bubble.setBoundVariable("strokeWeight", v("Sous Border", "border/hairline"));
     c.appendChild(bubble);
     bubble.resize(Math.min(BUBBLE_MAX_W, ROW_W - 32), bubble.height);
     bubble.layoutSizingHorizontal = "FIXED";
 
+    // Thinking and Streaming put their contents on one row: a spinner beside the word,
+    // or the text followed by the caret.
+    const row = spec.spinner || spec.cursor ? hFrame("row") : null;
+    if (row) {
+      row.counterAxisAlignItems = "CENTER";
+      row.itemSpacing = spec.spinner ? 6 : 2;   // HStack(spacing: 6) / 2
+      bubble.appendChild(row);
+      row.layoutSizingHorizontal = "FILL";
+    }
+    if (spec.spinner) {
+      // The system spinner, drawn as a ring: iOS chrome, and Sous does not style it.
+      const ring = figma.createEllipse();
+      ring.name = "spinner";
+      ring.resize(14, 14);
+      ring.fills = [];
+      ring.strokes = [boundPaint(v("Sous Color", "text/muted"))];
+      ring.strokeWeight = 2;
+      ring.arcData = { startingAngle: 0, endingAngle: Math.PI * 1.4, innerRadius: 0 };
+      row.appendChild(ring);
+    }
+
     const text = await textNode("Sous/Body",
-      spec.name === "Role=User" ? "Can I use thighs instead of breasts?"
-                                : "Yes — thighs stay juicier and take a few minutes longer. Sear them skin-side down first.",
+      spec.body || (spec.name === "Role=User"
+        ? "Can I use thighs instead of breasts?"
+        : "Yes — thighs stay juicier and take a few minutes longer. Sear them skin-side down first."),
       v("Sous Color", spec.text), "text");
-    bubble.appendChild(text);
-    text.layoutSizingHorizontal = "FILL";
+    (row || bubble).appendChild(text);
     text.textAutoResize = "HEIGHT";
+    if (row) {
+      text.layoutSizingHorizontal = spec.cursor ? "HUG" : "HUG";
+    } else {
+      text.layoutSizingHorizontal = "FILL";
+    }
+
+    if (spec.cursor) {
+      // The blinking caret that trails the text while it streams in.
+      const caret = figma.createRectangle();
+      caret.name = "caret";
+      caret.resize(2, 14);
+      caret.fills = [boundPaint(v("Sous Color", "text/primary"))];
+      row.appendChild(caret);
+    }
 
     page.appendChild(c);
     comps.push(c);
@@ -1522,8 +1567,14 @@ async function buildChatBubble() {
     "A message in the chat transcript. User messages are ink-filled with cream text and sit to " +
     "the right; Sous's replies sit on the canvas colour to the left and render Markdown. Both " +
     "keep a 1pt ink border and leave at least 48pt on the opposite side.\n\n" +
-    "Swift: ChatBubbleView. Assistant text goes through MarkdownTextView.";
-  const PAD = 32, GAP = 24, cell = { w: ROW_W - 32, h: 80 };
+    "Thinking and Streaming are the two states Sous's side passes through before it settles: " +
+    "a spinner beside the word, outlined in the quiet separator colour so it reads as not-yet " +
+    "a message; then the reply with a blinking caret behind it, back on the ink border. Both " +
+    "are variants rather than components of their own — same bubble, same gutter, same " +
+    "padding.\n\n" +
+    "Swift: ChatBubbleView, ThinkingBubbleView, StreamingBubbleView. Assistant text goes " +
+    "through MarkdownTextView.";
+  const PAD = 32, GAP = 24, cell = { w: ROW_W - 32, h: 84 };
   layoutGrid(set, () => 0, (c) => BUBBLE_SPECS.findIndex((b) => b.name === c.name),
     cell, PAD, GAP, 1, BUBBLE_SPECS.length);
   const doc = await docPanel(page, v, "Chat Bubble", [
@@ -1555,10 +1606,17 @@ async function verifyChatBubble() {
     const t = c.findOne((x) => x.name === "text");
     check("Chat Bubble " + spec.name + " fill", (await varNameOf(b.fills[0])) === spec.fill);
     check("Chat Bubble " + spec.name + " text colour", (await varNameOf(t.fills[0])) === spec.text);
-    check("Chat Bubble " + spec.name + " border", (await varNameOf(b.strokes[0])) === "border/strong");
+    check("Chat Bubble " + spec.name + " border",
+      (await varNameOf(b.strokes[0])) === (spec.border || "border/strong"));
     check("Chat Bubble " + spec.name + " alignment", c.primaryAxisAlignItems === spec.align, c.primaryAxisAlignItems);
     check("Chat Bubble " + spec.name + " leaves a gutter", b.width <= BUBBLE_MAX_W, String(b.width));
+    // The two transient states carry their own furniture.
+    check("Chat Bubble " + spec.name + " spinner", !!c.findOne((x) => x.name === "spinner") === !!spec.spinner);
+    check("Chat Bubble " + spec.name + " caret", !!c.findOne((x) => x.name === "caret") === !!spec.cursor);
   }
+  const thinking = set.children.find((x) => x.name === "Role=Thinking");
+  check("Thinking reads as not-yet-a-message — the quiet border, not the ink one",
+    !!thinking && (await varNameOf(thinking.findOne((x) => x.name === "bubble").strokes[0])) === "border/subtle");
 }
 
 // -------------------------------------------------------------- Composer Bar
@@ -5042,6 +5100,706 @@ async function verifyPaywallScreen() {
     !!lockupBlock && !!benefitsBlock && lockupBlock.y + lockupBlock.height <= benefitsBlock.y);
 }
 
+// ------------------------------------------------------- Cap Reached screen
+//
+// Source: CapReachedView — the hard stop a *paying* subscriber meets at the
+// monthly recipe cap. Not the paywall: this user already pays, so the screen is a
+// note from John with a direct line to support rather than a pitch. Trial users
+// who hit their cap see the Paywall instead and never reach this.
+//
+// Built entirely from components that already existed for the Paywall — the close
+// button, both button styles, the static section header — which is what the
+// coverage audit predicted when it put this screen next in line.
+
+const CAP_MESSAGE =
+  "Hi, I'm John — I made Sous. I didn't think anyone would cook quite this much! " +
+  "Drop me a line and I'll take a look at your account to see what we can do to " +
+  "hold you over until next month.";
+
+async function buildCapReachedScreen() {
+  const page = await ensurePage("Screens");
+  const v = await colorVars();
+  const screen = await newScreen(page, "Cap Reached", "background/canvas", v);
+  screen.x = 40 + 600 + 120 + (CANVAS_W + 80) * 11;
+  screen.y = 40;
+
+  const close = (await getVariant("Icon Button", "Icon Button", "Style=Bordered")).createInstance();
+  await figma.setCurrentPageAsync(page);
+  close.name = "close";
+  screen.appendChild(close);
+  close.x = CANVAS_W - 20 - close.width;     // .padding(.horizontal, 20)
+  close.y = SAFE_TOP + 12;                   // .padding(.top, 12)
+  const closeIcon = close.findOne((x) => x.name === "icon");
+  if (closeIcon) {
+    await figma.loadFontAsync(closeIcon.fontName);
+    closeIcon.characters = sfSymbol("xmark");
+  }
+
+  // Everything below the close button is left-aligned in a 28pt gutter.
+  //
+  // Plain frame, not auto-layout: SwiftUI pads each child differently here (6 under
+  // the count, 4 under the reset line, 24 either side of the rule), and auto-layout
+  // has only one itemSpacing. Explicit offsets say what the code says.
+  const body = figma.createFrame();
+  body.name = "body";
+  body.fills = [];
+  body.clipsContent = false;
+  screen.appendChild(body);
+  body.resize(CANVAS_W - 56, 10);
+  const W = CANVAS_W - 56;
+  let cursor = 0;
+  const place = (node, gapAbove) => {
+    cursor += gapAbove;
+    node.x = 0;
+    node.y = cursor;
+    cursor += node.height;
+  };
+
+  const eyebrow = (await getVariant("Section Header", "Section Header", "State=Static")).createInstance();
+  await figma.setCurrentPageAsync(page);
+  eyebrow.name = "eyebrow";
+  const shSet = (await getVariant("Section Header", "Section Header", "State=Static")).parent;
+  await figma.setCurrentPageAsync(page);
+  body.appendChild(eyebrow);
+  eyebrow.resize(W, eyebrow.height);
+  eyebrow.setProperties({ [propKey(shSet, "Title")]: "MONTHLY LIMIT REACHED" });
+  place(eyebrow, 0);
+
+  const count = await textNode("Sous/Title", "100 of 100 recipes used",
+    v("Sous Color", "text/primary"), "count");
+  body.appendChild(count);
+  count.textAutoResize = "HEIGHT";
+  count.resize(W, count.height);
+  place(count, 6);                           // .padding(.top, 6)
+
+  const resets = await textNode("Sous/Caption", "RESETS IN 6 DAYS",
+    v("Sous Color", "text/muted"), "resets");
+  body.appendChild(resets);
+  resets.letterSpacing = { value: 1, unit: "PIXELS" };   // .kerning(1)
+  resets.textAutoResize = "HEIGHT";
+  resets.resize(W, resets.height);
+  place(resets, 4);                          // .padding(.top, 4)
+
+  const rule = figma.createRectangle();
+  rule.name = "rule";
+  rule.resize(CANVAS_W - 56, 1);
+  rule.fills = [boundPaint(v("Sous Color", "border/subtle"))];
+  body.appendChild(rule);
+  place(rule, 24);                           // .padding(.vertical, 24)
+
+  const note = await textNode("Sous/Body", CAP_MESSAGE, v("Sous Color", "text/primary"), "note");
+  body.appendChild(note);
+  note.textAutoResize = "HEIGHT";
+  note.resize(W, note.height);
+  place(note, 24);                           // the rule's lower 24
+
+  body.resize(W, cursor);
+  body.x = 28;                               // .padding(.horizontal, 28)
+  body.y = close.y + close.height + 16;      // Spacer(minLength: 16)
+
+  // Footer: the two actions, anchored up from the home indicator.
+  const share = (await getVariant("Button", "Button", "Style=Secondary, State=Default")).createInstance();
+  await figma.setCurrentPageAsync(page);
+  share.name = "share";
+  const btnSet = (await getVariant("Button", "Button", "Style=Primary, State=Default")).parent;
+  await figma.setCurrentPageAsync(page);
+  screen.appendChild(share);
+  share.resize(CANVAS_W - 40, BUTTON_H);
+  share.setProperties({ [propKey(btnSet, "Label")]: "SHARE SOUS WITH A FRIEND" });
+  share.x = 20;                              // .padding(.horizontal, 20)
+  share.y = CANVAS_H - SAFE_BOTTOM - 28 - BUTTON_H;   // .padding(.bottom, 28)
+
+  const message = (await getVariant("Button", "Button", "Style=Primary, State=Default")).createInstance();
+  await figma.setCurrentPageAsync(page);
+  message.name = "message";
+  screen.appendChild(message);
+  message.resize(CANVAS_W - 40, BUTTON_H);
+  message.setProperties({ [propKey(btnSet, "Label")]: "MESSAGE JOHN" });
+  message.x = 20;
+  message.y = share.y - 12 - BUTTON_H;       // .padding(.top, 12) between them
+
+  await safeAreaGuides(screen, v);
+  COMPONENT_LOG.push("Cap Reached screen");
+}
+
+async function verifyCapReachedScreen() {
+  const page = figma.root.children.find((p) => p.name === "Screens");
+  if (!page) return check("Cap Reached screen", false, "Screens page missing");
+  await figma.setCurrentPageAsync(page);
+  const screen = page.children.find((x) => x.name === "Cap Reached");
+  if (!screen) return check("Cap Reached screen", false, "missing");
+  check("Cap Reached is iPhone-sized", screen.width === CANVAS_W && screen.height === CANVAS_H);
+  check("Cap Reached sits on the canvas colour",
+    (await varNameOf(screen.fills[0])) === "background/canvas");
+  const names = [];
+  for (const i of screen.findAll((n) => n.type === "INSTANCE")) {
+    const m = await i.getMainComponentAsync();
+    names.push(m ? (m.parent && m.parent.type === "COMPONENT_SET" ? m.parent.name : m.name) : "detached");
+  }
+  check("Cap Reached is built from components", !names.includes("detached"), names.join(", "));
+  check("Cap Reached reuses the Paywall's parts — close button, both buttons, a static header",
+    names.filter((n) => n === "Icon Button").length === 1 &&
+    names.filter((n) => n === "Button").length === 2 &&
+    names.filter((n) => n === "Section Header").length === 1, names.join(", "));
+  const msg = screen.findOne((x) => x.name === "message");
+  const msgMain = msg && (await msg.getMainComponentAsync());
+  check("MESSAGE JOHN is Primary — this user already pays, so it is the main action",
+    !!msgMain && msgMain.name === "Style=Primary, State=Default", msgMain ? msgMain.name : "missing");
+  const share = screen.findOne((x) => x.name === "share");
+  const shareMain = share && (await share.getMainComponentAsync());
+  check("SHARE SOUS is Secondary", !!shareMain && shareMain.name === "Style=Secondary, State=Default",
+    shareMain ? shareMain.name : "missing");
+  check("the two actions clear the home indicator",
+    !!share && Math.round(share.y + share.height) <= CANVAS_H - SAFE_BOTTOM,
+    share ? String(Math.round(share.y + share.height)) : "missing");
+  const bodyBlock = screen.findOne((x) => x.name === "body");
+  check("the note clears the buttons",
+    !!bodyBlock && !!msg && bodyBlock.y + bodyBlock.height <= msg.y,
+    bodyBlock && msg ? Math.round(bodyBlock.y + bodyBlock.height) + " vs " + Math.round(msg.y) : "missing");
+}
+
+// ------------------------------------------------------------ Picker Sheet
+//
+// Source: the three wheel sheets — ServingsPickerSheet (SERVES / PEOPLE / CANCEL ·
+// SET), DurationPickerSheet (SET TIMER / HOURS · MINUTES / CANCEL · START) and
+// AdjustTimerSheet (ADJUST TIMER + a live countdown / HOURS · MINUTES / PAUSE ·
+// START, with Delete Timer beneath).
+//
+// They are one component. Every one is: a title row, a rule, a labelled wheel area,
+// a rule, then two actions inside a single ink-bordered box split by a hairline —
+// the quiet one on the left, the committing one filled burgundy on the right. What
+// varies is the number of wheels, whether the header carries a readout, and whether
+// a destructive footer follows.
+//
+// The wheel itself is a UIKit picker, so it is drawn as system chrome: a rounded
+// selection band with the neighbouring values fading out. Sous does not draw it and
+// should not restyle it.
+
+const PICKER_SHEET_SPECS = [
+  { name: "Wheels=One", labels: ["PEOPLE"], values: [["2", "3", "4", "5", "6"]] },
+  { name: "Wheels=Two", labels: ["HOURS", "MINUTES"],
+    values: [["0", "1", "2", "3", "4"], ["14", "15", "16", "17", "18"]] },
+];
+const SHEET_W = 393;
+const WHEEL_H = 180;          // the visible height iOS gives a wheel in a medium sheet
+const WHEEL_BAND_H = 36;      // the selection band
+
+// One wheel column: its label, then the values with the middle one banded.
+async function pickerWheel(v, label, values, width) {
+  const col = autoLayout("VERTICAL");
+  col.name = "wheel " + label;
+  col.itemSpacing = 4;                       // VStack(spacing: 4)
+  col.counterAxisAlignItems = "CENTER";
+  col.fills = [];
+  col.resize(width, WHEEL_H);
+
+  const cap = await textNode("Sous/Picker Label", label, v("Sous Color", "text/muted"), "label");
+  col.appendChild(cap);
+  cap.letterSpacing = { value: 1.0, unit: "PIXELS" };   // .kerning(1.0)
+
+  const wheel = figma.createFrame();
+  wheel.name = "wheel";
+  wheel.fills = [];
+  wheel.clipsContent = true;
+  col.appendChild(wheel);
+  wheel.layoutSizingHorizontal = "FILL";
+  wheel.resize(width, WHEEL_H - cap.height - 4);
+
+  // The selection band: system chrome, so a rounded grey rather than a Sous shape.
+  const band = figma.createRectangle();
+  band.name = "selection";
+  band.resize(width - 16, WHEEL_BAND_H);
+  band.fills = [boundPaint(v("Sous Color", "text/muted"))];
+  band.opacity = 0.18;
+  band.cornerRadius = 10;
+  wheel.appendChild(band);
+  band.x = 8;
+  band.y = Math.round((wheel.height - WHEEL_BAND_H) / 2);
+
+  // Five values, the middle one selected and the rest falling away.
+  const mid = Math.floor(values.length / 2);
+  for (let i = 0; i < values.length; i++) {
+    const t = await textNode("Sous/Picker Value", values[i],
+      v("Sous Color", "text/primary"), "value " + values[i]);
+    wheel.appendChild(t);
+    t.textAlignHorizontal = "CENTER";
+    t.textAutoResize = "HEIGHT";
+    t.resize(width, t.height);
+    t.x = 0;
+    t.y = Math.round((wheel.height - t.height) / 2 + (i - mid) * WHEEL_BAND_H);
+    // iOS fades the values either side of the selection.
+    t.opacity = i === mid ? 1 : (Math.abs(i - mid) === 1 ? 0.45 : 0.2);
+  }
+  return col;
+}
+
+async function buildPickerSheet() {
+  const page = await ensurePage("Picker Sheet");
+  const owned = ["Picker Sheet / Documentation"]
+    .concat(PICKER_SHEET_SPECS.map((s) => "picker/row/" + s.name.replace("Wheels=", "")));
+  if (!(await clearOwned(page, "Picker Sheet", owned))) return;
+  const v = await colorVars();
+  const comps = [];
+
+  for (const spec of PICKER_SHEET_SPECS) {
+    const c = figma.createComponent();
+    c.name = spec.name;
+    c.layoutMode = "VERTICAL";
+    c.itemSpacing = 0;
+    c.counterAxisAlignItems = "MIN";
+    c.resize(SHEET_W, 10);
+    c.primaryAxisSizingMode = "AUTO";
+    c.counterAxisSizingMode = "FIXED";
+    c.fills = [boundPaint(v("Sous Color", "background/canvas"))];
+
+    // Header: title left, optional live readout right.
+    const header = hFrame("header");
+    header.counterAxisAlignItems = "CENTER";
+    header.paddingLeft = header.paddingRight = 20;
+    header.paddingTop = 24;
+    header.paddingBottom = 16;
+    c.appendChild(header);
+    header.layoutSizingHorizontal = "FILL";
+    const title = await textNode("Sous/Title", "ADJUST TIMER", v("Sous Color", "text/primary"), "title");
+    header.appendChild(title);
+    const spacer = figma.createFrame();
+    spacer.name = "header-spacer";
+    spacer.fills = [];
+    spacer.resize(10, 1);
+    header.appendChild(spacer);
+    spacer.layoutGrow = 1;
+    const readout = await textNode("Sous/Readout", "16:04", v("Sous Color", "text/accent"), "readout");
+    header.appendChild(readout);
+
+    const top = hairlineRow(v, "rule-top");
+    c.appendChild(top.row);
+    top.row.layoutSizingHorizontal = "FILL";
+    top.hair.layoutSizingHorizontal = "FILL";
+
+    // Wheel area: one column, or two split by a hairline.
+    const wheels = hFrame("wheels");
+    wheels.itemSpacing = 0;
+    wheels.paddingLeft = wheels.paddingRight = 20;
+    c.appendChild(wheels);
+    wheels.layoutSizingHorizontal = "FILL";
+    const colWidth = spec.labels.length === 1
+      ? SHEET_W - 40
+      : Math.floor((SHEET_W - 40 - 1) / 2);
+    for (let i = 0; i < spec.labels.length; i++) {
+      if (i > 0) {
+        const split = figma.createRectangle();
+        split.name = "wheel-divider";
+        split.resize(1, WHEEL_H - 16);
+        split.fills = [boundPaint(v("Sous Color", "border/subtle"))];
+        wheels.appendChild(split);
+      }
+      const col = await pickerWheel(v, spec.labels[i], spec.values[i], colWidth);
+      wheels.appendChild(col);
+    }
+
+    const bottom = hairlineRow(v, "rule-bottom");
+    c.appendChild(bottom.row);
+    bottom.row.layoutSizingHorizontal = "FILL";
+    bottom.hair.layoutSizingHorizontal = "FILL";
+
+    // Actions: one ink-bordered box, split by a hairline. Quiet left, committing right.
+    const actionsPad = figma.createFrame();
+    actionsPad.name = "actions-pad";
+    actionsPad.layoutMode = "VERTICAL";
+    actionsPad.primaryAxisSizingMode = "AUTO";
+    actionsPad.counterAxisSizingMode = "FIXED";
+    actionsPad.fills = [];
+    actionsPad.paddingLeft = actionsPad.paddingRight = 20;
+    actionsPad.paddingTop = 20;
+    actionsPad.paddingBottom = 8;
+    c.appendChild(actionsPad);
+    actionsPad.layoutSizingHorizontal = "FILL";
+
+    const actions = hFrame("actions");
+    actions.itemSpacing = 0;
+    actions.counterAxisAlignItems = "CENTER";
+    actionsPad.appendChild(actions);
+    actions.layoutSizingHorizontal = "FILL";
+    actions.strokes = [boundPaint(v("Sous Color", "border/strong"))];
+    actions.strokeWeight = 1;
+
+    const left = figma.createFrame();
+    left.name = "left";
+    left.layoutMode = "HORIZONTAL";
+    left.primaryAxisAlignItems = "CENTER";
+    left.counterAxisAlignItems = "CENTER";
+    left.primaryAxisSizingMode = "FIXED";
+    left.counterAxisSizingMode = "AUTO";
+    left.paddingTop = left.paddingBottom = 16;   // .padding(.vertical, 16)
+    left.fills = [];
+    actions.appendChild(left);
+    left.layoutGrow = 1;
+    const leftLabel = await textNode("Sous/Button", "CANCEL", v("Sous Color", "text/accent"), "left-label");
+    left.appendChild(leftLabel);
+
+    const actionSplit = figma.createRectangle();
+    actionSplit.name = "action-divider";
+    actionSplit.resize(1, 52);
+    actionSplit.fills = [boundPaint(v("Sous Color", "border/subtle"))];
+    actions.appendChild(actionSplit);
+
+    const right = figma.createFrame();
+    right.name = "right";
+    right.layoutMode = "HORIZONTAL";
+    right.primaryAxisAlignItems = "CENTER";
+    right.counterAxisAlignItems = "CENTER";
+    right.primaryAxisSizingMode = "FIXED";
+    right.counterAxisSizingMode = "AUTO";
+    right.paddingTop = right.paddingBottom = 16;
+    right.fills = [boundPaint(v("Sous Color", "accent/primary"))];
+    actions.appendChild(right);
+    right.layoutGrow = 1;
+    const rightLabel = await textNode("Sous/Button", "START", v("Sous Color", "text/onInverse"), "right-label");
+    right.appendChild(rightLabel);
+
+    // Footer: the destructive action, present only on the adjust sheet.
+    const footer = figma.createFrame();
+    footer.name = "footer";
+    footer.layoutMode = "HORIZONTAL";
+    footer.primaryAxisAlignItems = "CENTER";
+    footer.counterAxisAlignItems = "CENTER";
+    footer.primaryAxisSizingMode = "FIXED";
+    footer.counterAxisSizingMode = "AUTO";
+    footer.paddingTop = 24;
+    footer.paddingBottom = 8;
+    footer.fills = [];
+    c.appendChild(footer);
+    footer.layoutSizingHorizontal = "FILL";
+    // System red at 80%: Sous has no destructive colour of its own yet
+    // (docs/KnownIssues.md), so this is deliberately a raw value.
+    const del = await textNode("Sous/Button Quiet", "Delete Timer",
+      v("Sous Color", "text/muted"), "footer-label");
+    del.fills = [{ type: "SOLID", color: { r: 1, g: 0.23, b: 0.19 }, opacity: 0.8 }];
+    footer.appendChild(del);
+
+    page.appendChild(c);
+    comps.push(c);
+  }
+
+  const set = figma.combineAsVariants(comps, page);
+  set.name = "Picker Sheet";
+  set.description =
+    "The wheel sheet behind servings, a new timer and adjusting a running one. Title row, " +
+    "rule, labelled wheels, rule, then two actions in one ink-bordered box split by a " +
+    "hairline — quiet on the left, committing and burgundy on the right.\n\n" +
+    "The box is the component, not the two halves: that is why these buttons are not built " +
+    "from Button, and why the shared SwiftUI button skipped them.\n\n" +
+    "The wheel is a UIKit picker — rounded selection band, values fading either side. System " +
+    "chrome, not Sous's own shape.\n\n" +
+    "Swift: ServingsPickerSheet, DurationPickerSheet, AdjustTimerSheet.";
+
+  const titleKey = set.addComponentProperty("Title", "TEXT", "ADJUST TIMER");
+  const leftKey = set.addComponentProperty("Left", "TEXT", "CANCEL");
+  const rightKey = set.addComponentProperty("Right", "TEXT", "START");
+  const readoutKey = set.addComponentProperty("Readout", "BOOLEAN", false);
+  const footerKey = set.addComponentProperty("Footer", "BOOLEAN", false);
+  for (const variant of set.children) {
+    variant.findOne((x) => x.name === "title").componentPropertyReferences = { characters: titleKey };
+    variant.findOne((x) => x.name === "left-label").componentPropertyReferences = { characters: leftKey };
+    variant.findOne((x) => x.name === "right-label").componentPropertyReferences = { characters: rightKey };
+    variant.findOne((x) => x.name === "readout").componentPropertyReferences = { visible: readoutKey };
+    variant.findOne((x) => x.name === "footer").componentPropertyReferences = { visible: footerKey };
+    variant.findOne((x) => x.name === "readout").visible = false;
+    variant.findOne((x) => x.name === "footer").visible = false;
+  }
+
+  const PAD = 32, GAP = 40, cell = { w: SHEET_W, h: 420 };
+  layoutGrid(set, () => 0, (c) => PICKER_SHEET_SPECS.findIndex((s) => s.name === c.name),
+    cell, PAD, GAP, 1, PICKER_SHEET_SPECS.length);
+  const doc = await docPanel(page, v, "Picker Sheet", [
+    ["Sous/Body",
+      "One sheet, three jobs. The wheel count is the variant; the labels, the header readout and the destructive footer are properties. Servings uses one wheel and CANCEL · SET; a new timer uses two and CANCEL · START; adjusting a running one uses two, turns the readout on for the live countdown, swaps CANCEL for PAUSE, and turns the footer on.",
+      "text/primary", "description"],
+    ["Sous/Body",
+      "Wheel labels belong to the variant rather than to a property: one wheel always counts people, two always count hours and minutes. If that stops being true, they become properties.",
+      "text/muted", "usage"],
+  ]);
+  set.x = doc.x + doc.width + 80;
+  set.y = doc.y + 40;
+  await gridLabels(page, v, set, [], PICKER_SHEET_SPECS.map((s) => s.name.replace("Wheels=", "")),
+    cell, PAD, GAP, "picker");
+  COMPONENT_LOG.push("Picker Sheet (" + set.children.length + " variants)");
+}
+
+async function verifyPickerSheet() {
+  const page = figma.root.children.find((p) => p.name === "Picker Sheet");
+  if (!page) return check("component Picker Sheet", false, "page missing");
+  await figma.setCurrentPageAsync(page);
+  const set = page.children.find((x) => x.type === "COMPONENT_SET" && x.name === "Picker Sheet");
+  if (!set) return check("component Picker Sheet", false, "component set missing");
+  for (const spec of PICKER_SHEET_SPECS) {
+    const c = set.children.find((x) => x.name === spec.name);
+    if (!c) { check("Picker Sheet " + spec.name, false, "missing"); continue; }
+    const t = "Picker Sheet " + spec.name;
+    check(t + " has " + spec.labels.length + " wheel(s)",
+      c.findAll((n) => n.name.indexOf("wheel ") === 0).length === spec.labels.length);
+    const right = c.findOne((x) => x.name === "right");
+    check(t + " commits on the right, in burgundy",
+      !!right && (await varNameOf(right.fills[0])) === "accent/primary");
+    const left = c.findOne((x) => x.name === "left");
+    check(t + " keeps the left action quiet — no fill",
+      !!left && left.fills.length === 0);
+    const actions = c.findOne((x) => x.name === "actions");
+    check(t + " wraps both actions in one ink border",
+      !!actions && actions.strokes.length === 1 &&
+      (await varNameOf(actions.strokes[0])) === "border/strong");
+    check(t + " hides the readout and footer by default",
+      c.findOne((x) => x.name === "readout").visible === false &&
+      c.findOne((x) => x.name === "footer").visible === false);
+    const band = c.findOne((x) => x.name === "selection");
+    check(t + " draws the wheel as system chrome — a rounded selection band",
+      !!band && band.cornerRadius === 10, band ? String(band.cornerRadius) : "missing");
+  }
+  const defs = Object.keys(set.componentPropertyDefinitions || {});
+  check("Picker Sheet exposes Title, Left, Right, Readout and Footer",
+    ["Title", "Left", "Right", "Readout", "Footer"].every(
+      (n) => defs.some((k) => k === n || k.indexOf(n + "#") === 0)), defs.join(", "));
+}
+
+// ------------------------------------------------- Memory Proposal Toast
+//
+// Source: ChatSheetView.MemoryProposalToast. When Sous notices something worth
+// remembering, a burgundy toast slides in over the transcript: a header, the
+// proposed memory in Sous's words, three actions, and a countdown bar that saves
+// by default when it runs out.
+//
+// The countdown is the thing to understand about this component. It is not a
+// dismissal timer — reaching the end SAVES. That is why the bar is drawn as a
+// depleting measure rather than a progress fill, and why SKIP sits alongside SAVE
+// rather than being the quiet way out.
+
+// 393 - 68 leading - 16 trailing. The leading inset clears the hamburger, which is a
+// 44pt burgundy square drawn above this toast in an outer overlay — same burgundy, so it
+// silently painted over the first 44pt of every line until 2026-09-25.
+const TOAST_W = 309;
+const TOAST_SPECS = [
+  { name: "State=Proposed", actions: ["SAVE", "EDIT", "SKIP"] },
+  { name: "State=Editing", actions: ["SAVE", "CANCEL"] },
+];
+
+async function buildMemoryToast() {
+  const page = await ensurePage("Memory Toast");
+  const owned = ["Memory Toast / Documentation"]
+    .concat(TOAST_SPECS.map((t) => "toast/row/" + t.name.replace("State=", "")));
+  if (!(await clearOwned(page, "Memory Toast", owned))) return;
+  const v = await colorVars();
+  const comps = [];
+
+  for (const spec of TOAST_SPECS) {
+    const editing = spec.name === "State=Editing";
+    const c = figma.createComponent();
+    c.name = spec.name;
+    c.layoutMode = "VERTICAL";
+    c.itemSpacing = 0;
+    c.counterAxisAlignItems = "MIN";
+    c.resize(TOAST_W, 10);
+    c.primaryAxisSizingMode = "AUTO";
+    c.counterAxisSizingMode = "FIXED";
+    c.fills = [boundPaint(v("Sous Color", "accent/primary"))];
+    c.strokes = [boundPaint(v("Sous Color", "accent/primary"))];
+    c.strokeAlign = "INSIDE";
+    c.setBoundVariable("strokeWeight", v("Sous Border", "border/hairline"));
+
+    if (editing) {
+      // The memory, open for correction in a bordered field on the page colour.
+      const pad = figma.createFrame();
+      pad.name = "edit-pad";
+      pad.layoutMode = "VERTICAL";
+      pad.itemSpacing = 8;                     // VStack(spacing: 8)
+      pad.primaryAxisSizingMode = "AUTO";
+      pad.counterAxisSizingMode = "FIXED";
+      pad.fills = [];
+      pad.paddingLeft = pad.paddingRight = pad.paddingTop = pad.paddingBottom = 12;
+      c.appendChild(pad);
+      pad.layoutSizingHorizontal = "FILL";
+
+      const field = figma.createFrame();
+      field.name = "field";
+      field.layoutMode = "HORIZONTAL";
+      field.counterAxisAlignItems = "CENTER";
+      field.primaryAxisSizingMode = "FIXED";
+      field.counterAxisSizingMode = "AUTO";
+      field.paddingLeft = field.paddingRight = field.paddingTop = field.paddingBottom = 8;
+      field.fills = [boundPaint(v("Sous Color", "background/canvas"))];
+      field.strokes = [boundPaint(v("Sous Color", "border/strong"))];
+      field.strokeAlign = "INSIDE";
+      field.setBoundVariable("strokeWeight", v("Sous Border", "border/hairline"));
+      pad.appendChild(field);
+      field.layoutSizingHorizontal = "FILL";
+      const fieldText = await textNode("Sous/Body", "I cook on induction",
+        v("Sous Color", "text/primary"), "field-text");
+      field.appendChild(fieldText);
+      fieldText.layoutSizingHorizontal = "FILL";
+
+      // Same three columns as the Proposed row, so SAVE does not move when you tap
+      // EDIT. CANCEL takes the slot SKIP vacated — already the "back out" position —
+      // and the empty middle is EDIT's own slot, spent by the fact that you are editing.
+      const row = hFrame("actions");
+      row.itemSpacing = 0;
+      pad.appendChild(row);
+      row.layoutSizingHorizontal = "FILL";
+      const editCols = [spec.actions[0], null, spec.actions[1]];
+      for (const label of editCols) {
+        const cell = figma.createFrame();
+        cell.name = label ? "action " + label : "action-gap";
+        cell.layoutMode = "HORIZONTAL";
+        cell.primaryAxisAlignItems = "CENTER";
+        cell.counterAxisAlignItems = "CENTER";
+        cell.primaryAxisSizingMode = "FIXED";
+        cell.counterAxisSizingMode = "AUTO";
+        cell.fills = [];
+        row.appendChild(cell);
+        cell.layoutGrow = 1;
+        if (label) {
+          const t = await textNode("Sous/Button", label, v("Sous Color", "text/onInverse"),
+            "label " + label);
+          cell.appendChild(t);
+        } else {
+          const filler = figma.createFrame();
+          filler.name = "gap";
+          filler.fills = [];
+          filler.resize(1, 18);
+          cell.appendChild(filler);
+        }
+      }
+    } else {
+      const head = await textNode("Sous/Button", "REMEMBERING THIS",
+        v("Sous Color", "text/onInverse"), "header");
+      c.appendChild(head);
+      head.layoutSizingHorizontal = "FILL";
+
+      const memory = await textNode("Sous/Body", "You cook on induction",
+        v("Sous Color", "text/onInverse"), "memory");
+      c.appendChild(memory);
+      memory.layoutSizingHorizontal = "FILL";
+      memory.textAutoResize = "HEIGHT";
+
+      const row = hFrame("actions");
+      row.itemSpacing = 0;
+      c.appendChild(row);
+      row.layoutSizingHorizontal = "FILL";
+      for (const label of spec.actions) {
+        const cell = figma.createFrame();
+        cell.name = "action " + label;
+        cell.layoutMode = "HORIZONTAL";
+        cell.primaryAxisAlignItems = "CENTER";
+        cell.counterAxisAlignItems = "CENTER";
+        cell.primaryAxisSizingMode = "FIXED";
+        cell.counterAxisSizingMode = "AUTO";
+        cell.fills = [];
+        row.appendChild(cell);
+        cell.layoutGrow = 1;
+        const t = await textNode("Sous/Button", label, v("Sous Color", "text/onInverse"),
+          "label " + label);
+        cell.appendChild(t);
+      }
+
+      // SwiftUI pads these individually, so they are set here rather than by itemSpacing.
+      head.x = 12; memory.x = 12;
+      c.paddingLeft = 0; c.paddingRight = 0;
+      head.layoutSizingHorizontal = "FILL";
+      c.paddingTop = 0;
+      // padding(.horizontal, 12) on the header, memory and action row
+      for (const n of [head, memory, row]) {
+        n.layoutAlign = "STRETCH";
+      }
+      c.paddingLeft = c.paddingRight = 12;
+      c.paddingTop = 10;                       // header .padding(.top, 10)
+      c.itemSpacing = 6;                       // header .padding(.bottom, 6)
+
+      // The countdown. It depletes toward a SAVE, not a dismissal.
+      const track = figma.createFrame();
+      track.name = "countdown";
+      track.fills = [];
+      track.layoutMode = "HORIZONTAL";
+      track.primaryAxisSizingMode = "FIXED";
+      track.counterAxisSizingMode = "FIXED";
+      track.resize(TOAST_W, 2);
+      c.appendChild(track);
+      track.layoutAlign = "STRETCH";
+      const bar = figma.createRectangle();
+      bar.name = "countdown-fill";
+      bar.resize(Math.round(TOAST_W * 0.6), 2);
+      bar.fills = [{ type: "SOLID", color: { r: 1, g: 1, b: 1 }, opacity: 0.35 }];
+      track.appendChild(bar);
+    }
+
+    page.appendChild(c);
+    comps.push(c);
+  }
+
+  const set = figma.combineAsVariants(comps, page);
+  set.name = "Memory Toast";
+  set.description =
+    "Sous noticing something worth remembering. Burgundy, over the transcript, with the " +
+    "proposal in Sous's own words and three ways to answer it.\n\n" +
+    "The bar is a countdown that SAVES when it runs out — not a dismissal timer. That is why " +
+    "SKIP sits beside SAVE as an equal rather than being the quiet way out, and why every " +
+    "label is white: on burgundy that does not invert, a label that did would go near-black " +
+    "in dark mode.\n\n" +
+    "It starts 68pt from the left, not 16pt, to clear the hamburger — which is the same " +
+    "burgundy and is drawn above it, so an overlap reads as nothing at all while quietly " +
+    "eating the text.\n\n" +
+    "Swift: ChatSheetView.MemoryProposalToast.";
+
+  const PAD = 32, GAP = 32, cell = { w: TOAST_W, h: 130 };
+  layoutGrid(set, () => 0, (c) => TOAST_SPECS.findIndex((t) => t.name === c.name),
+    cell, PAD, GAP, 1, TOAST_SPECS.length);
+  const doc = await docPanel(page, v, "Memory Toast", [
+    ["Sous/Body",
+      "The only burgundy surface in the app that carries body text rather than a single label. Everything on it is white, because the burgundy does not invert between light and dark.",
+      "text/primary", "description"],
+    ["Sous/Body",
+      "Letting the countdown run out saves the memory. Worth knowing when reading the three actions: they are not save / maybe / cancel, they are save now / correct it first / no.",
+      "text/muted", "usage"],
+    ["Sous/Body",
+      "Narrower than the screen on the left because the hamburger lives there. Covering it instead would have looked fine and stolen the tap — tapping this toast opens Memories.",
+      "text/muted", "layout"],
+    ["Sous/Body",
+      "Both states share three columns, so SAVE does not shift when you tap EDIT — it holds its place and CANCEL inherits SKIP's. Only the vertical moves, because the field is taller than the two lines it replaces.",
+      "text/muted", "layout"],
+  ]);
+  set.x = doc.x + doc.width + 80;
+  set.y = doc.y + 40;
+  await gridLabels(page, v, set, [], TOAST_SPECS.map((t) => t.name.replace("State=", "")),
+    cell, PAD, GAP, "toast");
+  COMPONENT_LOG.push("Memory Toast (" + set.children.length + " variants)");
+}
+
+async function verifyMemoryToast() {
+  const page = figma.root.children.find((p) => p.name === "Memory Toast");
+  if (!page) return check("component Memory Toast", false, "page missing");
+  await figma.setCurrentPageAsync(page);
+  const set = page.children.find((x) => x.type === "COMPONENT_SET" && x.name === "Memory Toast");
+  if (!set) return check("component Memory Toast", false, "component set missing");
+  for (const spec of TOAST_SPECS) {
+    const c = set.children.find((x) => x.name === spec.name);
+    if (!c) { check("Memory Toast " + spec.name, false, "missing"); continue; }
+    const t = "Memory Toast " + spec.name;
+    check(t + " sits on burgundy", (await varNameOf(c.fills[0])) === "accent/primary");
+    for (const label of spec.actions) {
+      const node = c.findOne((x) => x.name === "label " + label || x.name === "action " + label);
+      check(t + " has " + label, !!node);
+    }
+    // Every label on this surface must be white: the burgundy does not invert, so a
+    // label that did would go near-black in dark mode.
+    for (const n of c.findAll((x) => x.type === "TEXT")) {
+      if (n.name === "field-text") continue;   // that one sits on the page colour
+      check(t + " " + n.name + " is white on the burgundy",
+        (await varNameOf(n.fills[0])) === "text/onInverse",
+        (await varNameOf(n.fills[0])) || "raw");
+    }
+  }
+  const proposed = set.children.find((x) => x.name === "State=Proposed");
+  check("the countdown bar is present — it saves when it runs out",
+    !!proposed && !!proposed.findOne((x) => x.name === "countdown-fill"));
+}
+
 // ----------------------------------------------------------------- registry
 
 // Order matters: a component may only be built after everything it nests. The
@@ -5083,6 +5841,10 @@ const COMPONENTS = [
     build: buildFormKit, verify: verifyFormKit },
   { name: "Segmented Control", page: "Segmented Control", sets: ["Segmented Control"],
     build: buildSegmentedControl, verify: verifySegmentedControl },
+  { name: "Picker Sheet", page: "Picker Sheet", sets: ["Picker Sheet"],
+    build: buildPickerSheet, verify: verifyPickerSheet },
+  { name: "Memory Toast", page: "Memory Toast", sets: ["Memory Toast"],
+    build: buildMemoryToast, verify: verifyMemoryToast },
   { name: "Settings Row", page: "Settings Row", sets: ["Settings Row"],
     build: buildSettingsRow, verify: verifySettingsRow },
   { name: "Apple Sign In Button", page: "Apple Sign In Button", sets: ["Apple Sign In Button"],
@@ -5106,13 +5868,15 @@ const COMPONENTS = [
     build: buildSignInScreen, verify: verifySignInScreen },
   { name: "Paywall", page: "Screens", sets: [],
     build: buildPaywallScreen, verify: verifyPaywallScreen },
+  { name: "Cap Reached", page: "Screens", sets: [],
+    build: buildCapReachedScreen, verify: verifyCapReachedScreen },
 ];
 
 // Generated screens are rebuilt from the library on every run, so they are
 // cleared first: otherwise their instances would mark every component "in use"
 // and block the component rebuilds. Anything you want to keep, duplicate — a
 // copy is not generated, so it is never touched.
-const GENERATED_SCREENS = ["Recipe Canvas", "Chat", "Zero State", "Sidebar", "Settings", "Change Suggestion", "Voice Mode", "Talk to a Recipe", "Preferences", "Sign In", "Paywall"];
+const GENERATED_SCREENS = ["Recipe Canvas", "Chat", "Zero State", "Sidebar", "Settings", "Change Suggestion", "Voice Mode", "Talk to a Recipe", "Preferences", "Sign In", "Paywall", "Cap Reached"];
 
 async function clearGeneratedScreens() {
   const page = figma.root.children.find((p) => p.name === "Screens");

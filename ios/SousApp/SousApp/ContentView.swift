@@ -122,7 +122,7 @@ struct ContentView: View {
                 case .capReached:
                     capSummary = DebugFixture.cappedUsage()
                     billingPresentation = .capReached
-                case .canvas, .review, .explore:
+                case .canvas, .review, .explore, .memoryToast:
                     break
                 }
             }

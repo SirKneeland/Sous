@@ -447,3 +447,52 @@ worth doing whenever the bottom zone is next opened up.
 One thing to carry over: the bar uses `Color.white.opacity(0.25)` for the divider and
 `HapticOnPressStyle()` for both halves. The opacity literal is part of the untokenised
 white-opacity set already recorded under the destructive-colour entry.
+
+---
+
+## ~~Memory toast labels went near-black on burgundy in dark mode~~ — fixed 2026-09-25
+
+- **Area:** `ios/SousApp/SousApp/Views/ChatSheetView.swift` — `MemoryProposalToast`
+- **Type:** Bug — **resolved**
+- **Flagged:** 2026-09-25 (surfaced while building the Figma Memory Toast component)
+
+The toast sits on `Color.sousTerracotta`, which does not invert. Four of its labels used
+`Color.sousBackground`, which does — so in dark mode the header, the proposed memory text,
+SKIP and the edit-mode CANCEL all rendered at `#1A1A1A` on `#C45068`: 3.89:1, below AA, and
+inconsistent within a single control, since SAVE and EDIT beside them were already white.
+
+All four are now `Color.white`. Verified on device in dark mode: the toast contains only
+burgundy and white.
+
+**This is the fourth instance of one mistake.** The same defect was fixed on 2026-09-24 for
+START / SET / the generate pill, then again for the OG badge, and now here. The rule is
+simple and worth stating plainly: **anything drawn on `sousTerracotta` must use
+`Color.white`, never `Color.sousBackground`**, because the burgundy is fixed across modes
+and `sousBackground` flips. `SousButtonStyle.primary` now encodes this for buttons; the
+toast and the badge are hand-drawn surfaces that each had to learn it separately.
+
+Remaining hand-drawn burgundy surfaces worth checking if they gain labels: the voice bar
+(already uses its own blush palette) and the timer banner (already white).
+
+**A second toast bug surfaced the same day, from the same screenshot.** The hamburger is a
+44pt burgundy square drawn in an outer overlay (`HistoryDrawer`), so it sits *above* the
+toast. Because it is the same burgundy, the overlap was invisible — it silently painted over
+the first 44pt of every line, so "REMEMBERING THIS" arrived as "EMBERING THIS" and
+"You cook on induction" lost its "You". The toast now starts 68pt from the left (16 + the
+hamburger's 44 + 8 of air) instead of 16.
+
+Covering the hamburger instead would have looked fine and stolen its tap, since tapping the
+toast opens Memories. Worth remembering for anything else that renders at the top-left: the
+hamburger is above the chat sheet and shares its colour, so an overlap shows as missing
+content rather than as an overlap.
+
+**A third toast inconsistency, settled the same day.** The two states used different layout
+idioms for the same row: Proposed spread three actions across equal thirds, Editing huddled
+two to the left on a 12pt stack. Tapping EDIT reshuffled the furniture, and the tap targets
+shrank in the mode where the thumb is furthest away. Editing now uses the same three columns,
+so **SAVE holds its exact position** (measured: x 112.0–145.7pt in both) and CANCEL inherits
+the slot SKIP vacated. The empty middle is EDIT's own slot, spent.
+
+Vertical position still shifts between the states, because the text field is taller than the
+two lines it replaces. Left as is — padding the field to match would be contorting the layout
+to hide a genuine mode change.

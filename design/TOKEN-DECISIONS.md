@@ -252,12 +252,13 @@ components — if a screen can't be built from them, the components are wrong.
 
 **Built:** Checkbox, Button, Icon Button, Section Header, Ingredient Group Header, List Row,
 Recipe Title, Bottom Bar, Chat Bubble, Composer Bar, Chat Header, Wordmark, Recent Recipe Row,
-Apple Sign In Button, Benefit Row.
+Apple Sign In Button, Benefit Row, Picker Sheet.
 
 **Screens assembled:** Recipe Canvas, Chat, Zero State, Sidebar.
 
-**Screens: eleven built** — Recipe Canvas, Chat, Zero State, Sidebar, Settings,
-Change Suggestion, Voice Mode, Talk to a Recipe, Preferences, **Sign In**, **Paywall**.
+**Screens: twelve built** — Recipe Canvas, Chat, Zero State, Sidebar, Settings,
+Change Suggestion, Voice Mode, Talk to a Recipe, Preferences, **Sign In**, **Paywall**,
+**Cap Reached**.
 
 ### 14. Apple's sign-in button is square, and its mark is not redrawn (2026-09-24)
 
@@ -291,15 +292,14 @@ design system covers it. Done as a deliberate step: the nine screens built so fa
 the operator's list, not from a sweep of the codebase.
 
 *Covered:* recipe canvas, chat sheet, zero state, history drawer, settings, patch review,
-voice bar, import chooser, preferences, **sign in**, **paywall**.
+voice bar, import chooser, preferences, **sign in**, **paywall**, **cap reached**,
+**the three wheel sheets** (one **Picker Sheet** component).
 
 *Not yet in the library — worth a pass, roughly in order of how often a user meets them:*
 
 | Screen / surface | Source | Why it matters |
 |---|---|---|
-| **Cap reached** | `Billing/CapReachedView.swift` | The hard stop at 100 recipes/month. Next in line: it reuses the paywall's CTA, close button and legal footer, so most of its parts now exist |
 | **Memories** | `Views/MemoriesView.swift` | Reached from Settings; a list with edit and swipe-delete |
-| **Timer sheets** | `AdjustTimerSheet`, `DurationPickerSheet`, `ServingsPickerSheet` | Three near-identical wheel pickers — likely one component, the same way the three row types were |
 | **Timer banners** | `TimerBannerStack`, `TimerDoneBanner` | The only monospace readouts outside the canvas |
 | **Import: the other modes** | `Import/RecipeImportSheet.swift` | Camera, library, paste, loading and error states — only the chooser is built |
 | **Photo acquisition** | `Acquisition/PhotoAcquisitionSheet.swift` | Camera/library picker sheet |
@@ -310,8 +310,29 @@ voice bar, import chooser, preferences, **sign in**, **paywall**.
 *Deliberately out of scope:* everything under `Debug/` and `RowLayoutDebugPreview` — developer
 tools, not product surfaces.
 
-The timer sheets and the in-chat furniture are the two clusters most likely to collapse into
-shared components, as the three list rows did.
+**The timer sheets did collapse (2026-09-25)**, as predicted — three sheets into one **Picker
+Sheet** with a `Wheels=One / Two` variant, plus Title, Left, Right, Readout and Footer as
+properties. Servings is one wheel with CANCEL · SET; a new timer is two with CANCEL · START;
+adjusting a running one is two with the readout on for the live countdown, PAUSE in place of
+CANCEL, and the footer on for Delete Timer.
+
+Two things the collapse settled:
+
+- **The bordered box is the component, not the two halves.** Both actions live inside one ink
+  border split by a hairline, which is exactly why the shared SwiftUI button skipped these
+  sheets. The component now says so, rather than leaving it as a note in KnownIssues.
+- **Wheel labels belong to the variant, not to a property.** One wheel always counts people;
+  two always count hours and minutes. If that stops being true they become properties — the
+  component's own notes say so.
+
+The in-chat furniture is the remaining cluster most likely to collapse the same way.
+
+**Cap Reached needed no new components (2026-09-25).** It was built from the close button,
+both button styles and the static section header — all of which already existed for the
+Paywall. That is the coverage audit's own prediction coming true, and a useful signal: when a
+screen can be assembled without inventing anything, the component set is holding. The harness
+asserts it, so a future change that sneaks a new part into this screen will fail rather than
+pass quietly.
 
 **Deferred deliberately:**
 - **Foundations pages** (colour swatches, type specimen, spacing bars).

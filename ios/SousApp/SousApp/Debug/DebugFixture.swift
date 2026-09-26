@@ -23,6 +23,7 @@ import SousCore
 ///   -sous-fixture explore                 no canvas, generate pill showing
 ///   -sous-fixture paywall                 the subscription wall
 ///   -sous-fixture capReached              the 100-a-month hard stop
+///   -sous-fixture memoryToast             the memory proposal toast, over the chat
 ///   -sous-fixture-entitlement byok        entitlement to fake (default: subscriber)
 enum DebugFixture {
 
@@ -38,6 +39,8 @@ enum DebugFixture {
         case paywall
         /// The 100-recipes-a-month hard stop, over a canvas.
         case capReached
+        /// A memory proposal toast over the chat. Normally needs a live model turn.
+        case memoryToast
     }
 
     /// Canned usage for the cap-reached screen. Reaching it for real needs a paid

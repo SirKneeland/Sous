@@ -63,6 +63,7 @@ and names every token or variant that's wrong, which is enough to fix it without
 | **Chat Bubble / Composer Bar / Chat Header** | The chat sheet. |
 | **Settings Row / Segmented Control / Badge** | Settings and its pickers. |
 | **Recent Recipe Row / Wordmark / Import Option Row** | Sidebar and import. |
+| **Picker Sheet** | Wheels One / Two. The wheel sheet behind servings, a new timer and adjusting a running one. Properties: Title, Left, Right, Readout, Footer. |
 | **Apple Sign In Button** | Scheme Light / Dark. Apple's own control at Sous's size and shape (345 × 50, square via Apple's `cornerRadius` API) — a reserved space, never a redrawn Apple mark. |
 | **Benefit Row** | One paywall claim: burgundy tick plus body text, top-aligned. Property: Benefit. |
 | **Checkbox** | Unchecked, Checked × Default (20pt), Small (18pt). Built only if missing, so an existing one is never replaced. |

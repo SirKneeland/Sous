@@ -651,9 +651,10 @@ final class AppStore: ObservableObject {
         hasAppliedDebugFixture = true
 
         let recipe = DebugFixture.recipe()
-        hasCanvas = fixture != .explore
+        hasCanvas = fixture != .explore && fixture != .memoryToast
         canGenerateRecipe = fixture == .explore
-        originalRecipe = fixture == .explore ? nil : DebugFixture.originalRecipe()
+        originalRecipe = (fixture == .explore || fixture == .memoryToast)
+            ? nil : DebugFixture.originalRecipe()
         chatTranscript = [
             ChatMessage(role: .assistant,
                         text: "Fixture loaded. This recipe came from DebugFixture, not the model.")
@@ -663,6 +664,14 @@ final class AppStore: ObservableObject {
         // The billing walls sit over a canvas; ContentView presents them.
         case .paywall, .capReached:
             uiState = .recipeOnly(recipe: recipe)
+        case .memoryToast:
+            // The toast lives in the chat sheet, so the chat has to be what is on screen.
+            uiState = .chatOpen(
+                recipe: Recipe(id: UUID(), version: 1, title: "New Recipe"),
+                draftUserText: "",
+                hidden: HiddenContext()
+            )
+            pendingMemoryProposal = "You cook on induction"
         case .explore:
             uiState = .chatOpen(
                 recipe: Recipe(id: UUID(), version: 1, title: "New Recipe"),
