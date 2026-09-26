@@ -282,6 +282,30 @@ The component reserves the space and states the geometry; Apple supplies the gly
 
 ---
 
+### 16. Swipe actions are documented, not drawn (2026-09-26)
+
+Swiping a list row reveals an action, and iOS draws it: the rounded capsule, its size, its
+reveal and the full-swipe threshold are all Apple's. Sous chooses three things — the tint,
+the SF Symbol and the label.
+
+So the **List Row** component records them rather than reproducing them: a note saying which
+edge does what, and two colour chips for the tints. Drawing the capsules would freeze an
+appearance Apple can change between releases, and they are round where everything Sous draws
+is square — the same reasoning that keeps the wheel picker, the toggle and Apple's sign-in
+button as they are.
+
+| Where | Gesture | Action | Tint |
+|---|---|---|---|
+| Canvas rows | swipe right | Done, `checkmark` | `status/added` |
+| Canvas rows | swipe left | Ask Sous, `bubble.left` | `accent/primary` |
+| Memories | swipe left | Delete | the system's own red |
+
+**This gives `status/added` a third job** — patch-diff additions, the ACCEPT button, and now
+swipe-to-Done. Arguably one idea (*this is the affirmative action*) wearing three hats, but
+worth watching: a colour with three meanings is on its way to having none. Not split here.
+
+---
+
 **A rule worth keeping:** iOS chrome stays iOS-shaped. Sheets, segmented pickers, toggles,
 steppers, the DONE pill and the back button are all rounded, and deliberately so — a square
 switch reads as broken, not consistent. Everything Sous draws itself stays square. Each of

@@ -2123,7 +2123,7 @@ async function buildListRow() {
 
   const page = await ensurePage("List Row");
   const states = ["To Do", "Checked", "Current", "Done", "Highlighted"];
-  const owned = ["List Row / Documentation"]
+  const owned = ["List Row / Documentation", "List Row / Swipe tints"]
     .concat(["No timer", "Timer"].map((c) => "row/col/" + c))
     .concat(states.map((r) => "row/row/" + r));
   if (!(await clearOwned(page, "List Row", owned))) return;
@@ -2187,9 +2187,45 @@ async function buildListRow() {
       "Row text is edited directly: double-click into an instance and type. There is deliberately no Text field in the properties panel — one shared text field would force the same styling on every variant, which cost the Done row its strikethrough and the Current row its bold.",
       "text/primary", "editing"],
     ["Sous/Body",
-      "Code notes: the app builds this row three separate times (IngredientRow, leafStepRowView, mepFlatRowView) — one shared row view would be the equivalent of this component. Indents also disagree: sub-steps indent 16pt per level, nested prep tasks 20pt; this component uses 20pt.",
-      "text/muted", "code-debt"],
+      "Swiping a row reveals an action, and iOS draws it — the rounded capsule, its size, its reveal and the full-swipe threshold are all Apple's. What Sous chooses is the tint, the SF Symbol and the label. That is why the capsules are not drawn here: reproducing a control we do not own would freeze an appearance Apple can change, and it is already round where everything of ours is square.",
+      "text/primary", "swipe"],
+    ["Sous/Body",
+      "On the canvas: swipe right for Done — checkmark, status/added green. Swipe left for Ask Sous — bubble.left, accent/primary. Done is hidden once a row is already done. In Memories the swipe is the system's own destructive Delete, red and unstyled by us.",
+      "text/primary", "swipe-actions"],
+    ["Sous/Body",
+      "Code notes: this row's three implementations were unified into SousChecklistRow on 2026-09-24, and the sub-step and prep-task indents now agree at 20pt. Memories reuses it with Checkbox off and Roomy on.",
+      "text/muted", "code-notes"],
   ]);
+
+  // The two swipe tints as chips. Not capsules: the shape is Apple's, the colour is ours.
+  const swipeKey = autoLayout("VERTICAL");
+  swipeKey.name = "List Row / Swipe tints";
+  swipeKey.itemSpacing = 12;
+  swipeKey.paddingTop = swipeKey.paddingBottom = 24;
+  swipeKey.paddingLeft = swipeKey.paddingRight = 24;
+  swipeKey.fills = [boundPaint(v("Sous Color", "background/canvas"))];
+  page.appendChild(swipeKey);
+  swipeKey.x = doc.x;
+  swipeKey.y = doc.y + doc.height + 40;
+  const swipeHead = await textNode("Sous/Section Header", "SWIPE TINTS",
+    v("Sous Color", "text/accent"), "swipe-head");
+  swipeKey.appendChild(swipeHead);
+  for (const chip of [
+    { label: "Done  \u00b7  swipe right  \u00b7  checkmark", token: "status/added" },
+    { label: "Ask Sous  \u00b7  swipe left  \u00b7  bubble.left", token: "accent/primary" },
+  ]) {
+    const chipRow = hFrame("chip " + chip.token);
+    chipRow.counterAxisAlignItems = "CENTER";
+    chipRow.itemSpacing = 12;
+    swipeKey.appendChild(chipRow);
+    const sw = figma.createRectangle();
+    sw.name = "swatch";
+    sw.resize(36, 24);
+    sw.fills = [boundPaint(v("Sous Color", chip.token))];
+    chipRow.appendChild(sw);
+    const t = await textNode("Sous/Body", chip.label, v("Sous Color", "text/primary"), "chip-label");
+    chipRow.appendChild(t);
+  }
   set.x = doc.x + doc.width + 80 + 152;
   set.y = doc.y + 40;
   await gridLabels(page, v, set, ["No timer", "Timer"], states, cell, PAD, GAP, "row");

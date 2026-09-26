@@ -560,6 +560,16 @@ function expect(label, condition, detail) {
     const lrSet = figma.root.children.find((p) => p.name === "List Row").children
       .find((n) => n.type === "COMPONENT_SET");
     const lrDefs = Object.keys(lrSet.componentPropertyDefinitions || {});
+    // Swipe actions are documented, not drawn: iOS owns the capsule, Sous owns the tint.
+    const lrPage = figma.root.children.find((p) => p.name === "List Row");
+    expect("List Row documents its swipe tints",
+      !!lrPage.children.find((x) => x.name === "List Row / Swipe tints"),
+      lrPage.children.map((c) => c.name).join(", "));
+    const tintPanel = lrPage.children.find((x) => x.name === "List Row / Swipe tints");
+    expect("both swipe tints are named — the green Done and the burgundy Ask Sous",
+      !!tintPanel.findOne((x) => x.name === "chip status/added") &&
+      !!tintPanel.findOne((x) => x.name === "chip accent/primary"));
+
     expect("List Row exposes Roomy", lrDefs.some((k) => k === "Roomy" || k.indexOf("Roomy#") === 0),
       lrDefs.join(", "));
     const lrVariant = lrSet.children[0];

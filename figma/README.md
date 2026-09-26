@@ -69,7 +69,7 @@ and names every token or variant that's wrong, which is enough to fix it without
 | **Checkbox** | Unchecked, Checked × Default (20pt), Small (18pt). Built only if missing, so an existing one is never replaced. |
 | **Button** | Primary, Inverse, Secondary, Secondary Accent, Text — plus Disabled for Inverse and Secondary. Properties: Label, Icon. |
 | **Section Header** | Expanded, Collapsed, Static. Property: Title. |
-| **List Row** | The row behind ingredients, steps and mise en place — and, Roomy, the Memories list. To Do, Checked, Current, Done, Highlighted, plus three Timer variants. Switches: Checkbox, Nested, Timer, Notes, Roomy. Plus **Ingredient Group Header**. |
+| **List Row** | The row behind ingredients, steps and mise en place — and, Roomy, the Memories list. To Do, Checked, Current, Done, Highlighted, plus three Timer variants. Switches: Checkbox, Nested, Timer, Notes, Roomy. Its page also documents the swipe tints — iOS draws those capsules, so they are recorded rather than redrawn. Plus **Ingredient Group Header**. |
 
 Re-running rebuilds a component from scratch **only while nothing uses it**. Once you've placed
 an instance of it anywhere, the plugin leaves it alone and says so in the report, because
