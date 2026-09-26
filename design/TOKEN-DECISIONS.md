@@ -323,6 +323,21 @@ shared components, as the three list rows did.
 
 **App-code debt this work surfaced** is in `docs/KnownIssues.md`.
 
+**Two extractions landed (2026-09-25)**, both driven by components built here:
+
+- **`SousChecklistRow` / `SousChecklistText`** — the checkbox-and-text pairing behind
+  ingredients, steps and mise en place. Five call sites; verified as a pixel-for-pixel no-op.
+  It also settled the nesting indent, which the original note had mis-diagnosed: sub-steps and
+  nested prep tasks now both sit at 39.7pt against 19.7pt for a top-level row.
+- **`SousButton` / `SousButtonLabel`** — the five styles from the **Button** component, across
+  13 call sites.
+
+Both are deliberately narrower than "one view for everything". The rows share how they *look*
+and differ in how they *behave* (swipe actions, list insets, the timer highlight), so only the
+appearance was centralised. Paired rows inside a shared bordered container — the picker sheets,
+the mise en place modal — and the split **Bottom Bar** stayed out, because the container is the
+component in those cases, not the halves.
+
 **How Figma actually behaves** — hard-won, all encoded as tests in
 `design/test-figma-plugin.js`: a shared TEXT property forces one styling across every variant
 bound to it; attaching one flattens per-character styling; paint-level opacity is ignored on a

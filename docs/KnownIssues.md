@@ -232,9 +232,14 @@ outside `SousButton.swift` itself split as **21 shaped buttons and 16 bare label
 the first group is migration work; the second is text that happens to share a type token,
 and moving it under a button view would be wrong.
 
-**Still to migrate — 9 shaped buttons**, once the 12 already done are subtracted:
-`WindowButtonHost`'s TALK TO SOUS, the two ingredient-row swipe actions on the canvas, a
-debug-only texture preview, and the deliberate exceptions below.
+**The migration is done.** 13 shaped buttons moved onto `SousButton` / `SousButtonLabel`.
+Everything that remains is either a deliberate exception or work for a different component —
+see "What is left, and why it is not button work" at the end of this entry.
+
+An earlier draft of this entry said "9 shaped buttons still to migrate". That figure was
+wrong twice over: two of the nine were mislabelled (see the mise en place modal below) and
+one is bar work rather than button work. The honest remaining count for *this* extraction is
+zero.
 
 **A width option was added** once four real callers needed it: `fillsWidth: false` with a
 `horizontalPadding`, alongside the existing fixed-height / hug-the-label sizing.
@@ -252,6 +257,38 @@ migrating anything with a disabled appearance.
 
 `MemoriesView`'s CANCEL and SAVE are **not** migration work: they are `ToolbarItem`
 buttons, so iOS draws them, the same way the Apple sign-in button is Apple's.
+
+### What is left, and why it is not button work
+
+**TALK TO SOUS is the left half of a two-part bar, not a button.** In `WindowButtonHost` it
+sits beside a 60pt mic button in the same burgundy, separated by a 1pt white-at-25% divider —
+one control that has been split, not two that happen to be adjacent. Three things make a
+shared button the wrong home for it:
+
+- The divider belongs to neither half. It only reads as a divider because both sides share a
+  fill, and a button component has no notion of the sliver between it and its neighbour.
+- The mic half is a fixed-width icon square, so it would be an Icon Button. Migrating only
+  the left half would leave the seam between them owned by nobody.
+- The mic half disappears during the trial and at the soft wall (`voiceEnabled`), and when it
+  goes, TALK TO SOUS expands to full width and the divider vanishes. That is bar-level layout
+  logic, not button state.
+
+The design system already reads it this way: the Figma **Bottom Bar** component has exactly
+two variants, Voice Yes and Voice No, which is precisely that distinction. The bar is modelled
+as one component; the Swift side has not caught up.
+
+**The work this implies** is a `SousBottomBar` view matching that component — taking
+`voiceEnabled` and the two actions — not a `SousButton` call. Not blocking anything, and worth
+doing whenever the bottom zone is next opened up.
+
+**The mise en place confirmation modal's CANCEL / OK** (`RecipeCanvasView` ~1255) is a paired
+row inside one shared bordered container, the same shape as the picker sheets. The container
+with its divider is the component; the halves are parts of it. Staying bespoke.
+
+**`TexturePreviewView`'s BACK** is the paper-texture tuning tool, which `TOKEN-DECISIONS.md`
+puts out of scope as a developer surface rather than product UI.
+
+### Adjacent, not part of this
 
 Two of the 16 bare labels are worth a separate look, since a label using the *button* type
 token is usually either a mislabelled button or the wrong token: `ChatSheetView`'s section
@@ -384,3 +421,29 @@ Three screens moved: the history drawer and chat blank state gained tracking, th
 a point. Verified as confined to the wordmark — every pixel that changed on those three screens
 falls inside the wordmark's own band. The paywall's **PRO** keeps its own tracking of 3; it is a
 section-header label, not the wordmark.
+
+---
+
+## The bottom bar is hand-built; Figma already models it as one component
+
+- **Area:** `ios/SousApp/SousApp/WindowButtonHost.swift` — the TALK TO SOUS / mic row
+- **Type:** Cleanup / consistency
+- **Flagged:** 2026-09-25 (surfaced while closing out the shared-button extraction)
+
+TALK TO SOUS and the mic button are drawn inline as two `Button`s with a hand-placed 1pt
+white-at-25% divider between them, sharing one burgundy fill. They are one control split in
+two, not two buttons side by side — which is why the shared `SousButton` was the wrong home
+for them and they were left alone.
+
+The Figma **Bottom Bar** component already models this correctly, with Voice Yes / Voice No
+variants matching the `voiceEnabled` branch that hides the mic during the trial and at the
+soft wall. When the mic goes, TALK TO SOUS expands to full width and the divider disappears —
+bar-level layout, not button state.
+
+The shape to build is a `SousBottomBar` view taking `voiceEnabled` and the two actions, the
+same way `SousChecklistRow` and `SousButton` now own their patterns. Nothing depends on it;
+worth doing whenever the bottom zone is next opened up.
+
+One thing to carry over: the bar uses `Color.white.opacity(0.25)` for the divider and
+`HapticOnPressStyle()` for both halves. The opacity literal is part of the untokenised
+white-opacity set already recorded under the destructive-colour entry.
