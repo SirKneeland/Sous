@@ -14,6 +14,24 @@
 
 const COMPONENT_LOG = [];
 
+// Components that could not be rebuilt this run because something in the file
+// still uses them. They keep whatever they already had, so verification must not
+// hold them to the current spec — and anything that builds FROM them has to cope
+// with a variant that does not exist yet rather than aborting the whole import.
+const SKIPPED = new Set();
+
+// Like getVariant, but returns null instead of throwing. Use this whenever the
+// variant belongs to a component the operator may have placed instances of: a
+// stale square is not a reason to lose every component after it in the run.
+async function getVariantOrNull(pageName, setName, variantName) {
+  const page = figma.root.children.find((p) => p.name === pageName);
+  if (!page) return null;
+  await figma.setCurrentPageAsync(page);
+  const set = page.children.find((n) => n.type === "COMPONENT_SET" && n.name === setName);
+  if (!set) return null;
+  return set.children.find((c) => c.name === variantName) || null;
+}
+
 async function ensurePage(name) {
   let page = figma.root.children.find((p) => p.name === name);
   if (!page) {
@@ -108,18 +126,29 @@ async function clearOwned(page, setName, ownedNames, quiet) {
   for (const set of sets) {
     const variants = set.type === "COMPONENT_SET" ? set.children : [set];
     for (const variant of variants) {
-      // Figma still lists instances deleted earlier in this same run; they have
-      // no parent chain any more, which is why they reported "unknown page".
-      const instances = (await variant.getInstancesAsync()).filter((i) => !i.removed);
+      // Figma still lists instances deleted earlier in this same run, and it only
+      // flags the node you actually removed — instances *inside* a deleted frame
+      // keep removed = false and stay in this list, orphaned. So `removed` alone
+      // is not enough: an instance counts only if walking up from it reaches a
+      // live page. Anything that does not is already gone and must not block a
+      // rebuild, which is what "unknown page" in the old report really meant.
+      const live = [];
+      for (const inst of await variant.getInstancesAsync()) {
+        if (inst.removed) continue;
+        let n = inst, orphan = false;
+        while (n && n.type !== "PAGE") {
+          if (n.removed) { orphan = true; break; }
+          n = n.parent;
+        }
+        if (orphan || !n) continue;
+        live.push({ inst: inst, page: n.name });
+      }
+      const instances = live;
       if (instances.length) {
         const where = {};
-        for (const inst of instances) {
-          let n = inst;
-          while (n && n.type !== "PAGE") n = n.parent;
-          const label = n ? n.name : "unknown page";
-          where[label] = (where[label] || 0) + 1;
-        }
+        for (const entry of instances) where[entry.page] = (where[entry.page] || 0) + 1;
         if (quiet) return false;
+        SKIPPED.add(setName);
         warn.push(
           setName + " was not rebuilt: " + instances.length + " instance(s) still use it (" +
           Object.keys(where).map((k) => k + ": " + where[k]).join(", ") +
@@ -1077,6 +1106,12 @@ const ICON_BUTTON_STYLES = [
     symbol: "gearshape.fill", weight: "Medium", iconSize: "icon/large" },
   { style: "Bordered", size: 32, fill: null, stroke: "border/strong", icon: "text/primary",
     symbol: "gearshape", weight: "Regular", iconSize: "icon/medium" },
+  // On Accent is Bordered's geometry on a burgundy fill: the pencil on a running
+  // timer banner. Its border is white at 50%, which is a literal rather than a
+  // token — the same unbound white the voice bar uses for its button chrome, and
+  // recorded in KnownIssues alongside those.
+  { style: "On Accent", size: 32, fill: null, stroke: null, strokeWhiteAlpha: 0.5,
+    icon: "text/onInverse", symbol: "pencil", weight: "Regular", iconSize: "icon/medium" },
 ];
 
 async function buildIconButton() {
@@ -1099,6 +1134,10 @@ async function buildIconButton() {
     c.fills = spec.fill ? [boundPaint(v("Sous Color", spec.fill))] : [];
     if (spec.stroke) {
       c.strokes = [boundPaint(v("Sous Color", spec.stroke))];
+      c.strokeAlign = "INSIDE";
+      c.setBoundVariable("strokeWeight", v("Sous Border", "border/hairline"));
+    } else if (spec.strokeWhiteAlpha) {
+      c.strokes = [whiteAlpha(spec.strokeWhiteAlpha)];
       c.strokeAlign = "INSIDE";
       c.setBoundVariable("strokeWeight", v("Sous Border", "border/hairline"));
     } else {
@@ -1132,7 +1171,8 @@ async function buildIconButton() {
   set.description =
     "Square icon button. Accent = the 44pt burgundy hamburger that opens the history drawer. " +
     "Inverse = the drawer's settings button, same size on the ink fill. Bordered = the 32pt " +
-    "outlined button used in the chat sheet header.\n\n" +
+    "outlined button used in the chat sheet header. On Accent = the same 32pt square sitting " +
+    "on burgundy — the pencil on a running timer banner — bordered in white at 50%.\n\n" +
     "Swift: HistoryDrawer hamburger and settings buttons; SousIconButton(systemName:action:). " +
     "To change the symbol, edit the icon layer's text — glyphs come from design/sf-symbols.json.";
 
@@ -1145,6 +1185,9 @@ async function buildIconButton() {
       "text/primary", "description"],
     ["Sous/Body",
       "Filled buttons are 44pt — the minimum comfortable tap target. The bordered one is 32pt because it sits in a header row, not under a thumb.",
+      "text/primary", "usage"],
+    ["Sous/Body",
+      "On Accent is the same 32pt square on a burgundy fill, used for the pencil on a running timer banner. Its border is white at 50% rather than a colour token, because there is no token for white-on-accent chrome — the voice bar does the same thing, and both are logged as debt rather than invented here.",
       "text/primary", "usage"],
   ]);
   set.x = doc.x + doc.width + 80;
@@ -1159,14 +1202,27 @@ async function verifyIconButton() {
   await figma.setCurrentPageAsync(page);
   const set = page.children.find((x) => x.type === "COMPONENT_SET" && x.name === "Icon Button");
   if (!set) return check("component Icon Button", false, "component set missing");
-  check("Icon Button variant count", set.children.length === ICON_BUTTON_STYLES.length, String(set.children.length));
+  // If the set could not be rebuilt, it is whatever the file already had. Check
+  // the variants that are there and do not fail it for ones this run would have
+  // added — the "was not rebuilt" warning is the actionable message, not a FAILED.
+  const stale = SKIPPED.has("Icon Button");
+  check("Icon Button variant count",
+    stale ? set.children.length > 0 : set.children.length === ICON_BUTTON_STYLES.length,
+    String(set.children.length) + (stale ? " (not rebuilt this run)" : ""));
   for (const spec of ICON_BUTTON_STYLES) {
     const c = set.children.find((x) => x.name === "Style=" + spec.style);
-    if (!c) { check("Icon Button " + spec.style, false, "missing"); continue; }
+    if (!c) { if (!stale) check("Icon Button " + spec.style, false, "missing"); continue; }
     const t = "Icon Button " + spec.style;
     check(t + " size", c.width === spec.size && c.height === spec.size, c.width + "x" + c.height);
     check(t + " fill", (c.fills.length ? await varNameOf(c.fills[0]) : null) === spec.fill);
-    check(t + " border", (c.strokes.length ? await varNameOf(c.strokes[0]) : null) === spec.stroke);
+    if (spec.strokeWhiteAlpha) {
+      const s = c.strokes[0];
+      check(t + " border is unbound white at " + spec.strokeWhiteAlpha,
+        !!s && s.color.r === 1 && s.color.g === 1 && s.color.b === 1 &&
+        s.opacity === spec.strokeWhiteAlpha, JSON.stringify(s));
+    } else {
+      check(t + " border", (c.strokes.length ? await varNameOf(c.strokes[0]) : null) === spec.stroke);
+    }
     const icon = c.findOne((x) => x.name === "icon");
     check(t + " icon color", icon && (await varNameOf(icon.fills[0])) === spec.icon);
     check(t + " glyph", !!icon && icon.characters.length > 0, JSON.stringify(icon && icon.characters));
@@ -4914,6 +4970,240 @@ async function verifyBenefitRow() {
     Object.keys(c.componentPropertyDefinitions || {}).some((k) => k.startsWith("Benefit")));
 }
 
+// --------------------------------------------------------------- Timer Banner
+//
+// Source: TimerBannerStack.swift (Running) and TimerDoneBanner.swift (Done).
+// Both are full-bleed burgundy and both carry a monospace readout, which is the
+// only place mono appears outside the canvas and the wheel sheets.
+//
+// Measured on device (iPhone 17, 402pt wide), light and dark:
+//   Running  52.00pt tall, fill #8B2E3F light / #C45068 dark, 20pt side gutters,
+//            pencil 32pt square with a white-at-50% border (#C5969F over burgundy).
+//   Done     300.00pt tall, same fill, content centred, 16pt between the two lines.
+// The library draws at 393pt, so the gutters and the pencil carry over unchanged
+// and only the flexible label width differs.
+
+const TIMER_BANNER_W = 393;
+
+async function buildTimerBanner() {
+  const page = await ensurePage("Timer Banner");
+  if (!(await clearOwned(page, "Timer Banner",
+    ["Timer Banner / Documentation", "timerbanner/row/Running", "timerbanner/row/Done"]))) return;
+  const v = await colorVars();
+
+  // The pencil is an Icon Button instance, so check it exists before drawing
+  // anything. If Icon Button could not be rebuilt this run — because something in
+  // the file still uses it — On Accent does not exist yet, and a banner drawn
+  // without its pencil would look finished and be wrong. Skip the component and
+  // say exactly what to do about it, rather than throwing and losing the run.
+  const onAccent = await getVariantOrNull("Icon Button", "Icon Button", "Style=On Accent");
+  if (!onAccent) {
+    SKIPPED.add("Timer Banner");
+    warn.push(
+      "Timer Banner was not built: it needs Icon Button's On Accent variant for the " +
+      "pencil, and Icon Button " +
+      (SKIPPED.has("Icon Button")
+        ? "could not be rebuilt this run (see above) — clear the instances it names, then run again."
+        : "has no On Accent variant. Re-run after Icon Button rebuilds successfully.")
+    );
+    return;
+  }
+  await figma.setCurrentPageAsync(page);
+
+  // --- Running: label, countdown, pencil, on one 52pt bar.
+  const running = figma.createComponent();
+  running.name = "State=Running";
+  running.layoutMode = "HORIZONTAL";
+  running.counterAxisAlignItems = "CENTER";
+  running.itemSpacing = 8;                       // HStack(spacing: 8)
+  running.paddingLeft = running.paddingRight = 20;
+  running.paddingTop = running.paddingBottom = 10;
+  running.resize(TIMER_BANNER_W, 52);
+  running.primaryAxisSizingMode = "FIXED";
+  running.counterAxisSizingMode = "FIXED";
+  running.fills = [boundPaint(v("Sous Color", "accent/primary"))];
+
+  const label = await textNode("Sous/Button", "Bake for 18 minutes until golden",
+    v("Sous Color", "text/onInverse"), "label");
+  running.appendChild(label);
+  label.layoutSizingHorizontal = "FILL";
+  label.textAutoResize = "NONE";
+  label.textTruncation = "ENDING";               // .lineLimit(1) + .truncationMode(.tail)
+  // Sous/Button uppercases, because almost every button label in the app is written
+  // in capitals. This one is not a button label — it is the step the timer belongs
+  // to, sentence case, straight from the recipe. The style is still the right one
+  // (the view really does use .sousButton), so the case is overridden here rather
+  // than the node being moved to a style that does not match the code.
+  label.textCase = "ORIGINAL";
+
+  const readout = await textNode("Sous/Timer Banner", "17:29",
+    v("Sous Color", "text/onInverse"), "readout");
+  running.appendChild(readout);
+
+  // Both sit on the same optical line. A text layer carries its line's leading, so
+  // a hugging layer rides high in a bar — the fix is to let each box fill the row's
+  // height and centre its own glyphs, rather than trusting the auto-layout to
+  // centre two boxes of different heights.
+  for (const t of [label, readout]) {
+    t.layoutSizingVertical = "FILL";
+    t.textAlignVertical = "CENTER";
+  }
+
+  const pencil = onAccent.createInstance();
+  // Layout already centres the 32pt square; naming it here keeps the three
+  // children on one line when someone edits the padding later.
+  await figma.setCurrentPageAsync(page);
+  pencil.name = "adjust";
+  running.appendChild(pencil);
+  page.appendChild(running);
+
+  // --- Done: the 300pt panel that takes over the bottom of the screen.
+  const done = figma.createComponent();
+  done.name = "State=Done";
+  done.layoutMode = "VERTICAL";
+  done.primaryAxisAlignItems = "CENTER";
+  done.counterAxisAlignItems = "CENTER";
+  done.itemSpacing = 16;                         // VStack(spacing: 16)
+  done.resize(TIMER_BANNER_W, 300);
+  done.primaryAxisSizingMode = "FIXED";
+  done.counterAxisSizingMode = "FIXED";
+  done.fills = [boundPaint(v("Sous Color", "accent/primary"))];
+
+  const heading = await textNode("Sous/Title", "BAKE FOR 18 MINUTES UNTIL GOLDEN",
+    v("Sous Color", "text/onInverse"), "heading");
+  done.appendChild(heading);
+  heading.layoutSizingHorizontal = "FILL";
+  heading.textAutoResize = "HEIGHT";
+  heading.textAlignHorizontal = "CENTER";
+
+  const doneReadout = await textNode("Sous/Readout Large", "TIMER DONE [18:00]",
+    v("Sous Color", "text/onInverse"), "done-readout");
+  done.appendChild(doneReadout);
+  doneReadout.textAlignHorizontal = "CENTER";
+  page.appendChild(done);
+
+  const set = figma.combineAsVariants([running, done], page);
+  set.name = "Timer Banner";
+
+  // Four text properties, not two. A shared TEXT property forces one styling
+  // across every variant bound to it, and these variants disagree: Running's
+  // label is Sous/Button while Done's heading is Sous/Title. So each property is
+  // bound to exactly one node. Sharing them would silently flatten the type.
+  const labelKey = set.addComponentProperty("Label", "TEXT", "Bake for 18 minutes until golden");
+  const readoutKey = set.addComponentProperty("Readout", "TEXT", "17:29");
+  const headingKey = set.addComponentProperty("Heading", "TEXT", "BAKE FOR 18 MINUTES UNTIL GOLDEN");
+  const doneReadoutKey = set.addComponentProperty("Done Readout", "TEXT", "TIMER DONE [18:00]");
+  label.componentPropertyReferences = { characters: labelKey };
+  readout.componentPropertyReferences = { characters: readoutKey };
+  heading.componentPropertyReferences = { characters: headingKey };
+  doneReadout.componentPropertyReferences = { characters: doneReadoutKey };
+
+  set.description =
+    "The running timer bar and the panel shown when a timer expires. Both full-bleed " +
+    "burgundy, both carrying a monospace readout — the only mono outside the canvas and " +
+    "the wheel sheets.\n\n" +
+    "Running is 52pt and sits above the bottom bar; up to three stack, newest first. " +
+    "Done is 300pt, extends under the home indicator, and its heading is uppercased by " +
+    "the view.\n\n" +
+    "Swift: TimerBannerStack.swift, TimerDoneBanner.swift.";
+
+  const PAD = 32, GAP = 32, cell = { w: TIMER_BANNER_W, h: 300 };
+  layoutGrid(set, () => 0, (c) => (c.name === "State=Running" ? 0 : 1), cell, PAD, GAP, 1, 2);
+  const doc = await docPanel(page, v, "Timer Banner", [
+    ["Sous/Body",
+      "A running timer shows the step it belongs to, the time left, and a pencil that opens the adjust sheet. Tapping the bar itself scrolls the canvas to that step. Up to three stack above the bottom bar, newest first — that stacking is layout, not part of this component.",
+      "text/primary", "description"],
+    ["Sous/Body",
+      "The countdown is monospace so the digits do not shuffle as it ticks from 9:59 to 10:00. That is the functional reason the spec's ban on monospace carves out numeric readouts.",
+      "text/primary", "usage"],
+    ["Sous/Body",
+      "The pencil is Icon Button's On Accent scheme: a 32pt square bordered in white at 50%. That border is a literal rather than a token — Sous has no white-on-accent chrome colour, the same gap the voice bar has.",
+      "text/primary", "usage"],
+    ["Sous/Body",
+      "Contrast: the Done panel sets 28pt and 32pt text, both large enough to clear AA on the dark-mode burgundy. The Running bar's 14pt label is the marginal case at 4.47:1 — a second instance of the open question in KnownIssues, not a new one. Built to the shipped colour.",
+      "text/primary", "usage"],
+  ]);
+  set.x = doc.x + doc.width + 80;
+  set.y = doc.y + 40;
+  await gridLabels(page, v, set, [], ["Running", "Done"], cell, PAD, GAP, "timerbanner");
+  COMPONENT_LOG.push("Timer Banner (" + set.children.length + " variants)");
+}
+
+async function verifyTimerBanner() {
+  // Deliberately not built this run — the warning already explains why, and
+  // holding it to the spec would turn an explained skip into a FAILED report.
+  if (SKIPPED.has("Timer Banner")) return;
+  const page = figma.root.children.find((p) => p.name === "Timer Banner");
+  if (!page) return check("component Timer Banner", false, "page missing");
+  await figma.setCurrentPageAsync(page);
+  const set = page.children.find((x) => x.type === "COMPONENT_SET" && x.name === "Timer Banner");
+  if (!set) return check("component Timer Banner", false, "component set missing");
+  check("Timer Banner variant count", set.children.length === 2, String(set.children.length));
+
+  const running = set.children.find((x) => x.name === "State=Running");
+  const done = set.children.find((x) => x.name === "State=Done");
+  check("Timer Banner Running is 52pt tall", !!running && running.height === 52,
+    running && String(running.height));
+  check("Timer Banner Done is 300pt tall", !!done && done.height === 300,
+    done && String(done.height));
+  for (const [t, c] of [["Running", running], ["Done", done]]) {
+    check("Timer Banner " + t + " is burgundy",
+      !!c && (await varNameOf(c.fills[0])) === "accent/primary");
+  }
+  check("Timer Banner Running has 20pt side gutters",
+    !!running && running.paddingLeft === 20 && running.paddingRight === 20,
+    running && running.paddingLeft + "/" + running.paddingRight);
+
+  // The readouts must stay monospace — that is the whole reason these two screens
+  // are exceptions to the no-monospace rule.
+  const styles = await figma.getLocalTextStylesAsync();
+  const monoOf = (name) => {
+    const s = styles.find((x) => x.name === name);
+    return s && /Mono|Menlo/.test(s.fontName.family);
+  };
+  const readout = running && running.findOne((x) => x.name === "readout");
+  const doneReadout = done && done.findOne((x) => x.name === "done-readout");
+  for (const [t, node, style] of [["Running", readout, "Sous/Timer Banner"],
+                                  ["Done", doneReadout, "Sous/Readout Large"]]) {
+    check("Timer Banner " + t + " readout uses " + style,
+      !!node && node.textStyleId === (styles.find((s) => s.name === style) || {}).id);
+  }
+
+  // Every piece of text on both variants sits on burgundy, so all of it is white.
+  for (const [t, c] of [["Running", running], ["Done", done]]) {
+    if (!c) continue;
+    for (const node of c.findAll((x) => x.type === "TEXT")) {
+      check("Timer Banner " + t + " " + node.name + " is white",
+        (await varNameOf(node.fills[0])) === "text/onInverse");
+    }
+  }
+
+  const pencil = running && running.findOne((x) => x.name === "adjust");
+  check("Timer Banner pencil is an Icon Button instance",
+    !!pencil && pencil.type === "INSTANCE", pencil && pencil.type);
+
+  // The label and the countdown read as one line, so both boxes fill the row and
+  // centre their own glyphs. Leaving either to hug makes it ride high on the leading.
+  const bannerLabel = running && running.findOne((x) => x.name === "label");
+  for (const [n, node] of [["label", bannerLabel], ["readout", readout]]) {
+    check("Timer Banner " + n + " is vertically centred",
+      !!node && node.textAlignVertical === "CENTER", node && node.textAlignVertical);
+  }
+  // The label is the recipe step, not a button label: sentence case, even though
+  // it borrows Sous/Button's metrics. Uppercasing it here would also make it wide
+  // enough to truncate when the real bar does not.
+  check("Timer Banner label is not uppercased",
+    !!bannerLabel && bannerLabel.textCase === "ORIGINAL", bannerLabel && bannerLabel.textCase);
+
+  // The four text properties must stay four: collapsing Label and Heading onto one
+  // shared property would force Sous/Button and Sous/Title to the same styling.
+  const props = Object.keys(set.componentPropertyDefinitions || {});
+  for (const want of ["Label", "Readout", "Heading", "Done Readout"]) {
+    check("Timer Banner has a " + want + " text property",
+      props.some((k) => k.split("#")[0] === want), props.join(", "));
+  }
+}
+
 // ------------------------------------------------------------- Sign In screen
 
 async function buildSignInScreen() {
@@ -6136,6 +6426,8 @@ const COMPONENTS = [
     build: buildAppleSignInButton, verify: verifyAppleSignInButton },
   { name: "Benefit Row", page: "Benefit Row", sets: ["Benefit Row"],
     build: buildBenefitRow, verify: verifyBenefitRow },
+  { name: "Timer Banner", page: "Timer Banner", sets: ["Timer Banner"],
+    build: buildTimerBanner, verify: verifyTimerBanner },
   { name: "Recipe Canvas", page: "Screens", sets: [], build: buildRecipeCanvas, verify: verifyRecipeCanvas },
   { name: "Chat", page: "Screens", sets: [], build: buildChatScreen, verify: verifyChatScreen },
   { name: "Zero State", page: "Screens", sets: [], build: buildZeroStateScreen, verify: verifyZeroStateScreen },

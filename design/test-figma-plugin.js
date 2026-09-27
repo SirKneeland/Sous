@@ -100,8 +100,13 @@ class Node {
   remove() {
     if (this.parent) this.parent._children = this.parent._children.filter((c) => c !== this);
     this.parent = null;
-    const mark = (n) => { n.removed = true; n._children.forEach(mark); };
-    mark(this);   // a deleted frame takes its instances with it, as in Figma
+    // Real Figma marks only the node you removed. Instances *inside* it keep
+    // removed = false and still show up in getInstancesAsync(), orphaned — their
+    // parent chain no longer reaches a page. Observed in the operator's file on
+    // 2026-09-27, where 9 such Icon Button instances blocked a rebuild and the
+    // report could only call them "unknown page". The stub used to mark
+    // descendants too, which was more generous than Figma and hid the bug.
+    this.removed = true;
   }
   resize(w, h) { this.width = w; this.height = h; }
   resizeWithoutConstraints(w, h) { this.width = w; this.height = h; }
@@ -373,6 +378,17 @@ const MAC = { "New York": ["Bold"], "SF Pro": ["Regular", "Semibold", "Bold", "M
               "SF Mono": ["Regular", "Semibold", "Bold"], Inter: ["Regular"] };
 const BROWSER = { Inter: ["Regular", "Semi Bold", "Bold", "Medium"] };
 
+// A live instance is one a user can actually see: its parent chain reaches a page.
+// Pushing a bare { mainComponent } models an orphan, not a live instance, and since
+// 2026-09-27 the plugin correctly ignores those.
+function placeInstance(figma, mainComponent, pageName) {
+  const page = figma.root.children.find((p) => p.name === pageName) || figma.root.children[0];
+  const inst = { type: "INSTANCE", name: "instance", mainComponent: mainComponent,
+                 removed: false, parent: page };
+  figma._instances.push(inst);
+  return inst;
+}
+
 let failures = 0;
 function expect(label, condition, detail) {
   if (condition) {
@@ -521,8 +537,10 @@ function expect(label, condition, detail) {
     const collapsed = sh.children.find((c) => c.name === "State=Collapsed").findOne((x) => x.name === "chevron");
     expect("Collapsed chevron turned -90°", collapsed.rotation === -90, String(collapsed.rotation));
 
+    // Icon Button gained a fourth scheme, On Accent, with the timer banner: the
+    // 32pt square on burgundy rather than on cream.
     expect("report lists the chrome components",
-      /Icon Button \(3 variants\)/.test(report) && /Recipe Title \(2 variants\)/.test(report), report);
+      /Icon Button \(4 variants\)/.test(report) && /Recipe Title \(2 variants\)/.test(report), report);
 
     // Sign In / Paywall — the billing-and-onboarding pair, added 2026-09-24.
     expect("report lists the sign-in and paywall pieces",
@@ -551,6 +569,45 @@ function expect(label, condition, detail) {
 
     // Cap Reached — built entirely from the Paywall's parts, which is the point of it.
     expect("report lists the Cap Reached screen", /Cap Reached screen/.test(report), report);
+
+    // Timer Banner — the running bar and the done panel, measured on device.
+    expect("report lists the Timer Banner", /Timer Banner \(2 variants\)/.test(report), report);
+    const tbSet = figma.root.children.find((p) => p.name === "Timer Banner").children
+      .find((n) => n.type === "COMPONENT_SET");
+    const tbRunning = tbSet.children.find((c) => c.name === "State=Running");
+    const tbDone = tbSet.children.find((c) => c.name === "State=Done");
+    expect("Timer Banner heights match the device: 52pt running, 300pt done",
+      tbRunning.height === 52 && tbDone.height === 300,
+      tbRunning.height + " / " + tbDone.height);
+    expect("the running banner's pencil is an Icon Button instance, not a redrawn square",
+      !!tbRunning.findOne((x) => x.name === "adjust" && x.type === "INSTANCE"));
+    // On Accent's border is white at 50% and deliberately unbound — Sous has no
+    // white-on-accent chrome token. If someone later binds it to a colour variable
+    // this fails, which is the point: that would be inventing a token by accident.
+    const onAccent = figma.root.children.find((p) => p.name === "Icon Button").children
+      .find((n) => n.type === "COMPONENT_SET").children.find((c) => c.name === "Style=On Accent");
+    expect("On Accent is a 32pt square bordered in unbound white at 50%",
+      onAccent.width === 32 && onAccent.height === 32 &&
+      onAccent.strokes[0].opacity === 0.5 && onAccent.strokes[0].color.r === 1 &&
+      !(onAccent.strokes[0].boundVariables && onAccent.strokes[0].boundVariables.color),
+      JSON.stringify(onAccent.strokes[0]));
+    // The label and countdown must read as one line, and the label must stay in
+    // sentence case — it is the recipe step, not a button label, even though it
+    // borrows Sous/Button's metrics.
+    const tbLabel = tbRunning.findOne((x) => x.name === "label");
+    const tbReadout = tbRunning.findOne((x) => x.name === "readout");
+    expect("banner label and countdown are both vertically centred",
+      tbLabel.textAlignVertical === "CENTER" && tbReadout.textAlignVertical === "CENTER",
+      tbLabel.textAlignVertical + " / " + tbReadout.textAlignVertical);
+    expect("the banner label is not uppercased",
+      tbLabel.textCase === "ORIGINAL", String(tbLabel.textCase));
+    // Four separate text properties, not two shared ones: Running's label is
+    // Sous/Button and Done's heading is Sous/Title, and a shared TEXT property
+    // would force one styling across both.
+    const tbProps = Object.keys(tbSet.componentPropertyDefinitions || {}).map((k) => k.split("#")[0]);
+    expect("Timer Banner keeps its four text properties separate",
+      ["Label", "Readout", "Heading", "Done Readout"].every((n) => tbProps.includes(n)),
+      tbProps.join(", "));
 
     // Picker Sheet — the three wheel sheets collapsed into one component.
     expect("report lists the Picker Sheet", /Picker Sheet \(2 variants\)/.test(report), report);
@@ -679,7 +736,7 @@ function expect(label, condition, detail) {
 
     // Once something uses the Button, the plugin must refuse to rebuild it.
     const liveSet = page.children.find((n) => n.type === "COMPONENT_SET");
-    figma._instances.push({ mainComponent: liveSet.children[0] });
+    placeInstance(figma, liveSet.children[0], "Button");
     const guarded = await run(null, { figma, state });
     expect("in-use Button is left alone", page.children.includes(liveSet), "set was replaced");
     expect("report explains why and where", /not rebuilt: 1 instance\(s\) still use it/.test(guarded.report), guarded.report);
@@ -744,6 +801,78 @@ function expect(label, condition, detail) {
     expect("everything else still verifies", /^VERIFIED/m.test(report), report);
   }
 
+  console.log("\n6e. An in-use Icon Button must not take the whole import down with it");
+  {
+    // This is the operator's real file on 2026-09-27: Icon Button had instances
+    // placed by hand, so it could not be rebuilt, so its new On Accent variant
+    // never appeared — and Timer Banner, which instances it, threw and aborted
+    // the run after the tokens had landed but before any component did.
+    const { figma, state } = await run({ allowModes: false, fonts: MAC });
+    const ibSet = figma.root.children.find((p) => p.name === "Icon Button").children
+      .find((n) => n.type === "COMPONENT_SET");
+    // Pin an instance on it and drop the variant this run would have added, which
+    // is exactly the state a stale file is in before the plugin runs.
+    placeInstance(figma, ibSet.children[0], "Icon Button");
+    const onAccent = ibSet.children.find((c) => c.name === "Style=On Accent");
+    if (onAccent) ibSet.children.splice(ibSet.children.indexOf(onAccent), 1);
+
+    const blocked = await run(null, { figma, state });
+    expect("the import still completes instead of aborting",
+      !/import failed/.test(blocked.report), blocked.report);
+    expect("it still verifies rather than reporting FAILED",
+      /^VERIFIED/m.test(blocked.report), blocked.report);
+    expect("the report says Icon Button was not rebuilt, and where",
+      /Icon Button was not rebuilt: 1 instance\(s\) still use it/.test(blocked.report),
+      blocked.report);
+    expect("the report says Timer Banner was skipped, and why",
+      /Timer Banner was not built: it needs Icon Button's On Accent variant/.test(blocked.report),
+      blocked.report);
+    expect("a half-built Timer Banner is never left behind",
+      !/Timer Banner \(\d+ variants\)/.test(blocked.report), blocked.report);
+  }
+
+  console.log("\n6g. Instances orphaned inside a deleted screen must not block a rebuild");
+  {
+    // The operator's file, 2026-09-27: the generated screens are cleared at the
+    // start of every run, and the Buttons, Icon Buttons and Badges inside them are
+    // then orphaned — Figma leaves them removed = false and still lists them, so
+    // they looked like live users of those components and blocked all three. The
+    // report could only call them "unknown page", which is the tell.
+    const { figma, state } = await run({ allowModes: false, fonts: MAC });
+    const ibSet = figma.root.children.find((p) => p.name === "Icon Button").children
+      .find((n) => n.type === "COMPONENT_SET");
+    const screens = figma.root.children.find((p) => p.name === "Screens");
+    const screen = screens.children[0];
+    const orphan = { type: "INSTANCE", name: "hamburger", mainComponent: ibSet.children[0],
+                     removed: false, parent: screen };
+    figma._instances.push(orphan);
+    screen.remove();                        // as clearGeneratedScreens does each run
+
+    expect("Figma leaves the orphan looking alive", orphan.removed === false);
+    const after = await run(null, { figma, state });
+    expect("an orphaned instance does not block the rebuild",
+      !/Icon Button was not rebuilt/.test(after.report), after.report);
+    expect("Icon Button rebuilds with all four schemes",
+      /Icon Button \(4 variants\)/.test(after.report), after.report);
+    expect("and Timer Banner builds off the back of it",
+      /Timer Banner \(2 variants\)/.test(after.report), after.report);
+    expect("the report no longer says 'unknown page'",
+      !/unknown page/.test(after.report), after.report);
+  }
+
+  console.log("\n6f. A genuine failure still names itself in the report");
+  {
+    // The abort the operator saw printed only "at getVariant(...)" with no message,
+    // which is unactionable. Whatever throws, the message must reach the report.
+    const { report } = await run({ allowModes: true, fonts: MAC }, null, (code) =>
+      code.replace("async function buildTimerBanner() {",
+        "async function buildTimerBanner() { throw new Error('a very specific explosion');"));
+    expect("a thrown error's message reaches the report",
+      /a very specific explosion/.test(report), report);
+    expect("the report still says how far it got",
+      /Progress before the failure/.test(report), report);
+  }
+
   console.log("\n6d. Retiring the three old row pages (as they exist in SousWork)");
   {
     const { figma, state } = makeFigma({ allowModes: false, fonts: MAC });
@@ -780,7 +909,7 @@ function expect(label, condition, detail) {
     const variant = new Node("COMPONENT", figma);
     variant.name = "State=To Do";
     set.appendChild(variant);
-    figma._instances.push({ mainComponent: variant });
+    placeInstance(figma, variant, "Step Row");
     p._loaded = false;
     const kept = await run(null, { figma, state });
     expect("in-use old page is kept", figma.root.children.some((x) => x.name === "Step Row"));

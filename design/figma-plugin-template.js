@@ -416,10 +416,16 @@ function buildReport(result) {
     await verifyComponents();
     report = buildReport(result);
   } catch (err) {
+    // Figma's sandbox hands back a stack whose first line is often just the frame,
+    // so the message has to be printed explicitly or the report says only "at
+    // getVariant(...)" and the operator has nothing to act on.
+    const message = (err && err.message) ? err.message : String(err);
     report =
-      "SOUS DESIGN TOKENS — import failed\n\n" +
-      (err && err.stack ? err.stack : String(err)) +
-      "\n\nProgress before the failure: " + (log.join(", ") || "none") + ".";
+      "SOUS DESIGN TOKENS — import failed\n\n" + message + "\n\n" +
+      (err && err.stack ? err.stack : "") +
+      "\n\nProgress before the failure: " + (log.join(", ") || "none") + "." +
+      (COMPONENT_LOG.length ? "\nComponents built: " + COMPONENT_LOG.join(", ") + "." : "") +
+      (warn.length ? "\n\nWarnings so far:\n" + warn.map((w) => "  - " + w).join("\n") : "");
   }
 
   console.log(report);

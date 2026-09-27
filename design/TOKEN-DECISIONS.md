@@ -317,13 +317,14 @@ the operator's list, not from a sweep of the codebase.
 
 *Covered:* recipe canvas, chat sheet, zero state, history drawer, settings, patch review,
 voice bar, import chooser, preferences, **sign in**, **paywall**, **cap reached**,
-**the three wheel sheets** (one **Picker Sheet** component), **memories** (full and empty).
+**the three wheel sheets** (one **Picker Sheet** component), **memories** (full and empty),
+**timer banners** (one **Timer Banner** component, running and done).
 
 *Not yet in the library — worth a pass, roughly in order of how often a user meets them:*
 
 | Screen / surface | Source | Why it matters |
 |---|---|---|
-| **Timer banners** | `TimerBannerStack`, `TimerDoneBanner` | The only monospace readouts outside the canvas |
+| ~~**Timer banners**~~ | `TimerBannerStack`, `TimerDoneBanner` | **Built 2026-09-27** — see decision 17 |
 | **Import: the other modes** | `Import/RecipeImportSheet.swift` | Camera, library, paste, loading and error states — only the chooser is built |
 | **Photo acquisition** | `Acquisition/PhotoAcquisitionSheet.swift` | Camera/library picker sheet |
 | **Mise en place confirmation** | `RecipeCanvasView` (modal) | Small modal, uses the Small checkbox that nothing else uses |
@@ -420,8 +421,58 @@ component in those cases, not the halves.
 `design/test-figma-plugin.js`: a shared TEXT property forces one styling across every variant
 bound to it; attaching one flattens per-character styling; paint-level opacity is ignored on a
 variable-bound colour (tint the layer instead); an instance is named after the component set,
-not the variant; a page must be loaded before its children can be read; and text layers carry
-the line's leading, so a hugging layer sits high in a bar.
+not the variant; a page must be loaded before its children can be read; text layers carry
+the line's leading, so a hugging layer sits high in a bar; and **a component that anything
+instances cannot be rebuilt, so a component built *from* another must tolerate a variant
+that does not exist yet rather than throwing** — the first run of Timer Banner took the
+whole import down for exactly this reason (2026-09-27), losing every component after it.
+
+**And the one the stub had wrong (2026-09-27).** Removing a node in Figma marks only that
+node: instances *inside* it keep `removed = false` and stay in `getInstancesAsync()`,
+orphaned. Since the plugin clears the generated screens at the start of every run, the
+Buttons, Icon Buttons and Badges inside them looked like live users and blocked their own
+components from rebuilding — the giveaway being a report that could only name them
+"unknown page". Liveness is now a walk up the parent chain to a real page, not the
+`removed` flag. The test stub had been marking descendants too, which was kinder than
+Figma and hid this for as long as the library was only tested against the stub.
+
+### 17. Timer banners are one component, and their text properties are not shared (2026-09-27)
+
+The running bar and the done panel look like two screens and are one idea: full-bleed
+burgundy carrying a monospace readout. They became one **Timer Banner** component with a
+Running / Done variant.
+
+Measured on device before drawing anything, in both modes:
+
+| | Light | Dark |
+|---|---|---|
+| Fill | `#8B2E3F` | `#C45068` |
+| Running bar | 52.00pt tall, 20pt side gutters | same |
+| Pencil | 32pt square, border `#C5969F` (white at 50%) | same geometry |
+| Done panel | 300.00pt tall, content centred, 16pt between lines | same |
+
+**Three things this settled.**
+
+**The pencil is Icon Button, not a new component.** It is Bordered's exact geometry — a 32pt
+square — on burgundy instead of cream. Icon Button gained an **On Accent** scheme rather
+than the library gaining a fourth near-identical square. That scheme's border is white at
+50%, deliberately left as a literal: Sous has no white-on-accent chrome token, the voice bar
+has the same gap, and inventing one in Figma that the app does not have would be a lie in the
+mirror. Logged in `KnownIssues.md` as one gap with three sites.
+
+**The two variants cannot share text properties.** Running's label is `Sous/Button`; Done's
+heading is `Sous/Title`. A shared TEXT property forces one styling across every variant bound
+to it — already a hard-won note in this file — so the component carries **four** properties,
+each bound to exactly one node, rather than two shared ones that would silently flatten the
+type. The harness asserts all four, so a future tidy-up that collapses them fails.
+
+**The stack is layout, not a component.** Up to three banners stack, newest first. That lives
+on the screen, and the component's notes say so.
+
+**On contrast.** The Done panel sets 28pt and 32pt, both comfortably large text, so the
+dark-mode burgundy is fine there. The Running bar's 14pt label is the marginal 4.47:1 case —
+a **second visible instance** of the open question below, not a new one. Built to the shipped
+colour, and noted on the component.
 
 ---
 

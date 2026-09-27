@@ -294,6 +294,16 @@ Two of the 16 bare labels are worth a separate look, since a label using the *bu
 token is usually either a mislabelled button or the wrong token: `ChatSheetView`'s section
 headers, and `SettingsView.swift:183` (the OG badge caption that still carries letter-spacing).
 
+**A third, found 2026-09-27** while building the Figma Timer Banner: the running banner's
+label (`TimerBannerStack.swift`) uses `.sousButton` but is not a button label at all — it is
+the recipe step the timer belongs to, in sentence case straight from the recipe. It showed up
+because the Figma `Sous/Button` style encodes ALL CAPS (nearly every real button label is
+written in capitals), so the component rendered the step shouting, and wide enough to
+truncate when the real bar does not. The component overrides the case and keeps the style,
+since the view genuinely does use `.sousButton` — but the honest fix is that this label wants
+a 14pt semibold sentence-case role, which `sousHeading3` already is. Grouped with the other
+two rather than changed alone.
+
 Two clusters are expected **not** to fit, and should stay bespoke unless a reason appears:
 
 - **The picker sheets** (`AdjustTimerSheet`, `DurationPickerSheet`, `ServingsPickerSheet`)
@@ -365,6 +375,17 @@ destructive action appears (account deletion is the likely trigger).
 The voice bar similarly uses `Color.white.opacity(0.08 / 0.15 / 0.2)` directly for its
 button fills, borders and waveform. Only the 0.2 border is tokenised
 (`voice/exitBorder`); the rest are literals.
+
+**A third site, found 2026-09-27** while building the Figma Timer Banner: the pencil on a
+running timer banner (`TimerBannerStack.swift`) is bordered with `Color.white.opacity(0.5)`.
+Measured on device it renders `#C5969F` in light mode — white at 50% over `#8B2E3F`.
+
+These three are one gap, not three bugs: **Sous has no token for white-on-accent chrome.**
+Every control that sits on a burgundy fill has to invent its own border and fill opacity, so
+each one picks a different number. The Figma **Icon Button → On Accent** variant records the
+0.5 as a literal for exactly this reason, and its component notes say so rather than
+inventing a token in Figma that the app does not have. Worth deciding a small
+`accent/chromeBorder` family when the voice bar is next opened up.
 
 ---
 

@@ -44,3 +44,5 @@ dev_memory/
 # Local PRDs / planning docs
 BillingPRD.md
 docs/BackendEngineeringPlan.md
+design/MIGRATION-PLAN.md
+docs/DesignSystemHandoff.md
