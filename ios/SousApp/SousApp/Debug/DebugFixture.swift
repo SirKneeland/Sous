@@ -26,6 +26,10 @@ import SousCore
 ///   -sous-fixture memoryToast             the memory proposal toast, over the chat
 ///   -sous-fixture importLoading           the import sheet's loading crawl
 ///   -sous-fixture photoFailed             the photo sheet's "could not attach" state
+///   -sous-fixture miseEnPlace             a recipe with no mise en place, so the
+///                                         MISE EN PLACE trigger and its modal are reachable
+///   -sous-fixture attachPreparing         the composer's attachment strip, mid-preparation
+///   -sous-fixture attachFailed            the composer's attachment strip, after a failure
 ///   -sous-fixture-entitlement byok        entitlement to fake (default: subscriber)
 enum DebugFixture {
 
@@ -53,6 +57,17 @@ enum DebugFixture {
         /// without a corrupt image — it needs JPEG encoding to fail, which cannot be
         /// provoked from the UI.
         case photoFailed
+        /// The canvas recipe with its mise en place section stripped, so the
+        /// MISE EN PLACE trigger appears. The confirmation modal only offers itself
+        /// once — a "don't show again" tick writes to AppStorage — so this fixture
+        /// clears that flag too, and the modal is one tap away every launch.
+        case miseEnPlace
+        /// The attachment strip while an image is being prepared. Real preparation
+        /// takes a few hundred milliseconds, so the state cannot be photographed.
+        case attachPreparing
+        /// The attachment strip after preparation failed. Needs a corrupt image to
+        /// reach for real, which cannot be provoked from the UI.
+        case attachFailed
     }
 
     /// A few saved memories, so the Memories screen has something in it. Normally these

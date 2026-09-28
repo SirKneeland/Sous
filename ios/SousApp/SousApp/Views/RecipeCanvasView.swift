@@ -1252,6 +1252,13 @@ private struct MiseEnPlaceConfirmationModal: View {
             }
             .buttonStyle(.plain)
 
+            // One bordered box split by a hairline — the same shape as the wheel
+            // sheets' CANCEL/START row, and now the same construction. CANCEL used to
+            // carry its own full border *inside* this one: invisible, since both are
+            // ink, but a stroke straddles its path, so the left half rendered
+            // fractionally larger than the right. The divider does that job properly.
+            // Padding moved 14 -> 16 to match the wheel sheets and to sit on the
+            // spacing scale, per decision 13.
             HStack(spacing: 0) {
                 Button {
                     onCancel()
@@ -1260,10 +1267,14 @@ private struct MiseEnPlaceConfirmationModal: View {
                         .font(.sousButton)
                         .foregroundStyle(Color.sousText)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
+                        .padding(.vertical, 16)
                 }
                 .buttonStyle(.plain)
-                .overlay(Rectangle().stroke(Color.sousText, lineWidth: 1))
+
+                Rectangle()
+                    .fill(Color.sousSeparator)
+                    .frame(width: 1)
+                    .frame(height: 52)
 
                 Button {
                     onConfirm()
@@ -1272,7 +1283,7 @@ private struct MiseEnPlaceConfirmationModal: View {
                         .font(.sousButton)
                         .foregroundStyle(Color.sousBackground)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
+                        .padding(.vertical, 16)
                         .background(Color.sousText)
                 }
                 .buttonStyle(.plain)

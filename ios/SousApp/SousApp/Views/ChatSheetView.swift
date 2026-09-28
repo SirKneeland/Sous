@@ -89,6 +89,13 @@ struct ChatSheetView: View {
         .onAppear {
             // -sous-fixture photoFailed opens the photo sheet on its failure state.
             if store.debugForcePhotoFailure { showPhotoSheet = true }
+            // The attachment-strip fixtures park the composer on a state that is
+            // otherwise too brief (preparing) or too rare (failed) to photograph.
+            switch store.debugForceAttachmentState {
+            case "preparing": photoSend.attachmentState = .preparing
+            case "failed":    photoSend.attachmentState = .failed(.invalidImageData)
+            default:          break
+            }
         }
 #endif
     }

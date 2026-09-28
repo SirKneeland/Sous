@@ -320,7 +320,9 @@ voice bar, import chooser, preferences, **sign in**, **paywall**, **cap reached*
 **the three wheel sheets** (one **Picker Sheet** component), **memories** (full and empty),
 **timer banners** (one **Timer Banner** component, running and done), **import's paste,
 loading and error modes** (plus a shared **Import Sheet Header** and a **Progress Bar**),
-**photo acquisition** (the **Camera Overlay Button** and the failure sheet).
+**photo acquisition** (the **Camera Overlay Button** and the failure sheet),
+**the mise en place modal** (and the **Split Action Bar** it shares with the wheel sheets),
+**the chat sheet's furniture in full** (**Attachment Strip** and **Quoted Context Chip**).
 
 *Not yet in the library — worth a pass, roughly in order of how often a user meets them:*
 
@@ -329,8 +331,8 @@ loading and error modes** (plus a shared **Import Sheet Header** and a **Progres
 | ~~**Timer banners**~~ | `TimerBannerStack`, `TimerDoneBanner` | **Built 2026-09-27** — see decision 17 |
 | ~~**Import: the other modes**~~ | `Import/RecipeImportSheet.swift` | **Built 2026-09-27** — see decision 18 |
 | ~~**Photo acquisition**~~ | `Acquisition/PhotoAcquisitionSheet.swift` | **Built 2026-09-27** — see decision 19 |
-| **Mise en place confirmation** | `RecipeCanvasView` (modal) | Small modal, uses the Small checkbox that nothing else uses |
-| **In-chat furniture — part done** | `ChatSheetView` | The memory toast is its own component and the thinking/streaming bubbles became Chat Bubble variants (2026-09-25). The generate pill is now a Primary Button. **Left: the attachment strip and the quoted-context chip.** |
+| ~~**Mise en place confirmation**~~ | `RecipeCanvasView` (modal) | **Built 2026-09-27** — see decision 20 |
+| ~~**In-chat furniture**~~ | `ChatSheetView` | **Finished 2026-09-27.** The memory toast, the Chat Bubble variants and the generate pill landed earlier; the attachment strip and quoted-context chip complete it — see decision 21. |
 | **API key callout** | `Views/APIKeyCallout.swift` | Onboarding nudge for BYOK users |
 
 *Deliberately out of scope:* everything under `Debug/` and `RowLayoutDebugPreview` — developer
@@ -600,6 +602,73 @@ the accent.
 Sous has no **on-dark-chrome** family, and no button style for one. Each surface picks its own
 numbers. That is now a named gap rather than three separate oddities — logged in
 `KnownIssues.md`, and worth settling the next time any of the three is opened up.
+
+### 20. Split Action Bar exists, the modal uses it, and the wheel sheets cannot (2026-09-27)
+
+Two actions in one ink-bordered box, split by a hairline — a quiet left, a committing right.
+The shape appears in the three wheel sheets and in the mise en place modal, and it is the
+reason both skipped the shared **Button**: the box is the component, not the halves.
+
+**Extracting it found a defect in the modal.** Its CANCEL carried a full border *inside* the
+outer border. Invisible, since both are ink — but SwiftUI centres a stroke on its path, so the
+left half rendered fractionally wider than the right. The wheel sheets had always used a
+proper `separator` hairline. The modal now does too.
+
+**And a padding mismatch.** The modal was at 14pt vertical padding against the wheel sheets'
+16, so the same control measured **44.33pt** in one place and **50.67pt** in another. 14 is not
+on the spacing scale; 16 is. Per decision 13 — spacing you touch snaps to the nearest step —
+the modal moved to 16. **Both now measure 50.67pt on device.**
+
+**Two tones, and they are not interchangeable.** Burgundy is for an action that changes a
+timer or a serving count; ink is for one that restructures the recipe. A burgundy OK on this
+modal would promise something smaller than it does.
+
+---
+
+**The retro-fit was attempted and reverted, and the reason is a real Figma limit.**
+
+The plan was for **Picker Sheet** to instance the new component. It cannot. Picker Sheet
+exposes **Left** and **Right** as its own text properties, which is exactly what lets one
+component serve all three wheel sheets (CANCEL/SET, CANCEL/START, PAUSE/START). A component
+property can only be bound to a layer **inside that component**, never forwarded into a nested
+instance, and the plugin API has no way to expose a nested instance's own properties. Instancing
+the bar would have traded three sheets for one.
+
+So the wheel sheets keep drawing the bar inline, the modal uses the component, and the shape is
+described once. The harness asserts Picker Sheet still has Left and Right, so a future attempt
+at this fails loudly rather than quietly costing the collapse.
+
+**This is worth knowing beyond this component:** any shared sub-part that a parent needs to
+re-label cannot be a nested instance in this library. It is the same wall the shared TEXT
+property hit from the other side.
+
+### 21. The chat furniture did not collapse, and that is the answer (2026-09-27)
+
+The coverage audit called the in-chat furniture "the remaining cluster most likely to collapse
+the same way" the timer sheets did. It didn't, and the reason is worth keeping.
+
+**Attachment Strip** is three variants — Previewing, Preparing, Failed. There is a fourth
+state, idle, which draws nothing, so it is not a variant; the harness asserts it never becomes
+one. **Quoted Context Chip** is a single component with two text properties.
+
+They look like they belong together — both are one-line strips above the composer — but they
+answer different questions. One is about a file you attached; the other is about a row you
+tapped. They share no geometry: the strip spans the full width at a 16pt gutter with a
+hairline under it, the chip sits *inside* the text field with a stripe down its edge. Merging
+them would have produced one component with a switch and nothing shared underneath.
+
+**Two details worth recording:**
+
+The chip's burgundy stripe is an **absolute overlay**, not a child of the row. As a child it
+stretches the layout — which is why the Swift uses `.overlay(alignment: .leading)` rather than
+an `HStack`. The component does the same and says so.
+
+The strip's **failed state is the only place in Sous where burgundy means "error"**, and its
+way out — DISMISS — is muted grey. That is the same shape as the import error screen's old
+CANCEL, which was moved off grey-on-grey in September precisely because it made a live escape
+wear the disabled costume. It is recorded here rather than changed, because both halves of it
+belong to the open destructive-colour question below: what red means in Sous, and what an
+error message should be coloured when there is no red.
 
 ---
 

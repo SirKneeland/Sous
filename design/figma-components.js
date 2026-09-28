@@ -5363,6 +5363,453 @@ async function verifyImportSheetHeader() {
   }
 }
 
+// ----------------------------------------------------------- Attachment Strip
+//
+// Source: ChatSheetView.attachmentStrip. A row above the composer while a photo is
+// attached, being prepared, or after preparation failed. There is a fourth state —
+// idle — which draws nothing, so it is not a variant.
+//
+// Measured on device: 48pt thumbnail at a 16pt gutter, 8pt above and below, and a
+// hairline under the row. The preparing and failed states were reached with
+// -sous-fixture attachPreparing / attachFailed; real preparation is too brief to
+// photograph and a real failure needs a corrupt image.
+
+const ATTACH_STRIP_W = 393;
+const ATTACH_SPECS = [
+  { name: "State=Previewing" },
+  { name: "State=Preparing" },
+  { name: "State=Failed" },
+];
+
+async function buildAttachmentStrip() {
+  const page = await ensurePage("Attachment Strip");
+  const owned = ["Attachment Strip / Documentation"]
+    .concat(ATTACH_SPECS.map((s) => "attach/row/" + s.name.replace("State=", "")));
+  if (!(await clearOwned(page, "Attachment Strip", owned))) return;
+  const v = await colorVars();
+
+  const comps = [];
+  for (const spec of ATTACH_SPECS) {
+    const c = figma.createComponent();
+    c.name = spec.name;
+    c.layoutMode = "VERTICAL";
+    c.itemSpacing = 0;
+    c.resize(ATTACH_STRIP_W, 10);
+    c.primaryAxisSizingMode = "AUTO";
+    c.counterAxisSizingMode = "FIXED";
+    c.fills = [boundPaint(v("Sous Color", "background/canvas"))];
+
+    const row = hFrame("row");
+    row.counterAxisAlignItems = "CENTER";
+    row.paddingLeft = row.paddingRight = 16;
+    row.paddingTop = row.paddingBottom = 8;
+    c.appendChild(row);
+    row.layoutSizingHorizontal = "FILL";
+
+    if (spec.name === "State=Previewing") {
+      row.itemSpacing = 10;
+      // The thumbnail is the user's photo, so the component reserves its square
+      // rather than inventing a picture: 48pt, bordered like every other Sous edge.
+      const thumb = figma.createRectangle();
+      thumb.name = "thumbnail";
+      thumb.resize(48, 48);
+      thumb.fills = [boundPaint(v("Sous Color", "background/surface"))];
+      thumb.strokes = [boundPaint(v("Sous Color", "border/subtle"))];
+      thumb.strokeAlign = "INSIDE";
+      thumb.setBoundVariable("strokeWeight", v("Sous Border", "border/hairline"));
+      row.appendChild(thumb);
+
+      const label = await textNode("Sous/Caption", "PHOTO ATTACHED",
+        v("Sous Color", "text/muted"), "label");
+      row.appendChild(label);
+
+      const spacer = figma.createFrame();
+      spacer.name = "spacer";
+      spacer.fills = [];
+      row.appendChild(spacer);
+      spacer.layoutGrow = 1;
+      spacer.layoutSizingVertical = "FIXED";
+      spacer.resize(10, 1);
+
+      const action = await textNode("Sous/Caption", "REMOVE",
+        v("Sous Color", "text/accent"), "action");
+      row.appendChild(action);
+
+    } else if (spec.name === "State=Preparing") {
+      row.itemSpacing = 8;
+      // iOS draws the spinner. Reserved, not redrawn — the same treatment the
+      // wheel picker and Apple's sign-in button get.
+      const spinner = figma.createEllipse();
+      spinner.name = "spinner (iOS draws this)";
+      spinner.resize(16, 16);
+      spinner.fills = [];
+      spinner.strokes = [boundPaint(v("Sous Color", "text/muted"))];
+      spinner.strokeAlign = "INSIDE";
+      spinner.setBoundVariable("strokeWeight", v("Sous Border", "border/hairline"));
+      row.appendChild(spinner);
+
+      const label = await textNode("Sous/Caption", "PREPARING IMAGE...",
+        v("Sous Color", "text/muted"), "label");
+      row.appendChild(label);
+
+    } else {
+      row.itemSpacing = 8;
+      const label = await textNode("Sous/Caption", "IMAGE COULD NOT BE PREPARED.",
+        v("Sous Color", "text/accent"), "label");
+      row.appendChild(label);
+
+      const spacer = figma.createFrame();
+      spacer.name = "spacer";
+      spacer.fills = [];
+      row.appendChild(spacer);
+      spacer.layoutGrow = 1;
+      spacer.layoutSizingVertical = "FIXED";
+      spacer.resize(10, 1);
+
+      const action = await textNode("Sous/Caption", "DISMISS",
+        v("Sous Color", "text/muted"), "action");
+      row.appendChild(action);
+    }
+
+    const rule = hairlineRow(v, "rule");
+    c.appendChild(rule.row);
+    rule.row.layoutSizingHorizontal = "FILL";
+    rule.hair.layoutSizingHorizontal = "FILL";
+
+    page.appendChild(c);
+    comps.push(c);
+  }
+
+  const set = figma.combineAsVariants(comps, page);
+  set.name = "Attachment Strip";
+  set.description =
+    "The row above the composer once a photo is involved. Previewing is a photo ready " +
+    "to send; Preparing is the brief moment while it is compressed; Failed is when that " +
+    "goes wrong.\n\n" +
+    "There is a fourth state, idle, which draws nothing — so it is not a variant.\n\n" +
+    "Swift: ChatSheetView.attachmentStrip.";
+
+  const PAD = 32, GAP = 32, cell = { w: ATTACH_STRIP_W, h: 72 };
+  layoutGrid(set, () => 0,
+    (c) => ATTACH_SPECS.findIndex((sp) => sp.name === c.name), cell, PAD, GAP, 1, 3);
+  const doc = await docPanel(page, v, "Attachment Strip", [
+    ["Sous/Body",
+      "Every state is one line of caption text at a 16pt gutter with a hairline under it, so the composer below never moves more than the row's own height.",
+      "text/primary", "description"],
+    ["Sous/Body",
+      "Failed puts the message in burgundy and the way out in muted grey. That is the only place in Sous where the accent is used to mean an error, and it is the same pattern the import error screen was moved away from — worth settling alongside the destructive colour question, not changed here on its own.",
+      "text/primary", "usage"],
+  ]);
+  set.x = doc.x + doc.width + 80;
+  set.y = doc.y + 40;
+  await gridLabels(page, v, set, [],
+    ["Previewing", "Preparing", "Failed"], cell, PAD, GAP, "attach");
+  COMPONENT_LOG.push("Attachment Strip (" + set.children.length + " variants)");
+}
+
+async function verifyAttachmentStrip() {
+  if (SKIPPED.has("Attachment Strip")) return;
+  const page = figma.root.children.find((p) => p.name === "Attachment Strip");
+  if (!page) return check("component Attachment Strip", false, "page missing");
+  await figma.setCurrentPageAsync(page);
+  const set = page.children.find((x) => x.type === "COMPONENT_SET" && x.name === "Attachment Strip");
+  if (!set) return check("component Attachment Strip", false, "component set missing");
+  check("Attachment Strip variant count", set.children.length === 3, String(set.children.length));
+
+  for (const spec of ATTACH_SPECS) {
+    const c = set.children.find((x) => x.name === spec.name);
+    if (!c) { check("Attachment Strip " + spec.name, false, "missing"); continue; }
+    const t = "Attachment Strip " + spec.name.replace("State=", "");
+    const row = c.findOne((x) => x.name === "row");
+    check(t + " sits at the 16pt gutter",
+      !!row && row.paddingLeft === 16 && row.paddingRight === 16,
+      row && row.paddingLeft + "/" + row.paddingRight);
+    check(t + " closes with a hairline", !!c.findOne((x) => x.name === "rule"));
+  }
+  const preview = set.children.find((x) => x.name === "State=Previewing");
+  const thumb = preview && preview.findOne((x) => x.name === "thumbnail");
+  check("Attachment Strip thumbnail is a bordered 48pt square",
+    !!thumb && thumb.width === 48 && thumb.height === 48 && thumb.strokes.length === 1,
+    thumb && thumb.width + "x" + thumb.height);
+  const failed = set.children.find((x) => x.name === "State=Failed");
+  const failLabel = failed && failed.findOne((x) => x.name === "label");
+  check("Attachment Strip's failure message is burgundy",
+    !!failLabel && (await varNameOf(failLabel.fills[0])) === "text/accent");
+}
+
+// ------------------------------------------------------- Quoted Context Chip
+//
+// Source: ChatSheetView.QuotedContextChip. Appears above the text field when the
+// user swipes a canvas row and picks Ask Sous, so the message carries which
+// ingredient or step it is about.
+//
+// Measured on device: a 3pt burgundy stripe down the leading edge, a hairline
+// border, and the quoted text truncated to one line.
+
+async function buildQuotedContextChip() {
+  const page = await ensurePage("Quoted Context Chip");
+  if (!(await clearOwned(page, "Quoted Context Chip",
+    ["Quoted Context Chip / Documentation"]))) return;
+  const v = await colorVars();
+
+  const c = figma.createComponent();
+  c.name = "Quoted Context Chip";
+  c.layoutMode = "HORIZONTAL";
+  c.counterAxisAlignItems = "CENTER";
+  c.itemSpacing = 0;
+  c.resize(QUOTED_CHIP_W, 10);
+  c.primaryAxisSizingMode = "FIXED";
+  c.counterAxisSizingMode = "AUTO";
+  c.fills = [boundPaint(v("Sous Color", "background/canvas"))];
+  c.strokes = [boundPaint(v("Sous Color", "border/subtle"))];
+  c.strokeAlign = "INSIDE";
+  c.setBoundVariable("strokeWeight", v("Sous Border", "border/hairline"));
+  page.appendChild(c);
+
+  const text = autoLayout("VERTICAL");
+  text.name = "text";
+  text.itemSpacing = 1;                      // VStack(spacing: 1)
+  text.counterAxisAlignItems = "MIN";
+  text.paddingLeft = 13;
+  text.paddingRight = 10;
+  text.paddingTop = text.paddingBottom = 4;
+  text.fills = [];
+  c.appendChild(text);
+  text.layoutGrow = 1;
+
+  const kind = await textNode("Sous/Caption", "INGREDIENT",
+    v("Sous Color", "text/accent"), "kind");
+  text.appendChild(kind);
+  kind.letterSpacing = { value: 0.8, unit: "PIXELS" };   // .kerning(0.8)
+
+  const quote = await textNode("Sous/Body", "4 chicken cutlets, pounded thin",
+    v("Sous Color", "text/muted"), "quote");
+  text.appendChild(quote);
+  quote.layoutSizingHorizontal = "FILL";
+  quote.textAutoResize = "NONE";
+  quote.layoutSizingVertical = "HUG";
+  quote.textTruncation = "ENDING";           // .lineLimit(1) + .truncationMode(.tail)
+
+  const dismiss = figma.createText();
+  dismiss.name = "dismiss";
+  dismiss.fontName = await loadIconFont();
+  dismiss.characters = sfSymbol("xmark");
+  dismiss.setBoundVariable("fontSize", v("Sous Icon Sizes", "icon/small"));
+  dismiss.fills = [boundPaint(v("Sous Color", "text/muted"))];
+  c.appendChild(dismiss);
+
+  // The stripe is an overlay, not a child: as a child it would stretch the row.
+  const stripe = figma.createRectangle();
+  stripe.name = "accent-stripe";
+  stripe.resize(3, 10);
+  stripe.fills = [boundPaint(v("Sous Color", "accent/primary"))];
+  c.appendChild(stripe);
+  stripe.layoutPositioning = "ABSOLUTE";
+  stripe.x = 0; stripe.y = 0;
+  stripe.constraints = { horizontal: "MIN", vertical: "STRETCH" };
+  stripe.resize(3, c.height);
+
+  const kindKey = c.addComponentProperty("Kind", "TEXT", "INGREDIENT");
+  const quoteKey = c.addComponentProperty("Quote", "TEXT", "4 chicken cutlets, pounded thin");
+  kind.componentPropertyReferences = { characters: kindKey };
+  quote.componentPropertyReferences = { characters: quoteKey };
+
+  c.description =
+    "What the next message is about. Appears above the text field after swiping a " +
+    "canvas row and choosing Ask Sous.\n\n" +
+    "Kind is INGREDIENT or STEP. Both are the same styling, which is why one text " +
+    "property can serve them.\n\n" +
+    "The burgundy stripe is an overlay sized to the chip, not a child of the row — as " +
+    "a child it would stretch the layout.\n\n" +
+    "Swift: ChatSheetView.QuotedContextChip.";
+  const doc = await docPanel(page, v, "Quoted Context Chip", [
+    ["Sous/Body",
+      "The quoted line is muted and truncated to one line: it is a reminder of what you tapped, not something to read. The burgundy stripe and label do the work of saying it is a quotation.",
+      "text/primary", "description"],
+    ["Sous/Body",
+      "It sits inside the composer's field, above the text you type, so dismissing it with the x leaves the message you were writing intact.",
+      "text/primary", "usage"],
+  ]);
+  c.x = doc.x + doc.width + 80;
+  c.y = doc.y + 40;
+  COMPONENT_LOG.push("Quoted Context Chip");
+}
+
+async function verifyQuotedContextChip() {
+  if (SKIPPED.has("Quoted Context Chip")) return;
+  const page = figma.root.children.find((p) => p.name === "Quoted Context Chip");
+  if (!page) return check("component Quoted Context Chip", false, "page missing");
+  await figma.setCurrentPageAsync(page);
+  const c = page.children.find((x) => x.type === "COMPONENT" && x.name === "Quoted Context Chip");
+  if (!c) return check("component Quoted Context Chip", false, "component missing");
+
+  const stripe = c.findOne((x) => x.name === "accent-stripe");
+  check("Quoted Context Chip has a 3pt burgundy stripe",
+    !!stripe && stripe.width === 3 && (await varNameOf(stripe.fills[0])) === "accent/primary",
+    stripe && String(stripe.width));
+  // Absolute, or it would stretch the row it sits in.
+  check("the stripe is an overlay, not a child of the row",
+    !!stripe && stripe.layoutPositioning === "ABSOLUTE", stripe && stripe.layoutPositioning);
+  const quote = c.findOne((x) => x.name === "quote");
+  check("the quoted line truncates rather than wrapping",
+    !!quote && quote.textTruncation === "ENDING", quote && quote.textTruncation);
+  check("the quoted line is muted", !!quote && (await varNameOf(quote.fills[0])) === "text/muted");
+  const kind = c.findOne((x) => x.name === "kind");
+  check("the kind label is burgundy", !!kind && (await varNameOf(kind.fills[0])) === "text/accent");
+  const props = Object.keys(c.componentPropertyDefinitions || {}).map((k) => k.split("#")[0]);
+  for (const want of ["Kind", "Quote"]) {
+    check("Quoted Context Chip has a " + want + " property", props.includes(want), props.join(", "));
+  }
+}
+
+// ------------------------------------------------------------ Split Action Bar
+//
+// Two actions inside one ink-bordered box, split by a hairline: a quiet left and a
+// committing right. The box is the component, not the halves — which is exactly why
+// the shared SwiftUI button skipped these.
+//
+// It appears three times: the wheel sheets (CANCEL/START, CANCEL/SET, PAUSE/START),
+// the mise en place modal (CANCEL/OK), and — differently modelled — the review bar.
+// Accent is the wheel sheets; Ink is the modal.
+//
+// Measured on device, both at 50.67pt tall after the modal was brought into line
+// (it had been 44.33 at 14pt padding, and carried a redundant border on its left
+// half — see decision 20).
+
+const QUOTED_CHIP_W = 269;   // the composer field's inner width
+const SPLIT_BAR_W = 353;   // 393 - 2x20pt gutter
+const SPLIT_BAR_SPECS = [
+  { name: "Tone=Accent", fill: "accent/primary", leftLabel: "text/accent",
+    rightLabel: "text/onInverse", left: "CANCEL", right: "START" },
+  { name: "Tone=Ink", fill: "background/inverse", leftLabel: "text/primary",
+    rightLabel: "text/inverse", left: "CANCEL", right: "OK" },
+];
+
+async function buildSplitActionBar() {
+  const page = await ensurePage("Split Action Bar");
+  const owned = ["Split Action Bar / Documentation"]
+    .concat(SPLIT_BAR_SPECS.map((s) => "splitbar/row/" + s.name.replace("Tone=", "")));
+  if (!(await clearOwned(page, "Split Action Bar", owned))) return;
+  const v = await colorVars();
+
+  const comps = [];
+  for (const spec of SPLIT_BAR_SPECS) {
+    const c = figma.createComponent();
+    c.name = spec.name;
+    c.layoutMode = "HORIZONTAL";
+    c.itemSpacing = 0;
+    c.counterAxisAlignItems = "CENTER";
+    c.resize(SPLIT_BAR_W, 10);
+    c.primaryAxisSizingMode = "FIXED";
+    c.counterAxisSizingMode = "AUTO";
+    c.fills = [];
+    c.strokes = [boundPaint(v("Sous Color", "border/strong"))];
+    c.strokeAlign = "INSIDE";
+    c.setBoundVariable("strokeWeight", v("Sous Border", "border/hairline"));
+    for (const k of ["topLeftRadius", "topRightRadius", "bottomLeftRadius", "bottomRightRadius"]) {
+      c.setBoundVariable(k, v("Sous Border", "radius/square"));
+    }
+
+    const half = async (name, fillToken, labelToken, text) => {
+      const f = figma.createFrame();
+      f.name = name;
+      f.layoutMode = "HORIZONTAL";
+      f.primaryAxisAlignItems = "CENTER";
+      f.counterAxisAlignItems = "CENTER";
+      f.primaryAxisSizingMode = "FIXED";
+      f.counterAxisSizingMode = "AUTO";
+      f.paddingTop = f.paddingBottom = 16;     // .padding(.vertical, 16)
+      f.fills = fillToken ? [boundPaint(v("Sous Color", fillToken))] : [];
+      c.appendChild(f);
+      f.layoutGrow = 1;
+      const label = await textNode("Sous/Button", text, v("Sous Color", labelToken), name + "-label");
+      f.appendChild(label);
+      return label;
+    };
+
+    const leftLabel = await half("left", null, spec.leftLabel, spec.left);
+
+    // A hairline, not a second border. The modal used to give its left half a full
+    // border inside this one — invisible, both being ink, but a stroke straddles its
+    // path so that half rendered fractionally wider than the other.
+    const divider = figma.createRectangle();
+    divider.name = "divider";
+    divider.resize(1, 52);
+    divider.fills = [boundPaint(v("Sous Color", "border/subtle"))];
+    c.appendChild(divider);
+
+    const rightLabel = await half("right", spec.fill, spec.rightLabel, spec.right);
+    page.appendChild(c);
+    comps.push(c);
+    c.setRelaunchData ? null : null;   // no-op; keeps the shape obvious
+  }
+
+  const set = figma.combineAsVariants(comps, page);
+  set.name = "Split Action Bar";
+  const leftKey = set.addComponentProperty("Left", "TEXT", "CANCEL");
+  const rightKey = set.addComponentProperty("Right", "TEXT", "START");
+  for (const c of set.children) {
+    const l = c.findOne((x) => x.name === "left-label");
+    const r = c.findOne((x) => x.name === "right-label");
+    if (l) l.componentPropertyReferences = { characters: leftKey };
+    if (r) r.componentPropertyReferences = { characters: rightKey };
+  }
+  set.description =
+    "Two actions in one bordered box, split by a hairline. The quiet action is on the " +
+    "left with no fill; the committing one is on the right, filled.\n\n" +
+    "Accent is the wheel sheets — CANCEL/START, CANCEL/SET, PAUSE/START. Ink is the " +
+    "mise en place modal's CANCEL/OK.\n\n" +
+    "The box is the component, not the halves. That is why these never moved onto the " +
+    "shared Button: a button has no notion of the seam between it and its neighbour.\n\n" +
+    "Swift: AdjustTimerSheet, DurationPickerSheet, ServingsPickerSheet, and the mise " +
+    "en place modal in RecipeCanvasView.";
+
+  const PAD = 32, GAP = 32, cell = { w: SPLIT_BAR_W, h: 60 };
+  layoutGrid(set, () => 0, (c) => (c.name === "Tone=Accent" ? 0 : 1), cell, PAD, GAP, 1, 2);
+  const doc = await docPanel(page, v, "Split Action Bar", [
+    ["Sous/Body",
+      "Both halves are the same width, so neither action is weighted by size — the fill does that instead. 50.7pt tall on device, in both tones.",
+      "text/primary", "description"],
+    ["Sous/Body",
+      "The two tones are not interchangeable. Burgundy is for an action that changes a timer or a serving count; ink is for one that restructures the recipe. A burgundy OK on the mise en place modal would promise something smaller than it does.",
+      "text/primary", "usage"],
+  ]);
+  set.x = doc.x + doc.width + 80;
+  set.y = doc.y + 40;
+  await gridLabels(page, v, set, [], ["Accent", "Ink"], cell, PAD, GAP, "splitbar");
+  COMPONENT_LOG.push("Split Action Bar (" + set.children.length + " variants)");
+}
+
+async function verifySplitActionBar() {
+  if (SKIPPED.has("Split Action Bar")) return;
+  const page = figma.root.children.find((p) => p.name === "Split Action Bar");
+  if (!page) return check("component Split Action Bar", false, "page missing");
+  await figma.setCurrentPageAsync(page);
+  const set = page.children.find((x) => x.type === "COMPONENT_SET" && x.name === "Split Action Bar");
+  if (!set) return check("component Split Action Bar", false, "component set missing");
+  check("Split Action Bar variant count", set.children.length === 2, String(set.children.length));
+
+  for (const spec of SPLIT_BAR_SPECS) {
+    const c = set.children.find((x) => x.name === spec.name);
+    if (!c) { check("Split Action Bar " + spec.name, false, "missing"); continue; }
+    const t = "Split Action Bar " + spec.name.replace("Tone=", "");
+    check(t + " is bordered", (c.strokes.length ? await varNameOf(c.strokes[0]) : null) === "border/strong");
+    const left = c.findOne((x) => x.name === "left");
+    const right = c.findOne((x) => x.name === "right");
+    // The left half must have NO fill and NO border of its own — that was the defect.
+    check(t + " left half has no fill", !!left && left.fills.length === 0);
+    check(t + " left half has no border of its own",
+      !!left && left.strokes.length === 0, left && JSON.stringify(left.strokes));
+    check(t + " right half is filled",
+      !!right && (await varNameOf(right.fills[0])) === spec.fill);
+    check(t + " halves are equal width", !!left && !!right &&
+      left.layoutGrow === 1 && right.layoutGrow === 1);
+    const divider = c.findOne((x) => x.name === "divider");
+    check(t + " is split by a hairline, not a second border",
+      !!divider && divider.width === 1 && (await varNameOf(divider.fills[0])) === "border/subtle");
+  }
+}
+
 // -------------------------------------------------------- Camera Overlay Button
 //
 // Source: PhotoAcquisitionSheet and RecipeImportSheet's camera mode — the same
@@ -6099,6 +6546,14 @@ async function buildPickerSheet() {
     c.appendChild(actionsPad);
     actionsPad.layoutSizingHorizontal = "FILL";
 
+    // Drawn inline, NOT as a Split Action Bar instance — deliberately, and it cost
+    // an attempt to find out why. Picker Sheet exposes Left and Right as its own
+    // text properties, which is what lets one component serve all three wheel
+    // sheets (CANCEL/SET, CANCEL/START, PAUSE/START). A component property can only
+    // be bound to a layer in the component itself, never forwarded into a nested
+    // instance, and the plugin API has no way to expose a nested instance's
+    // properties. Instancing the bar here would have traded three sheets for one.
+    // The shape is still described once, by the Split Action Bar component.
     const actions = hFrame("actions");
     actions.itemSpacing = 0;
     actions.counterAxisAlignItems = "CENTER";
@@ -6941,6 +7396,92 @@ async function buildPhotoAcquisitionScreens() {
   COMPONENT_LOG.push("Photo Acquisition Failed screen");
 }
 
+// ----------------------------------------------- Mise en place confirmation modal
+
+async function buildMiseEnPlaceModalScreen() {
+  const page = await ensurePage("Screens");
+  const v = await colorVars();
+  const { screen, card } = await importSheetCard(
+    page, v, "Mise en Place", 40 + 600 + 120 + (CANVAS_W + 80) * 19);
+  // A medium detent, not a full sheet: it covers the lower half of the canvas.
+  card.resize(CANVAS_W, Math.round(CANVAS_H * 0.52));
+  card.y = CANVAS_H - card.height;
+
+  const body = autoLayout("VERTICAL");
+  body.name = "modal";
+  body.itemSpacing = 24;                     // VStack(spacing: 24)
+  body.counterAxisAlignItems = "MIN";
+  body.paddingLeft = body.paddingRight = 24; // .padding(24)
+  body.paddingTop = body.paddingBottom = 24;
+  body.fills = [];
+  card.appendChild(body);
+  body.layoutSizingHorizontal = "FILL";
+
+  const intro = autoLayout("VERTICAL");
+  intro.name = "intro";
+  intro.itemSpacing = 12;                    // VStack(spacing: 12)
+  intro.counterAxisAlignItems = "MIN";
+  intro.fills = [];
+  body.appendChild(intro);
+  intro.layoutSizingHorizontal = "FILL";
+
+  const title = await textNode("Sous/Title", "MISE EN PLACE",
+    v("Sous Color", "text/primary"), "title");
+  intro.appendChild(title);
+
+  const blurb = await textNode("Sous/Body",
+    "Mise en place will move all prep work — chopping, measuring, preheating — to a " +
+    "dedicated section at the top of your recipe, so everything is ready before you " +
+    "start cooking.",
+    v("Sous Color", "text/primary"), "blurb");
+  intro.appendChild(blurb);
+  blurb.layoutSizingHorizontal = "FILL";
+  blurb.textAutoResize = "HEIGHT";
+
+  // The Small checkbox — the only place in the app that uses the 18pt size.
+  const optOut = hFrame("dont-show-again");
+  optOut.itemSpacing = 12;
+  optOut.counterAxisAlignItems = "CENTER";
+  body.appendChild(optOut);
+  optOut.layoutSizingHorizontal = "FILL";
+  const box = (await getVariant("Checkbox", "Checkbox",
+    "State=Unchecked, Size=Small")).createInstance();
+  await figma.setCurrentPageAsync(page);
+  box.name = "checkbox";
+  optOut.appendChild(box);
+  const optLabel = await textNode("Sous/Body", "Got it, don't show this again",
+    v("Sous Color", "text/primary"), "opt-out-label");
+  optOut.appendChild(optLabel);
+
+  const bar = (await getVariant("Split Action Bar", "Split Action Bar", "Tone=Ink")).createInstance();
+  await figma.setCurrentPageAsync(page);
+  bar.name = "actions";
+  body.appendChild(bar);
+  bar.layoutSizingHorizontal = "FILL";
+
+  await safeAreaGuides(screen, v);
+  COMPONENT_LOG.push("Mise en Place screen");
+}
+
+async function verifyMiseEnPlaceModalScreen() {
+  const page = figma.root.children.find((p) => p.name === "Screens");
+  if (!page) return check("Mise en Place screen", false, "Screens page missing");
+  await figma.setCurrentPageAsync(page);
+  const s = page.children.find((x) => x.name === "Mise en Place");
+  if (!s) return check("screen Mise en Place", false, "missing");
+
+  // Assembled from components, not redrawn — that is the test of the component set.
+  const bar = s.findOne((x) => x.name === "actions");
+  check("the modal uses the Split Action Bar component",
+    !!bar && bar.type === "INSTANCE", bar && bar.type);
+  const box = s.findOne((x) => x.name === "checkbox");
+  check("the modal uses the Small checkbox, the only place that size appears",
+    !!box && box.type === "INSTANCE", box && box.type);
+  const title = s.findOne((x) => x.name === "title");
+  check("the modal's title is the serif Title style",
+    !!title && (await varNameOf(title.fills[0])) === "text/primary");
+}
+
 async function verifyPhotoAcquisitionScreens() {
   const page = figma.root.children.find((p) => p.name === "Screens");
   if (!page) return check("Photo acquisition screens", false, "Screens page missing");
@@ -7170,6 +7711,12 @@ const COMPONENTS = [
     build: buildImportSheetHeader, verify: verifyImportSheetHeader },
   { name: "Progress Bar", page: "Progress Bar", sets: ["Progress Bar"],
     build: buildProgressBar, verify: verifyProgressBar },
+  { name: "Attachment Strip", page: "Attachment Strip", sets: ["Attachment Strip"],
+    build: buildAttachmentStrip, verify: verifyAttachmentStrip },
+  { name: "Quoted Context Chip", page: "Quoted Context Chip", sets: ["Quoted Context Chip"],
+    build: buildQuotedContextChip, verify: verifyQuotedContextChip },
+  { name: "Split Action Bar", page: "Split Action Bar", sets: ["Split Action Bar"],
+    build: buildSplitActionBar, verify: verifySplitActionBar },
   { name: "Camera Overlay Button", page: "Camera Overlay Button", sets: ["Camera Overlay Button"],
     build: buildCameraOverlayButton, verify: verifyCameraOverlayButton },
   { name: "Recipe Canvas", page: "Screens", sets: [], build: buildRecipeCanvas, verify: verifyRecipeCanvas },
@@ -7203,13 +7750,15 @@ const COMPONENTS = [
     build: buildImportErrorScreen, verify: () => {} },
   { name: "Photo Acquisition", page: "Screens", sets: [],
     build: buildPhotoAcquisitionScreens, verify: verifyPhotoAcquisitionScreens },
+  { name: "Mise en Place", page: "Screens", sets: [],
+    build: buildMiseEnPlaceModalScreen, verify: verifyMiseEnPlaceModalScreen },
 ];
 
 // Generated screens are rebuilt from the library on every run, so they are
 // cleared first: otherwise their instances would mark every component "in use"
 // and block the component rebuilds. Anything you want to keep, duplicate — a
 // copy is not generated, so it is never touched.
-const GENERATED_SCREENS = ["Recipe Canvas", "Chat", "Zero State", "Sidebar", "Settings", "Change Suggestion", "Voice Mode", "Talk to a Recipe", "Preferences", "Sign In", "Paywall", "Cap Reached", "Memories", "Memories Empty", "Import Paste", "Import Loading", "Import Error", "Photo Acquisition", "Photo Acquisition Failed"];
+const GENERATED_SCREENS = ["Recipe Canvas", "Chat", "Zero State", "Sidebar", "Settings", "Change Suggestion", "Voice Mode", "Talk to a Recipe", "Preferences", "Sign In", "Paywall", "Cap Reached", "Memories", "Memories Empty", "Import Paste", "Import Loading", "Import Error", "Photo Acquisition", "Photo Acquisition Failed", "Mise en Place"];
 
 async function clearGeneratedScreens() {
   const page = figma.root.children.find((p) => p.name === "Screens");

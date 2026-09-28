@@ -109,6 +109,9 @@ final class AppStore: ObservableObject {
     /// Set only by `-sous-fixture photoFailed`, so the chat sheet opens the photo
     /// sheet straight onto its failure state. Never set in the real app.
     @Published var debugForcePhotoFailure: Bool = false
+    /// Set only by the attachment-strip fixtures, so the composer can be parked on a
+    /// state that is otherwise too brief or too rare to photograph.
+    @Published var debugForceAttachmentState: String? = nil
 #endif
     /// Non-nil when an import attempt failed. Observed by RecipeImportSheet to switch into error state.
     @Published var importError: String? = nil
@@ -660,8 +663,10 @@ final class AppStore: ObservableObject {
         // Memories screen reachable and the LLM context realistic.
         if memories.isEmpty { memories = DebugFixture.memories() }
         hasCanvas = fixture != .explore && fixture != .memoryToast && fixture != .photoFailed
+            && fixture != .attachPreparing && fixture != .attachFailed
         canGenerateRecipe = fixture == .explore
-        originalRecipe = (fixture == .explore || fixture == .memoryToast || fixture == .photoFailed)
+        originalRecipe = (fixture == .explore || fixture == .memoryToast || fixture == .photoFailed
+            || fixture == .attachPreparing || fixture == .attachFailed)
             ? nil : DebugFixture.originalRecipe()
         chatTranscript = [
             ChatMessage(role: .assistant,
@@ -688,6 +693,21 @@ final class AppStore: ObservableObject {
             )
         case .canvas:
             uiState = .recipeOnly(recipe: recipe)
+        case .miseEnPlace:
+            // Strip the section so the trigger shows, and clear the "don't show
+            // again" flag so the modal is reachable on every launch.
+            var stripped = recipe
+            stripped.miseEnPlace = nil
+            UserDefaults.standard.set(false, forKey: "miseEnPlaceConfirmed")
+            uiState = .recipeOnly(recipe: stripped)
+        case .attachPreparing, .attachFailed:
+            // The strip lives in the chat, so the chat has to be on screen.
+            uiState = .chatOpen(
+                recipe: Recipe(id: UUID(), version: 1, title: "New Recipe"),
+                draftUserText: "",
+                hidden: HiddenContext()
+            )
+            debugForceAttachmentState = (fixture == .attachPreparing) ? "preparing" : "failed"
         case .photoFailed:
             // The photo sheet lives in the chat, so the chat has to be on screen.
             uiState = .chatOpen(

@@ -122,7 +122,8 @@ struct ContentView: View {
                 case .capReached:
                     capSummary = DebugFixture.cappedUsage()
                     billingPresentation = .capReached
-                case .canvas, .review, .explore, .memoryToast, .importLoading, .photoFailed:
+                case .canvas, .review, .explore, .memoryToast, .importLoading, .photoFailed,
+                     .miseEnPlace, .attachPreparing, .attachFailed:
                     // importLoading presents itself: applyDebugFixture sets
                     // isShowingImportSheet, which the canvas already observes.
                     break

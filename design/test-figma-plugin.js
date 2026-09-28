@@ -640,6 +640,62 @@ function expect(label, condition, detail) {
       .find((n) => n.type === "COMPONENT");
     expect("the progress bar is 2pt, as measured on device", bar.height === 2, String(bar.height));
 
+    // The chat sheet's last furniture: the attachment strip and the quoted chip.
+    expect("report lists the chat furniture",
+      /Attachment Strip \(3 variants\)/.test(report) && /Quoted Context Chip/.test(report),
+      report);
+    const stripSet = figma.root.children.find((p) => p.name === "Attachment Strip").children
+      .find((n) => n.type === "COMPONENT_SET");
+    // Idle draws nothing, so it must NOT become a fourth, empty variant.
+    expect("the attachment strip has three variants, not four",
+      stripSet.children.length === 3 &&
+      !stripSet.children.some((c) => /Idle/.test(c.name)),
+      stripSet.children.map((c) => c.name).join(", "));
+    const chip = figma.root.children.find((p) => p.name === "Quoted Context Chip").children
+      .find((n) => n.type === "COMPONENT");
+    const stripe = chip.findOne((x) => x.name === "accent-stripe");
+    // Absolute, or it stretches the row — the note the component carries.
+    expect("the chip's stripe is an absolute overlay 3pt wide",
+      stripe.layoutPositioning === "ABSOLUTE" && stripe.width === 3,
+      stripe.layoutPositioning + " w" + stripe.width);
+    const chipProps = Object.keys(chip.componentPropertyDefinitions || {}).map((k) => k.split("#")[0]);
+    expect("the chip carries Kind and Quote as separate text properties",
+      chipProps.includes("Kind") && chipProps.includes("Quote"), chipProps.join(", "));
+
+    // Mise en place: the modal, and the Split Action Bar it shares with the wheel sheets.
+    expect("report lists the mise en place pieces",
+      /Split Action Bar \(2 variants\)/.test(report) && /Mise en Place screen/.test(report),
+      report);
+    const splitSet = figma.root.children.find((p) => p.name === "Split Action Bar").children
+      .find((n) => n.type === "COMPONENT_SET");
+    for (const tone of ["Tone=Accent", "Tone=Ink"]) {
+      const bar = splitSet.children.find((c) => c.name === tone);
+      const left = bar.findOne((x) => x.name === "left");
+      const right = bar.findOne((x) => x.name === "right");
+      // The left half must carry no border of its own. The mise en place modal used
+      // to draw one inside the outer border: invisible, both being ink, but a stroke
+      // straddles its path so that half rendered fractionally wider.
+      expect(tone + ": the quiet half has no border of its own",
+        left.strokes.length === 0, JSON.stringify(left.strokes));
+      expect(tone + ": both halves grow equally",
+        left.layoutGrow === 1 && right.layoutGrow === 1);
+      expect(tone + ": split by a 1pt hairline",
+        !!bar.findOne((x) => x.name === "divider" && x.width === 1));
+    }
+    const mep = screensPage.children.find((x) => x.name === "Mise en Place");
+    expect("the modal is assembled from components, not redrawn",
+      !!mep.findOne((x) => x.name === "actions" && x.type === "INSTANCE") &&
+      !!mep.findOne((x) => x.name === "checkbox" && x.type === "INSTANCE"));
+    // Picker Sheet keeps drawing its own bar on purpose: a component property cannot
+    // be forwarded into a nested instance, so instancing would cost it Left/Right
+    // and with them its ability to serve all three wheel sheets.
+    const wheelSet = figma.root.children.find((p) => p.name === "Picker Sheet").children
+      .find((n) => n.type === "COMPONENT_SET");
+    const pickerProps = Object.keys(wheelSet.componentPropertyDefinitions || {})
+      .map((k) => k.split("#")[0]);
+    expect("Picker Sheet keeps its own Left and Right properties",
+      pickerProps.includes("Left") && pickerProps.includes("Right"), pickerProps.join(", "));
+
     // Photo acquisition: the one control Sous draws inside Apple's viewfinder.
     expect("report lists the photo acquisition pieces",
       /Camera Overlay Button/.test(report) && /Photo Acquisition screen/.test(report) &&

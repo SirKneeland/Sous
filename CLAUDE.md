@@ -18,14 +18,17 @@ This means:
 
 Always read the relevant docs before starting work:
 
-- `PRD.md` — product vision, UX model, interaction rules
-- `Milestones.md` — what's done, what's current, what's next. Never implement future milestones.
-- `ArchGuardrails.md` — non-negotiable architecture invariants. Read before touching any patch, state, or LLM code.
-- `PatchingRules.md` — the full patch contract
-- `StateModel.md` — authoritative state definitions
-- `UserStories.md` — acceptance criteria for every user-facing behavior
-- `DesignSpec.md` — visual design decisions, component specs, and UX rules. Read before touching any view or layout.
-- `PersonalityModes.md` — detailed behavioral spec for Minimal/Normal/Playful personality modes and their LLM prompt rules.
+- `docs/PRD.md` — product vision, UX model, interaction rules
+- `docs/Milestones.md` — what's done, what's current, what's next. Never implement future milestones.
+- `docs/ArchGuardrails.md` — non-negotiable architecture invariants. Read before touching any patch, state, or LLM code.
+- `docs/PatchingRules.md` — the full patch contract
+- `docs/StateModel.md` — authoritative state definitions
+- `docs/UserStories.md` — acceptance criteria for every user-facing behavior
+- `docs/DesignSpec.md` — visual design decisions, component specs, and UX rules. Read before
+  touching any view or layout. It is the *how to apply* document; the canonical values live in
+  `design/tokens.json` and the decision history in `design/TOKEN-DECISIONS.md`. See
+  "Design System Rules" below for the workflow.
+- `docs/PersonalityModes.md` — detailed behavioral spec for Minimal/Normal/Playful personality modes and their LLM prompt rules.
 - `CODEBASE.md` — repo structure, module map, test commands. Read before navigating the codebase.
 - `docs/KnownIssues.md` — running log of deferred bugs, flaky tests, and cleanup items. Read when working in an area that may be affected.
 - `docs/BugTriage.md` — the in-app bug report backlog: how reports are filed from the phone, and the `backend/scripts/bugs.sh` commands for listing, reading, and resolving them. **Read its "what is NOT a bug" section before interpreting any diagnostic** — several honest quirks (a reconstructed prompt, two disagreeing timestamps, truncated captures) read like defects and are not. Read when the operator asks to pull or work through bug submissions.
@@ -77,6 +80,59 @@ The short version:
 - PatchSets targeting a stale version must be rejected
 
 Violating any of these is a critical bug, not a style issue.
+
+---
+
+## Design System Rules
+
+Sous has a real design system as of September 2026. Colour, type, icon sizing and buttons are
+decided **once**, in files, and enforced by a script. Spacing is deliberately **not** — see
+decision 13 in `design/TOKEN-DECISIONS.md`.
+
+**The map:**
+
+| File | What it is |
+|---|---|
+| `design/tokens.json` | Canonical palette, type scale and icon scale. What Figma imports. |
+| `ios/SousApp/SousApp/Views/SousTheme.swift` | The Swift expression of the same values, plus the small shared components. |
+| `design/check-tokens.py` | Proves the two agree, and that no view hardcodes a colour or font size. |
+| `design/TOKEN-DECISIONS.md` | Numbered decision log. Every deviation and every "why" lives here. |
+| `design/MIGRATION-PLAN.md` | Which surfaces are migrated and which are still un-migrated vibes. |
+| `figma/` | The local Figma plugin that writes the library. |
+
+### The loop for any new feature or view change
+
+1. **Read first:** `docs/DesignSpec.md`, plus the "Still open" and "What is enforced now"
+   sections of `design/TOKEN-DECISIONS.md`.
+2. **Build from what exists.** `SousButton` (five styles — `primary`, `inverse`, `secondary`,
+   `secondaryAccent`, `text`), `SousButtonLabel`, `SousCheckbox`, `SousSectionLabel`, `SousRule`,
+   `SousIconButton`. Colour from `Color.sous*`, type from `Font.sous*`, icons from the five-step
+   `SousIconSize`.
+3. **If nothing fits, that is a design decision, not a code decision.** Do not add a sixth button
+   style, a bespoke hex, or an inline `.system(size:)` because one screen wants one. Add the token
+   to **both** `tokens.json` and `SousTheme.swift`, then write it up as the next numbered decision
+   in `TOKEN-DECISIONS.md` with the reasoning. If a screen cannot be assembled from components,
+   the components are wrong — that is the test working.
+4. **Run both checks** before declaring the task done:
+
+   ```
+   python3 design/check-tokens.py
+   node design/test-figma-plugin.js
+   ```
+
+5. **Verify in the Simulator in both light and dark mode** (see "Verification"), then push any new
+   or changed component to Figma with the **local plugin** in `figma/` — see `figma/README.md`.
+
+### Never
+
+- Hardcode a colour, or write `.system(size:)` in a view. `check-tokens.py` fails on both.
+- Change a value in `SousTheme.swift` without changing `design/tokens.json` to match.
+- Add a component variant or token without logging it in `TOKEN-DECISIONS.md`.
+- **Use the Figma MCP tools for this work.** The local plugin does all the writing; the MCP
+  allowance is roughly twenty calls per *month* and is not to be spent on routine library updates.
+- Assume a surface is migrated. Check `design/MIGRATION-PLAN.md` — surfaces 3–6 (photo
+  acquisition onward) were not started as of 2026-09-27, so expect pre-system code there and say
+  so rather than quietly matching it.
 
 ---
 
@@ -199,8 +255,18 @@ xcrun simctl launch <udid> com.donutindustries.SousApp -sous-fixture canvas
   ranged timer, RESET / RESTORE ORIGINAL buttons)
 - `-sous-fixture review` — recipe + pending patch, landing on the change-review screen
 - `-sous-fixture explore` — no canvas, generate pill showing
+- `-sous-fixture importLoading` — the import sheet's loading crawl
+- `-sous-fixture photoFailed` — the photo sheet's "could not attach" state
+- `-sous-fixture miseEnPlace` — a recipe with no mise en place, so the trigger and its modal
+  are reachable
+- `-sous-fixture attachPreparing` / `attachFailed` — the composer's attachment strip
 - `-sous-fixture-entitlement byok|subscriber|trialing|grace|soft_wall` — defaults to
   `subscriber`; drives the OG badge and the billing walls
+
+The five added during the design-system migration all exist for the same reason: the state is
+either too brief to photograph (the loading crawl, image preparation) or needs data the UI
+cannot produce (a corrupt image, a recipe with no mise en place). `DebugFixture.Kind` is the
+full list.
 
 The fixture never fakes a `PatchValidationResult` — the validator runs for real, so a bad
 fixture surfaces as an invalid patch rather than a review screen that lies.

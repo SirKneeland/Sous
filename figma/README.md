@@ -56,7 +56,7 @@ and names every token or variant that's wrong, which is enough to fix it without
 | **Bottom Bar** | Voice Yes / No — TALK TO SOUS, the mic button, and the pull-down chevron. |
 | **Icon Button** | Accent (44pt burgundy hamburger), Inverse (44pt ink settings), Bordered (32pt), On Accent (32pt on burgundy — the timer banner's pencil). |
 | **Recipe Title** | Servings Yes / No. Properties: Title, Servings. |
-| **Screens** | Recipe Canvas, Chat, Zero State, Sidebar, Settings, Change Suggestion, Voice Mode, Talk to a Recipe, Preferences, Sign In, Paywall, Cap Reached, Memories, Memories Empty, Import Paste, Import Loading, Import Error, Photo Acquisition, Photo Acquisition Failed — all on the **Screens** page, assembled only from components. |
+| **Screens** | Recipe Canvas, Chat, Zero State, Sidebar, Settings, Change Suggestion, Voice Mode, Talk to a Recipe, Preferences, Sign In, Paywall, Cap Reached, Memories, Memories Empty, Import Paste, Import Loading, Import Error, Photo Acquisition, Photo Acquisition Failed, Mise en Place — all on the **Screens** page, assembled only from components. |
 | **Form Kit** | Text Field, Text Area, Toggle, Stepper, Back Button. |
 | **Voice Bar** | Ready, Listening, Thinking, Speaking, Patch pending. |
 | **Diff Row / Review Bar** | Removed / Added; Ready / Invalid × Safe area. |
@@ -65,6 +65,9 @@ and names every token or variant that's wrong, which is enough to fix it without
 | **Recent Recipe Row / Wordmark / Import Option Row** | Sidebar and import. |
 | **Picker Sheet** | Wheels One / Two. The wheel sheet behind servings, a new timer and adjusting a running one. Properties: Title, Left, Right, Readout, Footer. |
 | **Apple Sign In Button** | Scheme Light / Dark. Apple's own control at Sous's size and shape (345 × 50, square via Apple's `cornerRadius` API) — a reserved space, never a redrawn Apple mark. |
+| **Attachment Strip** | Previewing / Preparing / Failed. The row above the composer once a photo is involved. Idle draws nothing, so it is not a variant. |
+| **Quoted Context Chip** | What the next message is about, after swiping a canvas row and choosing Ask Sous. Properties: Kind, Quote. |
+| **Split Action Bar** | Tone Accent / Ink. Two actions in one bordered box split by a hairline — the wheel sheets' CANCEL/START and the mise en place modal's CANCEL/OK. Properties: Left, Right. |
 | **Camera Overlay Button** | The one control Sous draws inside Apple's camera viewfinder — round, 50pt, switching to the photo library. Its fill stands in for a system blur. |
 | **Import Sheet Header** | Back Yes / No. The row every import mode shares — back button, title, CANCEL. Property: Title. Its back button is an Icon Button with the glyph swapped, not a second square. |
 | **Progress Bar** | The 2pt indeterminate line on the import loading screen. |
