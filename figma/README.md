@@ -56,7 +56,7 @@ and names every token or variant that's wrong, which is enough to fix it without
 | **Bottom Bar** | Voice Yes / No — TALK TO SOUS, the mic button, and the pull-down chevron. |
 | **Icon Button** | Accent (44pt burgundy hamburger), Inverse (44pt ink settings), Bordered (32pt), On Accent (32pt on burgundy — the timer banner's pencil). |
 | **Recipe Title** | Servings Yes / No. Properties: Title, Servings. |
-| **Screens** | Recipe Canvas, Chat, Zero State, Sidebar, Settings, Change Suggestion, Voice Mode, Talk to a Recipe, Preferences, Sign In, Paywall, Cap Reached, Memories, Memories Empty — all on the **Screens** page, assembled only from components. |
+| **Screens** | Recipe Canvas, Chat, Zero State, Sidebar, Settings, Change Suggestion, Voice Mode, Talk to a Recipe, Preferences, Sign In, Paywall, Cap Reached, Memories, Memories Empty, Import Paste, Import Loading, Import Error — all on the **Screens** page, assembled only from components. |
 | **Form Kit** | Text Field, Text Area, Toggle, Stepper, Back Button. |
 | **Voice Bar** | Ready, Listening, Thinking, Speaking, Patch pending. |
 | **Diff Row / Review Bar** | Removed / Added; Ready / Invalid × Safe area. |
@@ -65,6 +65,8 @@ and names every token or variant that's wrong, which is enough to fix it without
 | **Recent Recipe Row / Wordmark / Import Option Row** | Sidebar and import. |
 | **Picker Sheet** | Wheels One / Two. The wheel sheet behind servings, a new timer and adjusting a running one. Properties: Title, Left, Right, Readout, Footer. |
 | **Apple Sign In Button** | Scheme Light / Dark. Apple's own control at Sous's size and shape (345 × 50, square via Apple's `cornerRadius` API) — a reserved space, never a redrawn Apple mark. |
+| **Import Sheet Header** | Back Yes / No. The row every import mode shares — back button, title, CANCEL. Property: Title. Its back button is an Icon Button with the glyph swapped, not a second square. |
+| **Progress Bar** | The 2pt indeterminate line on the import loading screen. |
 | **Timer Banner** | Running / Done. The burgundy bar above the bottom bar while a timer runs, and the 300pt panel when one expires. Properties: Label, Readout, Heading, Done Readout — four, not two, because the variants set different type. |
 | **Benefit Row** | One paywall claim: burgundy tick plus body text, top-aligned. Property: Benefit. |
 | **Checkbox** | Unchecked, Checked × Default (20pt), Small (18pt). Built only if missing, so an existing one is never replaced. |

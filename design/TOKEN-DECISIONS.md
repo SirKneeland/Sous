@@ -318,14 +318,15 @@ the operator's list, not from a sweep of the codebase.
 *Covered:* recipe canvas, chat sheet, zero state, history drawer, settings, patch review,
 voice bar, import chooser, preferences, **sign in**, **paywall**, **cap reached**,
 **the three wheel sheets** (one **Picker Sheet** component), **memories** (full and empty),
-**timer banners** (one **Timer Banner** component, running and done).
+**timer banners** (one **Timer Banner** component, running and done), **import's paste,
+loading and error modes** (plus a shared **Import Sheet Header** and a **Progress Bar**).
 
 *Not yet in the library — worth a pass, roughly in order of how often a user meets them:*
 
 | Screen / surface | Source | Why it matters |
 |---|---|---|
 | ~~**Timer banners**~~ | `TimerBannerStack`, `TimerDoneBanner` | **Built 2026-09-27** — see decision 17 |
-| **Import: the other modes** | `Import/RecipeImportSheet.swift` | Camera, library, paste, loading and error states — only the chooser is built |
+| ~~**Import: the other modes**~~ | `Import/RecipeImportSheet.swift` | **Built 2026-09-27** — see decision 18 |
 | **Photo acquisition** | `Acquisition/PhotoAcquisitionSheet.swift` | Camera/library picker sheet |
 | **Mise en place confirmation** | `RecipeCanvasView` (modal) | Small modal, uses the Small checkbox that nothing else uses |
 | **In-chat furniture — part done** | `ChatSheetView` | The memory toast is its own component and the thinking/streaming bubbles became Chat Bubble variants (2026-09-25). The generate pill is now a Primary Button. **Left: the attachment strip and the quoted-context chip.** |
@@ -427,6 +428,23 @@ instances cannot be rebuilt, so a component built *from* another must tolerate a
 that does not exist yet rather than throwing** — the first run of Timer Banner took the
 whole import down for exactly this reason (2026-09-27), losing every component after it.
 
+**Floats are 32-bit, so never compare them with `===` (2026-09-27).** Figma stores
+opacity as a 32-bit float: write `0.2` and it reads back `0.20000000298023224`. Exact
+equality only ever holds for values that happen to be exact in float32 — `0.5`, `0.25`,
+`0.75` — which is why every earlier opacity check passed and the first `0.2` failed.
+Checks now compare through `approx()`, and the stub rounds opacity through `Math.fround`
+so the harness catches an `===` before the operator does. This was the *third* stub
+fidelity gap found in one day; the pattern is that the stub was written to make the
+plugin's intent pass, not to imitate Figma's constraints, and each gap surfaces as a
+green suite followed by a red report.
+
+**And a second thing the stub had wrong (2026-09-27).** A paint's own `opacity` is
+ignored once its colour is bound to a variable — it reads back as 1, and the layer has to
+be tinted instead. This file already said so, and the Progress Bar's track was written the
+wrong way anyway; the stub carried the opacity through, so every test passed and the real
+file reported `Progress Bar track is muted at 20% — 1`. The stub now drops it the way
+Figma does, and re-running the old code against it reproduces that exact failure.
+
 **And the one the stub had wrong (2026-09-27).** Removing a node in Figma marks only that
 node: instances *inside* it keep `removed = false` and stay in `getInstancesAsync()`,
 orphaned. Since the plugin clears the generated screens at the start of every run, the
@@ -473,6 +491,58 @@ on the screen, and the component's notes say so.
 dark-mode burgundy is fine there. The Running bar's 14pt label is the marginal 4.47:1 case —
 a **second visible instance** of the open question below, not a new one. Built to the shipped
 colour, and noted on the component.
+
+### 18. Import's other modes: three screens, two components, two pickers left alone (2026-09-27)
+
+The chooser was already built. Behind it sit five modes, and they are not five pieces of
+work:
+
+| Mode | Outcome |
+|---|---|
+| Paste | screen |
+| Loading | screen |
+| Error | screen |
+| Camera | Apple's picker — documented, not drawn |
+| Photo library | Apple's picker — documented, not drawn |
+
+Camera and library are `UIImagePickerController` and `PHPicker`. Redrawing them would
+freeze an appearance Apple owns, which is the same reasoning that leaves the wheel picker,
+the toggle, the swipe actions and Apple's sign-in button alone. The one control Sous *does*
+draw inside the viewfinder — the button that switches to the library — is its own component,
+built with the photo acquisition sheet.
+
+**Two components came out of it.**
+
+**Import Sheet Header** is the row every mode shares: a 32pt square on the left, the title,
+CANCEL in burgundy. Its back button is **Icon Button's Bordered scheme with the glyph
+overridden to a chevron** — the same square the chat header uses for its gear, not a second
+component. Where there is no back button, an empty 32pt square holds its place, because the
+title is centred against it and would otherwise drift left.
+
+Building it paid immediately: the already-built chooser screen had been drawing this row
+inline, and now instances the component. The harness asserts it, so a future screen that
+hand-rolls a header fails.
+
+**Progress Bar** is the 2pt line on the loading screen. Measured at exactly 2.00pt, fill
+`#1A1A1A` light and `#F2EFE9` dark — it is `text/primary`, so it inverts. It is
+indeterminate: the fill follows a timed sequence of milestones and deliberately stops short
+of full until the work finishes, so the component draws it at roughly 40% and says that is a
+shape, not a value.
+
+**The loading screen needed a debug fixture.** Reaching it for real means catching the gap
+between sending a recipe and the model answering, which on a fast failure is under a second
+— too short to look at, let alone check in two appearances. `-sous-fixture importLoading`
+opens the sheet straight onto the crawl, using the conversion stage, which is the one path
+the sheet is already designed to open into.
+
+**Sheet geometry is measured, not guessed.** The large detent's top edge sits at **62pt**
+— just below the 59pt safe area, not level with it — and the grabber is **36 x 5pt, 5pt**
+below that edge, horizontally centred. Drawn at 52pt the card sat level with the status bar
+and the grabber rode up into it. All four numbers are asserted on every import screen.
+
+**The error screen confirmed its own redesign.** Seen on device, the stacked TRY AGAIN over
+a bare burgundy CANCEL reads exactly as intended — the recovery path first, the way out
+beneath it, and no grey-on-grey that would make a live control wear the disabled costume.
 
 ---
 

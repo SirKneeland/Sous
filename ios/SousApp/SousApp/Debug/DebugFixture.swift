@@ -24,6 +24,7 @@ import SousCore
 ///   -sous-fixture paywall                 the subscription wall
 ///   -sous-fixture capReached              the 100-a-month hard stop
 ///   -sous-fixture memoryToast             the memory proposal toast, over the chat
+///   -sous-fixture importLoading           the import sheet's loading crawl
 ///   -sous-fixture-entitlement byok        entitlement to fake (default: subscriber)
 enum DebugFixture {
 
@@ -41,6 +42,12 @@ enum DebugFixture {
         case capReached
         /// A memory proposal toast over the chat. Normally needs a live model turn.
         case memoryToast
+        /// The import sheet, open on its loading crawl. Reaching this for real means
+        /// catching the gap between sending a recipe and the model answering, which on
+        /// a fast failure is under a second — too short to look at, let alone check in
+        /// two appearances. Uses the conversion stage, which is the one the sheet is
+        /// designed to open straight into.
+        case importLoading
     }
 
     /// A few saved memories, so the Memories screen has something in it. Normally these

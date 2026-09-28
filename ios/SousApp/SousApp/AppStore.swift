@@ -683,6 +683,13 @@ final class AppStore: ObservableObject {
             )
         case .canvas:
             uiState = .recipeOnly(recipe: recipe)
+        case .importLoading:
+            // The sheet opens straight into the crawl when the stage is .converting —
+            // the same path a unit conversion takes. No request is in flight, so the
+            // bar crawls and stops rather than completing.
+            uiState = .recipeOnly(recipe: recipe)
+            importLoadingStage = .converting
+            isShowingImportSheet = true
         case .review:
             let patchSet = DebugFixture.patchSet()
             // The validator runs for real — a bad fixture shows up as an invalid

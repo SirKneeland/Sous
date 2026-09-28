@@ -1325,6 +1325,14 @@ const SF_SYMBOL_TABLE = {
   "xmark": "100184"
 };
 
+// Figma stores opacity (and other unit floats) as 32-bit, so 0.2 written comes back
+// as 0.20000000298023224. Exact equality only ever holds for values that are exact
+// in float32 — 0.5, 0.25 — which is why this went unnoticed until a 0.2 appeared.
+// Compare floats through this, never with ===.
+function approx(a, b, eps) {
+  return typeof a === "number" && Math.abs(a - b) < (eps === undefined ? 1e-6 : eps);
+}
+
 function whiteAlpha(a) {
   return { type: "SOLID", color: { r: 1, g: 1, b: 1 }, opacity: a };
 }
@@ -2473,7 +2481,7 @@ async function verifyIconButton() {
       const s = c.strokes[0];
       check(t + " border is unbound white at " + spec.strokeWhiteAlpha,
         !!s && s.color.r === 1 && s.color.g === 1 && s.color.b === 1 &&
-        s.opacity === spec.strokeWhiteAlpha, JSON.stringify(s));
+        approx(s.opacity, spec.strokeWhiteAlpha), JSON.stringify(s));
     } else {
       check(t + " border", (c.strokes.length ? await varNameOf(c.strokes[0]) : null) === spec.stroke);
     }
@@ -5312,23 +5320,17 @@ async function buildImportScreen() {
   grabber.opacity = 0.5;
   grabWrap.appendChild(grabber);
 
-  // Header: title centred, CANCEL right, with a spacer left to balance it
-  const header = hFrame("header");
-  header.counterAxisAlignItems = "CENTER";
-  bindPadding(header, v, { left: "space/gutter", right: "space/gutter", top: "space/md", bottom: "space/md" });
+  // Header: the shared Import Sheet Header, with no back button — the chooser is
+  // where back would take you. This used to be drawn inline here; the paste, camera
+  // and library modes draw the same row, which is what made it a component.
+  const header = (await getVariant("Import Sheet Header", "Import Sheet Header", "Back=No")).createInstance();
+  await figma.setCurrentPageAsync(page);
+  header.name = "header";
+  const headerSet = (await getVariant("Import Sheet Header", "Import Sheet Header", "Back=No")).parent;
+  await figma.setCurrentPageAsync(page);
   card.appendChild(header);
   header.layoutSizingHorizontal = "FILL";
-  const spacerL = figma.createFrame();
-  spacerL.name = "balance";
-  spacerL.resize(32, 32);
-  spacerL.fills = [];
-  header.appendChild(spacerL);
-  const hTitle = await textNode("Sous/Button", "TALK TO A RECIPE", v("Sous Color", "text/primary"), "title");
-  header.appendChild(hTitle);
-  hTitle.layoutSizingHorizontal = "FILL";
-  hTitle.textAlignHorizontal = "CENTER";
-  const cancel = await textNode("Sous/Button", "CANCEL", v("Sous Color", "text/accent"), "cancel");
-  header.appendChild(cancel);
+  header.setProperties({ [propKey(headerSet, "Title")]: "TALK TO A RECIPE" });
 
   const headRule = hairlineRow(v, "header-rule");
   card.appendChild(headRule.row);
@@ -5877,6 +5879,19 @@ function propKey(set, name) {
   return key;
 }
 
+// Place a Button instance and set its label in one step. Button's variants carry a
+// State axis as well as Style, so the full variant name is assembled here rather
+// than spelled out at every call site.
+async function placeButton(page, style, label, opts) {
+  const variant = await getVariant("Button", "Button", "Style=" + style + ", State=Default");
+  const inst = variant.createInstance();
+  const set = variant.parent;
+  await figma.setCurrentPageAsync(page);
+  inst.setProperties({ [propKey(set, "Label")]: label });
+  if (opts && opts.icon) inst.setProperties({ [propKey(set, "Icon")]: true });
+  return inst;
+}
+
 // Instance text is overridden by writing the layer directly. Writing characters
 // flattens per-character styling, so anything special is re-applied afterwards.
 async function setRowText(inst, chars, opts) {
@@ -6238,6 +6253,8 @@ async function verifyBenefitRow() {
 // and only the flexible label width differs.
 
 const TIMER_BANNER_W = 393;
+const IMPORT_HEADER_W = 393;
+const PROGRESS_BAR_W = 313;   // 393 - 2x40pt padding, as the loading view sets
 
 async function buildTimerBanner() {
   const page = await ensurePage("Timer Banner");
@@ -6456,6 +6473,222 @@ async function verifyTimerBanner() {
     check("Timer Banner has a " + want + " text property",
       props.some((k) => k.split("#")[0] === want), props.join(", "));
   }
+}
+
+// -------------------------------------------------------- Import Sheet Header
+//
+// Source: RecipeImportSheet.sheetHeader(title:showBack:). One row shared by every
+// mode of the import sheet: a 32pt square on the left (a back button, or empty
+// space holding the title centred), the title, and CANCEL in burgundy.
+//
+// Measured on device: 20pt side gutters, 20pt above and 16pt below, back button
+// 32.67pt square (32pt plus the 1pt stroke) with its left edge at 19.67pt.
+
+const IMPORT_HEADER_SPECS = [
+  { name: "Back=Yes", back: true },
+  { name: "Back=No", back: false },
+];
+
+async function buildImportSheetHeader() {
+  const page = await ensurePage("Import Sheet Header");
+  const owned = ["Import Sheet Header / Documentation"]
+    .concat(IMPORT_HEADER_SPECS.map((s) => "importheader/row/" + s.name.replace("Back=", "")));
+  if (!(await clearOwned(page, "Import Sheet Header", owned))) return;
+  const v = await colorVars();
+
+  // The back button is Icon Button's Bordered scheme with a different glyph — the
+  // same 32pt square the chat header uses for its gear. If Bordered cannot be
+  // instanced this run, skip rather than redraw the square.
+  const bordered = await getVariantOrNull("Icon Button", "Icon Button", "Style=Bordered");
+  if (!bordered) {
+    SKIPPED.add("Import Sheet Header");
+    warn.push(
+      "Import Sheet Header was not built: its back button instances Icon Button's " +
+      "Bordered variant, which could not be rebuilt this run. Run again once Icon " +
+      "Button rebuilds."
+    );
+    return;
+  }
+
+  const comps = [];
+  for (const spec of IMPORT_HEADER_SPECS) {
+    await figma.setCurrentPageAsync(page);
+    const c = figma.createComponent();
+    c.name = spec.name;
+    c.layoutMode = "HORIZONTAL";
+    c.counterAxisAlignItems = "CENTER";
+    c.itemSpacing = 0;
+    c.resize(IMPORT_HEADER_W, 10);
+    c.primaryAxisSizingMode = "FIXED";
+    c.counterAxisSizingMode = "AUTO";
+    c.fills = [boundPaint(v("Sous Color", "background/canvas"))];
+    bindPadding(c, v, { left: "space/gutter", right: "space/gutter", top: "space/gutter", bottom: "space/md" });
+    page.appendChild(c);
+
+    if (spec.back) {
+      const back = bordered.createInstance();
+      await figma.setCurrentPageAsync(page);
+      back.name = "back";
+      c.appendChild(back);
+      // Bordered ships a gear; this row wants a chevron. Overriding the glyph on
+      // the instance is what the component's own notes tell you to do, and it is
+      // why there is no second 32pt square in the library.
+      const glyph = back.findOne((x) => x.name === "icon");
+      if (glyph) {
+        await figma.loadFontAsync(glyph.fontName);
+        glyph.characters = sfSymbol("chevron.left");
+      }
+    } else {
+      // No back button: an empty 32pt square still holds the title centred. The
+      // view does exactly this with Color.clear, and the header would shift left
+      // without it.
+      const balance = figma.createFrame();
+      balance.name = "balance";
+      balance.resize(32, 32);
+      balance.fills = [];
+      c.appendChild(balance);
+    }
+
+    const title = await textNode("Sous/Button", "PASTE TEXT", v("Sous Color", "text/primary"), "title");
+    c.appendChild(title);
+    title.layoutSizingHorizontal = "FILL";
+    title.textAlignHorizontal = "CENTER";
+
+    const cancel = await textNode("Sous/Button", "CANCEL", v("Sous Color", "text/accent"), "cancel");
+    c.appendChild(cancel);
+    comps.push(c);
+  }
+
+  const set = figma.combineAsVariants(comps, page);
+  set.name = "Import Sheet Header";
+  const titleKey = set.addComponentProperty("Title", "TEXT", "PASTE TEXT");
+  for (const c of set.children) {
+    const t = c.findOne((x) => x.name === "title");
+    if (t) t.componentPropertyReferences = { characters: titleKey };
+  }
+  set.description =
+    "The header every import mode shares. Back=No is the chooser (TALK TO A RECIPE); " +
+    "Back=Yes is any mode you can return from.\n\n" +
+    "The back button is an Icon Button (Bordered) with its glyph overridden to a " +
+    "chevron — not a second component. With no back button an empty 32pt square takes " +
+    "its place, so the title stays optically centred.\n\n" +
+    "Swift: RecipeImportSheet.sheetHeader(title:showBack:).";
+
+  const PAD = 32, GAP = 32, cell = { w: IMPORT_HEADER_W, h: 80 };
+  layoutGrid(set, () => 0, (c) => (c.name === "Back=Yes" ? 0 : 1), cell, PAD, GAP, 1, 2);
+  const doc = await docPanel(page, v, "Import Sheet Header", [
+    ["Sous/Body",
+      "CANCEL leaves the whole sheet; the back arrow only steps back to the chooser. They are different actions, which is why both can be on screen at once.",
+      "text/primary", "description"],
+    ["Sous/Body",
+      "CANCEL is burgundy and bare — the same way every other escape in Sous reads. It is not a bordered button, because it is not the thing you are meant to press.",
+      "text/primary", "usage"],
+  ]);
+  set.x = doc.x + doc.width + 80;
+  set.y = doc.y + 40;
+  await gridLabels(page, v, set, [], ["Back", "No back"], cell, PAD, GAP, "importheader");
+  COMPONENT_LOG.push("Import Sheet Header (" + set.children.length + " variants)");
+}
+
+async function verifyImportSheetHeader() {
+  if (SKIPPED.has("Import Sheet Header")) return;
+  const page = figma.root.children.find((p) => p.name === "Import Sheet Header");
+  if (!page) return check("component Import Sheet Header", false, "page missing");
+  await figma.setCurrentPageAsync(page);
+  const set = page.children.find((x) => x.type === "COMPONENT_SET" && x.name === "Import Sheet Header");
+  if (!set) return check("component Import Sheet Header", false, "component set missing");
+  check("Import Sheet Header variant count", set.children.length === 2, String(set.children.length));
+
+  const withBack = set.children.find((c) => c.name === "Back=Yes");
+  const without = set.children.find((c) => c.name === "Back=No");
+  check("Import Sheet Header back button is an Icon Button instance",
+    !!withBack && !!withBack.findOne((x) => x.name === "back" && x.type === "INSTANCE"));
+  // Without a back button the title would drift left, so the empty square must stay.
+  const balance = without && without.findOne((x) => x.name === "balance");
+  check("Import Sheet Header keeps a 32pt balance where the back button would be",
+    !!balance && balance.width === 32, balance && String(balance.width));
+  for (const [n, c] of [["Back=Yes", withBack], ["Back=No", without]]) {
+    const t = c && c.findOne((x) => x.name === "title");
+    check("Import Sheet Header " + n + " title is centred",
+      !!t && t.textAlignHorizontal === "CENTER", t && t.textAlignHorizontal);
+    const cancel = c && c.findOne((x) => x.name === "cancel");
+    check("Import Sheet Header " + n + " CANCEL is burgundy",
+      !!cancel && (await varNameOf(cancel.fills[0])) === "text/accent");
+  }
+}
+
+// ---------------------------------------------------------------- Progress Bar
+//
+// Source: RecipeImportSheet.loadingView. A 2pt line: a muted track at 20% with an
+// ink fill scaled from the leading edge. Measured on device at exactly 2.00pt, the
+// fill #1A1A1A in light and #F2EFE9 in dark — it is text/primary, so it inverts.
+
+async function buildProgressBar() {
+  const page = await ensurePage("Progress Bar");
+  if (!(await clearOwned(page, "Progress Bar", ["Progress Bar / Documentation"]))) return;
+  const v = await colorVars();
+
+  const c = figma.createComponent();
+  c.name = "Progress Bar";
+  c.resize(PROGRESS_BAR_W, 2);
+  c.fills = [];
+  c.clipsContent = true;
+  page.appendChild(c);
+
+  const track = figma.createRectangle();
+  track.name = "track";
+  track.resize(PROGRESS_BAR_W, 2);
+  track.fills = [boundPaint(v("Sous Color", "text/muted"))];
+  // Layer opacity, not paint opacity: Figma ignores a paint's own opacity once the
+  // colour is bound to a variable. Written down in TOKEN-DECISIONS, and still walked
+  // into here — the plugin's self-check caught it in the real file.
+  track.opacity = 0.2;
+  c.appendChild(track);
+  track.x = 0; track.y = 0;
+
+  const fill = figma.createRectangle();
+  fill.name = "fill";
+  fill.resize(Math.round(PROGRESS_BAR_W * 0.42), 2);
+  fill.fills = [boundPaint(v("Sous Color", "text/primary"))];
+  c.appendChild(fill);
+  fill.x = 0; fill.y = 0;
+
+  c.description =
+    "The import crawl. 2pt tall, a muted track at 20% with an ink fill growing from " +
+    "the left.\n\n" +
+    "It is indeterminate: the fill is driven by a timed sequence of milestones, not by " +
+    "real progress, and it stops short of full until the work actually finishes. Drawn " +
+    "here at roughly 40% — the shape of it, not a real value.\n\n" +
+    "Swift: RecipeImportSheet.loadingView.";
+  const doc = await docPanel(page, v, "Progress Bar", [
+    ["Sous/Body",
+      "The only progress indicator Sous draws itself. It is a line, not a spinner, because the wait has a shape — analysing, then reading, then converting — and a line can show that a stage has moved on.",
+      "text/primary", "description"],
+    ["Sous/Body",
+      "The fill is text/primary, so it inverts with the mode: near-black on cream, cream on near-black. Verified in both on device.",
+      "text/primary", "usage"],
+  ]);
+  c.x = doc.x + doc.width + 80;
+  c.y = doc.y + 40;
+  COMPONENT_LOG.push("Progress Bar");
+}
+
+async function verifyProgressBar() {
+  const page = figma.root.children.find((p) => p.name === "Progress Bar");
+  if (!page) return check("component Progress Bar", false, "page missing");
+  await figma.setCurrentPageAsync(page);
+  const c = page.children.find((x) => x.type === "COMPONENT" && x.name === "Progress Bar");
+  if (!c) return check("component Progress Bar", false, "component missing");
+  check("Progress Bar is 2pt tall", c.height === 2, String(c.height));
+  const track = c.findOne((x) => x.name === "track");
+  const fill = c.findOne((x) => x.name === "fill");
+  check("Progress Bar track is muted at 20%",
+    !!track && (await varNameOf(track.fills[0])) === "text/muted" && approx(track.opacity, 0.2),
+    track && String(track.opacity));
+  check("Progress Bar fill inverts with the mode",
+    !!fill && (await varNameOf(fill.fills[0])) === "text/primary");
+  check("Progress Bar fill is shorter than its track",
+    !!fill && !!track && fill.width < track.width, fill && fill.width + " of " + track.width);
 }
 
 // ------------------------------------------------------------- Sign In screen
@@ -7557,6 +7790,287 @@ async function buildMemoriesScreen() {
   COMPONENT_LOG.push("Memories screen");
 }
 
+// ------------------------------------------------- Import: paste, loading, error
+//
+// The chooser already exists as the "Talk to a Recipe" screen, at the 40% detent.
+// These three are the modes behind it, which all run at the full-height detent.
+//
+// Camera and photo library are deliberately absent: those are Apple's own pickers,
+// recorded in notes rather than redrawn, the same way Apple's sign-in button and the
+// iOS swipe actions are. The one control Sous draws inside the viewfinder is the
+// Camera Overlay Button, built with the photo acquisition sheet.
+
+// A full-height import sheet: the cream card with its grabber, inset and rounded the
+// way iOS draws a large detent, returning the column to fill.
+async function importSheetCard(page, v, name, x) {
+  const screen = await newScreen(page, name, "background/canvas", v);
+  screen.x = x;
+  screen.y = 40;
+
+  const card = figma.createFrame();
+  card.name = "sheet";
+  card.layoutMode = "VERTICAL";
+  card.itemSpacing = 0;
+  // Measured on device: the large detent's top edge sits at 62pt, just below the
+  // 59pt safe area — not level with it. At 52 the grabber rode up into the status bar.
+  const SHEET_TOP = 62;
+  card.resize(CANVAS_W, CANVAS_H - SHEET_TOP);
+  card.primaryAxisSizingMode = "FIXED";
+  card.counterAxisSizingMode = "FIXED";
+  card.fills = [boundPaint(v("Sous Color", "background/canvas"))];
+  card.topLeftRadius = card.topRightRadius = 20;   // system sheet chrome
+  card.clipsContent = true;
+  screen.appendChild(card);
+  card.x = 0;
+  card.y = SHEET_TOP;
+
+  const grabWrap = autoLayout("HORIZONTAL");
+  grabWrap.name = "grabber-wrap";
+  grabWrap.primaryAxisAlignItems = "CENTER";
+  grabWrap.paddingTop = 5;                   // measured: 5.00pt from the sheet's top edge
+  grabWrap.fills = [];
+  card.appendChild(grabWrap);
+  grabWrap.layoutSizingHorizontal = "FILL";
+  const grabber = figma.createRectangle();
+  grabber.name = "grabber";
+  grabber.resize(36, 5);
+  grabber.cornerRadius = 3;
+  grabber.fills = [boundPaint(v("Sous Color", "text/muted"))];
+  grabber.opacity = 0.5;   // layer, not paint — see the note on Progress Bar's track
+  grabWrap.appendChild(grabber);
+
+  return { screen: screen, card: card };
+}
+
+async function buildImportPasteScreen() {
+  const page = await ensurePage("Screens");
+  const v = await colorVars();
+  const { screen, card } = await importSheetCard(
+    page, v, "Import Paste", 40 + 600 + 120 + (CANVAS_W + 80) * 14);
+
+  const header = (await getVariant("Import Sheet Header", "Import Sheet Header", "Back=Yes")).createInstance();
+  await figma.setCurrentPageAsync(page);
+  header.name = "header";
+  card.appendChild(header);
+  header.layoutSizingHorizontal = "FILL";
+
+  const rule = hairlineRow(v, "header-rule");
+  card.appendChild(rule.row);
+  rule.row.layoutSizingHorizontal = "FILL";
+  rule.hair.layoutSizingHorizontal = "FILL";
+
+  // PASTE FROM CLIPBOARD: right-aligned, icon plus a caption-sized label. Enabled it
+  // is ink; with an empty clipboard it is muted and does nothing.
+  const clip = hFrame("clipboard-row");
+  clip.counterAxisAlignItems = "CENTER";
+  clip.primaryAxisAlignItems = "MAX";
+  clip.itemSpacing = 6;
+  clip.paddingLeft = clip.paddingRight = 20;
+  clip.paddingTop = 12;
+  clip.paddingBottom = 4;
+  card.appendChild(clip);
+  clip.layoutSizingHorizontal = "FILL";
+  const clipIcon = figma.createText();
+  clipIcon.name = "clipboard-icon";
+  clipIcon.fontName = await loadIconFont();
+  clipIcon.characters = sfSymbol("doc.on.clipboard");
+  clipIcon.setBoundVariable("fontSize", v("Sous Icon Sizes", "icon/small"));
+  clipIcon.fills = [boundPaint(v("Sous Color", "text/primary"))];
+  clip.appendChild(clipIcon);
+  const clipLabel = await textNode("Sous/Caption", "PASTE FROM CLIPBOARD",
+    v("Sous Color", "text/primary"), "clipboard-label");
+  clip.appendChild(clipLabel);
+  clipLabel.letterSpacing = { value: 0.5, unit: "PIXELS" };   // .kerning(0.5)
+
+  // The pasted recipe. 20pt in from the edge, body text.
+  const body = autoLayout("VERTICAL");
+  body.name = "pasted-text";
+  body.itemSpacing = 0;
+  body.paddingLeft = body.paddingRight = 20;
+  body.paddingTop = 16;
+  body.fills = [];
+  card.appendChild(body);
+  body.layoutSizingHorizontal = "FILL";
+  body.layoutSizingVertical = "FILL";
+  const pasted = await textNode("Sous/Body",
+    "Lemon Garlic Butter Shrimp\n\n1 lb shrimp, peeled\n3 tbsp butter\n" +
+    "4 cloves garlic, minced\n1 lemon, juiced\nParsley to finish\n\n" +
+    "Melt butter, add garlic, cook 1 min.\nAdd shrimp, cook 3 minutes per side.\n" +
+    "Finish with lemon and parsley.",
+    v("Sous Color", "text/primary"), "text");
+  body.appendChild(pasted);
+  pasted.layoutSizingHorizontal = "FILL";
+  pasted.textAutoResize = "HEIGHT";
+
+  const footRule = hairlineRow(v, "footer-rule");
+  card.appendChild(footRule.row);
+  footRule.row.layoutSizingHorizontal = "FILL";
+  footRule.hair.layoutSizingHorizontal = "FILL";
+
+  // IMPORT RECIPE: Inverse once there is text, Secondary Disabled while empty.
+  const btnWrap = hFrame("cta-wrap");
+  btnWrap.paddingLeft = btnWrap.paddingRight = 16;
+  btnWrap.paddingTop = btnWrap.paddingBottom = 16;
+  card.appendChild(btnWrap);
+  btnWrap.layoutSizingHorizontal = "FILL";
+  const cta = await placeButton(page, "Inverse", "IMPORT RECIPE");
+  cta.name = "cta";
+  btnWrap.appendChild(cta);
+  cta.layoutSizingHorizontal = "FILL";
+
+  await safeAreaGuides(screen, v);
+  COMPONENT_LOG.push("Import Paste screen");
+}
+
+async function buildImportLoadingScreen() {
+  const page = await ensurePage("Screens");
+  const v = await colorVars();
+  const { screen, card } = await importSheetCard(
+    page, v, "Import Loading", 40 + 600 + 120 + (CANVAS_W + 80) * 15);
+
+  // No header: the loading mode has no way back except CANCEL, so it draws none.
+  const column = autoLayout("VERTICAL");
+  column.name = "loading";
+  column.itemSpacing = 28;                   // VStack(spacing: 28)
+  column.primaryAxisAlignItems = "CENTER";
+  column.counterAxisAlignItems = "CENTER";
+  column.fills = [];
+  card.appendChild(column);
+  column.layoutSizingHorizontal = "FILL";
+  column.layoutSizingVertical = "FILL";
+  column.primaryAxisAlignItems = "CENTER";
+
+  const copy = await textNode("Sous/Caption", "SOUS-ING UP THE RECIPE...",
+    v("Sous Color", "text/muted"), "stage");
+  column.appendChild(copy);
+  copy.letterSpacing = { value: 1.2, unit: "PIXELS" };   // .kerning(1.2)
+
+  const bar = (await getVariant2("Progress Bar", "Progress Bar")).createInstance();
+  await figma.setCurrentPageAsync(page);
+  bar.name = "progress";
+  column.appendChild(bar);
+
+  const cancel = await placeButton(page, "Secondary Accent", "CANCEL");
+  cancel.name = "cancel";
+  column.appendChild(cancel);
+
+  await safeAreaGuides(screen, v);
+  COMPONENT_LOG.push("Import Loading screen");
+}
+
+async function buildImportErrorScreen() {
+  const page = await ensurePage("Screens");
+  const v = await colorVars();
+  const { screen, card } = await importSheetCard(
+    page, v, "Import Error", 40 + 600 + 120 + (CANVAS_W + 80) * 16);
+
+  const column = autoLayout("VERTICAL");
+  column.name = "error";
+  column.itemSpacing = 24;                   // VStack(spacing: 24)
+  column.primaryAxisAlignItems = "CENTER";
+  column.counterAxisAlignItems = "CENTER";
+  column.fills = [];
+  card.appendChild(column);
+  column.layoutSizingHorizontal = "FILL";
+  column.layoutSizingVertical = "FILL";
+
+  const message = await textNode("Sous/Body",
+    "Couldn't extract a recipe from this text — please check the text and try again.",
+    v("Sous Color", "text/primary"), "message");
+  column.appendChild(message);
+  message.layoutSizingHorizontal = "FILL";
+  message.textAutoResize = "HEIGHT";
+  message.textAlignHorizontal = "CENTER";
+  // .padding(.horizontal, 32) — the message is narrower than the sheet so it breaks
+  // into two balanced lines rather than one long one.
+  const msgPad = 32;
+  message.resize(CANVAS_W - msgPad * 2, message.height);
+  message.layoutSizingHorizontal = "FIXED";
+
+  // Stacked, not side by side, and the escape is a bare label rather than a muted
+  // border — grey-on-grey is how Sous draws a disabled control, and this one is live.
+  const actions = autoLayout("VERTICAL");
+  actions.name = "actions";
+  actions.itemSpacing = 8;
+  actions.primaryAxisAlignItems = "CENTER";
+  actions.counterAxisAlignItems = "CENTER";
+  actions.fills = [];
+  column.appendChild(actions);
+
+  const retry = await placeButton(page, "Secondary Accent", "TRY AGAIN");
+  retry.name = "retry";
+  actions.appendChild(retry);
+
+  const cancel = await placeButton(page, "Text", "CANCEL");
+  cancel.name = "cancel";
+  actions.appendChild(cancel);
+
+  await safeAreaGuides(screen, v);
+  COMPONENT_LOG.push("Import Error screen");
+}
+
+async function verifyImportScreens() {
+  const page = figma.root.children.find((p) => p.name === "Screens");
+  if (!page) return check("Import screens", false, "Screens page missing");
+  await figma.setCurrentPageAsync(page);
+  for (const name of ["Import Paste", "Import Loading", "Import Error"]) {
+    const s = page.children.find((x) => x.name === name);
+    if (!s) { check("screen " + name, false, "missing"); continue; }
+    check("screen " + name + " is iPhone-sized",
+      s.width === CANVAS_W && s.height === CANVAS_H, s.width + "x" + s.height);
+  }
+  // The sheet's top edge and its grabber, both measured on device. At 52pt the card
+  // sat level with the status bar and the grabber rode up into it.
+  for (const name of ["Import Paste", "Import Loading", "Import Error"]) {
+    const s = page.children.find((x) => x.name === name);
+    const card = s && s.findOne((x) => x.name === "sheet");
+    if (!card) { check(name + " has a sheet", false, "missing"); continue; }
+    check(name + " sheet starts at 62pt, clear of the status bar",
+      card.y === 62, String(card.y));
+    const grabber = card.findOne((x) => x.name === "grabber");
+    check(name + " grabber is 36x5pt",
+      !!grabber && grabber.width === 36 && grabber.height === 5,
+      grabber && grabber.width + "x" + grabber.height);
+    const wrap = card.findOne((x) => x.name === "grabber-wrap");
+    check(name + " grabber sits 5pt below the sheet top",
+      !!wrap && wrap.paddingTop === 5, wrap && String(wrap.paddingTop));
+    check(name + " grabber is horizontally centred",
+      !!wrap && wrap.primaryAxisAlignItems === "CENTER", wrap && wrap.primaryAxisAlignItems);
+  }
+
+  const paste = page.children.find((x) => x.name === "Import Paste");
+  if (paste) {
+    check("Import Paste reuses the shared header",
+      !!paste.findOne((x) => x.name === "header" && x.type === "INSTANCE"));
+    check("Import Paste's CTA is a Button instance",
+      !!paste.findOne((x) => x.name === "cta" && x.type === "INSTANCE"));
+  }
+  const loading = page.children.find((x) => x.name === "Import Loading");
+  if (loading) {
+    check("Import Loading uses the Progress Bar component",
+      !!loading.findOne((x) => x.name === "progress" && x.type === "INSTANCE"));
+    // The loading mode has no way back but CANCEL, so it must not grow a header.
+    check("Import Loading has no header",
+      !loading.findOne((x) => x.name === "header"));
+  }
+  const error = page.children.find((x) => x.name === "Import Error");
+  if (error) {
+    const retry = error.findOne((x) => x.name === "retry");
+    const cancel = error.findOne((x) => x.name === "cancel");
+    check("Import Error offers both a retry and a way out",
+      !!retry && !!cancel && retry.type === "INSTANCE" && cancel.type === "INSTANCE");
+    // Stacked, not side by side: the recovery path first, the exit beneath it.
+    // That was a deliberate redesign, so assert the layout rather than the pixels.
+    const actions = error.findOne((x) => x.name === "actions");
+    check("Import Error stacks its actions vertically",
+      !!actions && actions.layoutMode === "VERTICAL", actions && actions.layoutMode);
+    check("Import Error puts the retry above the way out",
+      !!actions && actions.children.length === 2 &&
+      actions.children[0].name === "retry" && actions.children[1].name === "cancel",
+      actions && actions.children.map((c) => c.name).join(", "));
+  }
+}
+
 async function buildMemoriesEmptyScreen() {
   const page = await ensurePage("Screens");
   const v = await colorVars();
@@ -7682,6 +8196,10 @@ const COMPONENTS = [
     build: buildBenefitRow, verify: verifyBenefitRow },
   { name: "Timer Banner", page: "Timer Banner", sets: ["Timer Banner"],
     build: buildTimerBanner, verify: verifyTimerBanner },
+  { name: "Import Sheet Header", page: "Import Sheet Header", sets: ["Import Sheet Header"],
+    build: buildImportSheetHeader, verify: verifyImportSheetHeader },
+  { name: "Progress Bar", page: "Progress Bar", sets: ["Progress Bar"],
+    build: buildProgressBar, verify: verifyProgressBar },
   { name: "Recipe Canvas", page: "Screens", sets: [], build: buildRecipeCanvas, verify: verifyRecipeCanvas },
   { name: "Chat", page: "Screens", sets: [], build: buildChatScreen, verify: verifyChatScreen },
   { name: "Zero State", page: "Screens", sets: [], build: buildZeroStateScreen, verify: verifyZeroStateScreen },
@@ -7705,13 +8223,19 @@ const COMPONENTS = [
     build: buildMemoriesScreen, verify: verifyMemoriesScreen },
   { name: "Memories Empty", page: "Screens", sets: [],
     build: buildMemoriesEmptyScreen, verify: () => {} },
+  { name: "Import Paste", page: "Screens", sets: [],
+    build: buildImportPasteScreen, verify: verifyImportScreens },
+  { name: "Import Loading", page: "Screens", sets: [],
+    build: buildImportLoadingScreen, verify: () => {} },
+  { name: "Import Error", page: "Screens", sets: [],
+    build: buildImportErrorScreen, verify: () => {} },
 ];
 
 // Generated screens are rebuilt from the library on every run, so they are
 // cleared first: otherwise their instances would mark every component "in use"
 // and block the component rebuilds. Anything you want to keep, duplicate — a
 // copy is not generated, so it is never touched.
-const GENERATED_SCREENS = ["Recipe Canvas", "Chat", "Zero State", "Sidebar", "Settings", "Change Suggestion", "Voice Mode", "Talk to a Recipe", "Preferences", "Sign In", "Paywall", "Cap Reached", "Memories", "Memories Empty"];
+const GENERATED_SCREENS = ["Recipe Canvas", "Chat", "Zero State", "Sidebar", "Settings", "Change Suggestion", "Voice Mode", "Talk to a Recipe", "Preferences", "Sign In", "Paywall", "Cap Reached", "Memories", "Memories Empty", "Import Paste", "Import Loading", "Import Error"];
 
 async function clearGeneratedScreens() {
   const page = figma.root.children.find((p) => p.name === "Screens");
@@ -7739,11 +8263,32 @@ async function clearGenerated() {
 
 async function buildComponents() {
   await clearGenerated();
-  for (const c of COMPONENTS) await c.build();
+  for (const c of COMPONENTS) {
+    try {
+      await c.build();
+    } catch (err) {
+      // One component failing must not cost the run. It is still a defect, so it
+      // is recorded as a failed check — the report says FAILED and names it — but
+      // everything after it still builds, which is how the operator gets one
+      // report describing the whole file rather than a stack trace and nothing.
+      SKIPPED.add(c.name);
+      for (const setName of c.sets) SKIPPED.add(setName);
+      check("component " + c.name + " built", false,
+        (err && err.message) ? err.message : String(err));
+    }
+  }
 }
 
 async function verifyComponents() {
-  for (const c of COMPONENTS) await c.verify();
+  for (const c of COMPONENTS) {
+    if (SKIPPED.has(c.name)) continue;   // already reported, by warning or by failure
+    try {
+      await c.verify();
+    } catch (err) {
+      check("component " + c.name + " verified", false,
+        (err && err.message) ? err.message : String(err));
+    }
+  }
 }
 
 

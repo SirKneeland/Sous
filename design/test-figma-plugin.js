@@ -68,7 +68,25 @@ class Node {
     // Figma reports figma.mixed when any character range differs from the node.
     return this._ranges.length ? MIXED : this._fills;
   }
-  set fills(v) { this._fills = v; }
+  // Figma stores opacity as a 32-bit float, so 0.2 reads back as 0.20000000298023224.
+  // Modelled here because the stub used to keep full double precision, so a check
+  // written with === passed locally and failed in the operator's file (2026-09-27).
+  // Values that are exact in float32 — 0.5, 0.25 — round-trip unchanged, which is
+  // why only the 0.2 ever showed it.
+  get opacity() { return this._opacity === undefined ? 1 : this._opacity; }
+  set opacity(v) { this._opacity = typeof v === "number" ? Math.fround(v) : v; }
+  set fills(v) {
+    // Figma ignores a paint's own opacity once its colour is bound to a variable —
+    // the value is silently dropped and reads back as 1. Modelled here because the
+    // stub used to carry it through, so a Progress Bar track written that way passed
+    // every test and then failed in the operator's real file (2026-09-27). Tint the
+    // layer instead.
+    this._fills = Array.isArray(v)
+      ? v.map((p) => (p && p.boundVariables && p.boundVariables.color && p.opacity !== undefined
+          ? Object.assign({}, p, { opacity: 1 })
+          : p))
+      : v;
+  }
   get textDecoration() {
     if (this._decoRanges.length === 1 &&
         this._decoRanges[0].start === 0 && this._decoRanges[0].end === (this.characters || "").length) {
@@ -588,9 +606,40 @@ function expect(label, condition, detail) {
       .find((n) => n.type === "COMPONENT_SET").children.find((c) => c.name === "Style=On Accent");
     expect("On Accent is a 32pt square bordered in unbound white at 50%",
       onAccent.width === 32 && onAccent.height === 32 &&
-      onAccent.strokes[0].opacity === 0.5 && onAccent.strokes[0].color.r === 1 &&
+      Math.abs(onAccent.strokes[0].opacity - 0.5) < 1e-6 && onAccent.strokes[0].color.r === 1 &&
       !(onAccent.strokes[0].boundVariables && onAccent.strokes[0].boundVariables.color),
       JSON.stringify(onAccent.strokes[0]));
+    // Import: the three modes behind the chooser, plus the header they share.
+    expect("report lists the import pieces",
+      /Import Sheet Header \(2 variants\)/.test(report) && /Progress Bar/.test(report) &&
+      /Import Paste screen/.test(report) && /Import Loading screen/.test(report) &&
+      /Import Error screen/.test(report), report);
+    for (const n of ["Import Paste", "Import Loading", "Import Error"]) {
+      expect(n + " is on the Screens page",
+        screensPage.children.some((c) => c.name === n),
+        screensPage.children.map((c) => c.name).join(", "));
+    }
+    // The chooser was drawn with its own inline header until the component existed.
+    // If it ever goes back to drawing one, this fails.
+    const chooser = screensPage.children.find((x) => x.name === "Talk to a Recipe");
+    const chooserHeader = chooser.findOne((x) => x.name === "header");
+    expect("the chooser reuses the shared header rather than drawing its own",
+      !!chooserHeader && chooserHeader.type === "INSTANCE",
+      chooserHeader ? chooserHeader.type : "no header");
+    // The back button is Icon Button with a different glyph — not a second square.
+    const hdrSet = figma.root.children.find((p) => p.name === "Import Sheet Header").children
+      .find((n) => n.type === "COMPONENT_SET");
+    const backVariant = hdrSet.children.find((c) => c.name === "Back=Yes");
+    expect("the import back button is an Icon Button instance, not a redrawn square",
+      !!backVariant.findOne((x) => x.name === "back" && x.type === "INSTANCE"));
+    // Camera and library are Apple's pickers: documented, never drawn.
+    expect("no camera or library screen was invented",
+      !screensPage.children.some((c) => /^Import (Camera|Library)$/.test(c.name)),
+      screensPage.children.map((c) => c.name).join(", "));
+    const bar = figma.root.children.find((p) => p.name === "Progress Bar").children
+      .find((n) => n.type === "COMPONENT");
+    expect("the progress bar is 2pt, as measured on device", bar.height === 2, String(bar.height));
+
     // The label and countdown must read as one line, and the label must stay in
     // sentence case — it is the recipe step, not a button label, even though it
     // borrows Sous/Button's metrics.
@@ -862,12 +911,29 @@ function expect(label, condition, detail) {
 
   console.log("\n6f. A genuine failure still names itself in the report");
   {
-    // The abort the operator saw printed only "at getVariant(...)" with no message,
-    // which is unactionable. Whatever throws, the message must reach the report.
+    // One component throwing must not cost the run: it is reported as a named
+    // failed check, and everything after it still builds.
     const { report } = await run({ allowModes: true, fonts: MAC }, null, (code) =>
       code.replace("async function buildTimerBanner() {",
         "async function buildTimerBanner() { throw new Error('a very specific explosion');"));
-    expect("a thrown error's message reaches the report",
+    expect("a thrown component error reaches the report",
+      /a very specific explosion/.test(report), report);
+    expect("it is reported as a failure, not swallowed",
+      /^FAILED/m.test(report) && /component Timer Banner built/.test(report), report);
+    expect("the components after it still build",
+      /Progress Bar/.test(report) && /Memories screen/.test(report), report);
+    expect("and the run completes rather than aborting",
+      !/import failed/.test(report), report);
+  }
+
+  console.log("\n6h. A fatal error outside the component loop still reports its message");
+  {
+    // The abort the operator saw printed only "at getVariant(...)" with no message,
+    // which is unactionable. Whatever throws, the message must reach the report.
+    const { report } = await run({ allowModes: true, fonts: MAC }, null, (code) =>
+      code.replace("async function buildTextStyles() {",
+        "async function buildTextStyles() { throw new Error('a very specific explosion');"));
+    expect("a fatal error's message reaches the report",
       /a very specific explosion/.test(report), report);
     expect("the report still says how far it got",
       /Progress before the failure/.test(report), report);
