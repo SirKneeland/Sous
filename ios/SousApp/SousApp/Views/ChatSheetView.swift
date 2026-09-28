@@ -83,15 +83,36 @@ struct ChatSheetView: View {
             onCameraPresented(newValue)
         }
         .sheet(isPresented: $showPhotoSheet) {
-            PhotoAcquisitionSheet(
-                onAcquired: { asset in
-                    photoSend.attach(asset)
-                    showPhotoSheet = false
-                    isComposerFocused = true
-                },
-                onCancel: { showPhotoSheet = false }
-            )
+            photoSheet
         }
+#if DEBUG
+        .onAppear {
+            // -sous-fixture photoFailed opens the photo sheet on its failure state.
+            if store.debugForcePhotoFailure { showPhotoSheet = true }
+        }
+#endif
+    }
+
+    @ViewBuilder
+    private var photoSheet: some View {
+        let sheet = PhotoAcquisitionSheet(
+            onAcquired: { asset in
+                photoSend.attach(asset)
+                showPhotoSheet = false
+                isComposerFocused = true
+            },
+            onCancel: { showPhotoSheet = false }
+        )
+#if DEBUG
+        if store.debugForcePhotoFailure {
+            // Forced straight to the failure state; the camera is never asked for.
+            { var s = sheet; s.debugInitialState = .failed(.encodingFailed); return s }()
+        } else {
+            sheet
+        }
+#else
+        sheet
+#endif
     }
 
     // MARK: - Blank State

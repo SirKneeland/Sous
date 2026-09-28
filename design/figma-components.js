@@ -5363,6 +5363,102 @@ async function verifyImportSheetHeader() {
   }
 }
 
+// -------------------------------------------------------- Camera Overlay Button
+//
+// Source: PhotoAcquisitionSheet and RecipeImportSheet's camera mode — the same
+// button written out twice. It is the only control Sous draws inside Apple's
+// camera viewfinder, and it switches to the photo library.
+//
+// Measured from a device photo of the real viewfinder (920px wide capture of a
+// 402pt screen, 2.289 px/pt):
+//   ours          115px  = 50.2pt across, fill #585858 over a #333333 bar
+//   Apple's close 107px  = 46.7pt across, fill #1E1E1E on the same bar
+// So it is 3.5pt LARGER than Apple's neighbouring controls, and noticeably
+// lighter — the translucency, not the size, is what makes it stand out.
+
+const CAMERA_OVERLAY_D = 50;      // measured 50.2pt
+const CAMERA_OVERLAY_LEFT = 30;   // .padding(.leading, 30)
+const CAMERA_OVERLAY_BOTTOM = 80; // .padding(.bottom, 80)
+
+async function buildCameraOverlayButton() {
+  const page = await ensurePage("Camera Overlay Button");
+  if (!(await clearOwned(page, "Camera Overlay Button",
+    ["Camera Overlay Button / Documentation"]))) return;
+  const v = await colorVars();
+
+  const c = figma.createComponent();
+  c.name = "Camera Overlay Button";
+  c.layoutMode = "HORIZONTAL";
+  c.primaryAxisAlignItems = "CENTER";
+  c.counterAxisAlignItems = "CENTER";
+  c.resize(CAMERA_OVERLAY_D, CAMERA_OVERLAY_D);
+  c.primaryAxisSizingMode = "FIXED";
+  c.counterAxisSizingMode = "FIXED";
+  // Round, and deliberately so — see decision 17. Everything Sous draws is square,
+  // but this one sits between Apple's shutter and flip controls, where a square
+  // burgundy block would read as a rendering fault rather than as Sous.
+  c.cornerRadius = CAMERA_OVERLAY_D / 2;
+  // The app fills this with .ultraThinMaterial, a live system blur that Figma has
+  // no equivalent for. Measured, it resolves to about white at 18% over the camera
+  // bar, so that is what is drawn — a stand-in, and the notes say so.
+  c.fills = [whiteAlpha(0.18)];
+  c.strokes = [];
+
+  const icon = figma.createText();
+  icon.name = "icon";
+  icon.fontName = await loadIconFont();
+  icon.characters = sfSymbol("photo.on.rectangle");
+  icon.setBoundVariable("fontSize", v("Sous Icon Sizes", "icon/xLarge"));
+  icon.fills = [boundPaint(v("Sous Color", "text/onInverse"))];
+  c.appendChild(icon);
+  page.appendChild(c);
+
+  c.description =
+    "The one control Sous draws inside Apple's camera viewfinder: it switches to the " +
+    "photo library. Round, not square — see decision 17 in TOKEN-DECISIONS.md.\n\n" +
+    "50pt across, sitting 30pt from the left edge and 80pt up from the bottom. Those " +
+    "two offsets are measured against a control bar Apple owns and can change between " +
+    "devices and releases, which is a risk recorded in KnownIssues.md rather than " +
+    "solved here.\n\n" +
+    "The fill is a stand-in: the app uses .ultraThinMaterial, a live blur Figma cannot " +
+    "reproduce, which measures about white at 18% over the camera bar.\n\n" +
+    "Swift: PhotoAcquisitionSheet and RecipeImportSheet — the same button, written twice.";
+
+  const doc = await docPanel(page, v, "Camera Overlay Button", [
+    ["Sous/Body",
+      "Measured against Apple's own controls in the same bar: this button is 50.2pt across, Apple's close button 46.7pt. It is 3.5pt larger, not smaller — but its fill is much lighter (about #585858 against Apple's #1E1E1E), so the translucency is what makes it read differently, not the size.",
+      "text/primary", "usage"],
+    ["Sous/Body",
+      "It is the only place in the app where Sous draws something round on purpose. The rule it breaks is worth keeping elsewhere: a square switch reads as broken, and a square button among Apple's round camera controls reads the same way.",
+      "text/primary", "usage"],
+  ]);
+  c.x = doc.x + doc.width + 80;
+  c.y = doc.y + 40;
+  COMPONENT_LOG.push("Camera Overlay Button");
+}
+
+async function verifyCameraOverlayButton() {
+  const page = figma.root.children.find((p) => p.name === "Camera Overlay Button");
+  if (!page) return check("component Camera Overlay Button", false, "page missing");
+  await figma.setCurrentPageAsync(page);
+  const c = page.children.find((x) => x.type === "COMPONENT" && x.name === "Camera Overlay Button");
+  if (!c) return check("component Camera Overlay Button", false, "component missing");
+  check("Camera Overlay Button is 50pt across",
+    c.width === CAMERA_OVERLAY_D && c.height === CAMERA_OVERLAY_D, c.width + "x" + c.height);
+  // Round on purpose. If this ever squares up, decision 17 has been lost.
+  check("Camera Overlay Button is round, which is the exception decision 17 records",
+    c.cornerRadius === CAMERA_OVERLAY_D / 2, String(c.cornerRadius));
+  // Its fill stands in for a system blur, so it must stay an unbound white — binding
+  // it to a colour token would claim Sous has a material colour, which it does not.
+  const fill = c.fills[0];
+  check("Camera Overlay Button's fill is unbound white, standing in for the blur",
+    !!fill && fill.color.r === 1 && approx(fill.opacity, 0.18) &&
+    !(fill.boundVariables && fill.boundVariables.color), JSON.stringify(fill));
+  const icon = c.findOne((x) => x.name === "icon");
+  check("Camera Overlay Button's glyph is white",
+    !!icon && (await varNameOf(icon.fills[0])) === "text/onInverse");
+}
+
 // ---------------------------------------------------------------- Progress Bar
 //
 // Source: RecipeImportSheet.loadingView. A 2pt line: a muted track at 20% with an
@@ -6755,6 +6851,134 @@ async function buildImportErrorScreen() {
   COMPONENT_LOG.push("Import Error screen");
 }
 
+// ------------------------------------- Photo acquisition: viewfinder and failure
+
+async function buildPhotoAcquisitionScreens() {
+  const page = await ensurePage("Screens");
+  const v = await colorVars();
+
+  // --- The viewfinder. Apple draws everything here except our one button, so the
+  // frame is a labelled placeholder: it records WHERE the button sits, without
+  // pretending to reproduce a camera UI that Apple owns and changes.
+  const cam = await newScreen(page, "Photo Acquisition", "background/canvas", v);
+  cam.x = 40 + 600 + 120 + (CANVAS_W + 80) * 17;
+  cam.y = 40;
+  cam.fills = [{ type: "SOLID", color: { r: 0, g: 0, b: 0 } }];   // the sheet is always black
+
+  const note = await textNode("Sous/Caption",
+    "APPLE'S CAMERA VIEWFINDER — NOT DRAWN",
+    v("Sous Color", "text/muted"), "apple-note");
+  cam.appendChild(note);
+  note.textAlignHorizontal = "CENTER";
+  note.resize(CANVAS_W - 80, note.height);
+  note.x = 40;
+  note.y = Math.round(CANVAS_H / 2) - 40;
+  note.letterSpacing = { value: 1.2, unit: "PIXELS" };
+
+  const overlay = (await getVariant2("Camera Overlay Button", "Camera Overlay Button")).createInstance();
+  await figma.setCurrentPageAsync(page);
+  overlay.name = "library-button";
+  cam.appendChild(overlay);
+  overlay.x = CAMERA_OVERLAY_LEFT;
+  overlay.y = CANVAS_H - CAMERA_OVERLAY_BOTTOM - CAMERA_OVERLAY_D;
+
+  // The two offsets are the risky part, so the screen states them.
+  const geom = await textNode("Sous/Caption",
+    "30PT FROM THE LEFT  ·  80PT FROM THE BOTTOM",
+    v("Sous Color", "text/muted"), "geometry-note");
+  cam.appendChild(geom);
+  geom.x = CAMERA_OVERLAY_LEFT;
+  geom.y = CANVAS_H - CAMERA_OVERLAY_BOTTOM + 8;
+  geom.letterSpacing = { value: 0.5, unit: "PIXELS" };
+
+  await safeAreaGuides(cam, v);
+  COMPONENT_LOG.push("Photo Acquisition screen");
+
+  // --- The failure state. Always black, so every label is white rather than a
+  // mode-aware token: the accent resolves to the light-mode burgundy here and
+  // measures 2.56:1 on black.
+  const fail = await newScreen(page, "Photo Acquisition Failed", "background/canvas", v);
+  fail.x = 40 + 600 + 120 + (CANVAS_W + 80) * 18;
+  fail.y = 40;
+  fail.fills = [{ type: "SOLID", color: { r: 0, g: 0, b: 0 } }];
+
+  const column = autoLayout("VERTICAL");
+  column.name = "failure";
+  column.itemSpacing = 16;                   // VStack(spacing: 16)
+  column.primaryAxisAlignItems = "CENTER";
+  column.counterAxisAlignItems = "CENTER";
+  column.paddingLeft = column.paddingRight = 24;
+  column.fills = [];
+  fail.appendChild(column);
+  // Fixed on both axes so the CENTER alignment actually centres in the screen
+  // rather than hugging the three labels.
+  column.primaryAxisSizingMode = "FIXED";
+  column.counterAxisSizingMode = "FIXED";
+  column.resize(CANVAS_W, CANVAS_H);
+  column.x = 0; column.y = 0;
+
+  const heading = await textNode("Sous/Heading 1", "Could not attach image.",
+    v("Sous Color", "text/onInverse"), "heading");
+  column.appendChild(heading);
+  heading.layoutSizingHorizontal = "FILL";
+  heading.textAlignHorizontal = "CENTER";
+
+  const body = await textNode("Sous/Body",
+    "The image could not be processed. Please try again.",
+    v("Sous Color", "text/onInverse"), "body");
+  column.appendChild(body);
+  body.layoutSizingHorizontal = "FILL";
+  body.textAutoResize = "HEIGHT";
+  body.textAlignHorizontal = "CENTER";
+  body.opacity = 0.7;                        // Color.white.opacity(0.7)
+
+  const dismiss = await textNode("Sous/Button", "DISMISS",
+    v("Sous Color", "text/onInverse"), "dismiss");
+  column.appendChild(dismiss);
+  dismiss.textAlignHorizontal = "CENTER";
+
+  await safeAreaGuides(fail, v);
+  COMPONENT_LOG.push("Photo Acquisition Failed screen");
+}
+
+async function verifyPhotoAcquisitionScreens() {
+  const page = figma.root.children.find((p) => p.name === "Screens");
+  if (!page) return check("Photo acquisition screens", false, "Screens page missing");
+  await figma.setCurrentPageAsync(page);
+
+  const cam = page.children.find((x) => x.name === "Photo Acquisition");
+  if (!cam) { check("screen Photo Acquisition", false, "missing"); }
+  else {
+    const btn = cam.findOne((x) => x.name === "library-button");
+    check("the viewfinder screen places the overlay button as an instance",
+      !!btn && btn.type === "INSTANCE", btn && btn.type);
+    check("the overlay button sits 30pt from the left",
+      !!btn && btn.x === CAMERA_OVERLAY_LEFT, btn && String(btn.x));
+    check("the overlay button sits 80pt up from the bottom",
+      !!btn && btn.y === CANVAS_H - CAMERA_OVERLAY_BOTTOM - CAMERA_OVERLAY_D,
+      btn && String(btn.y));
+    // Apple's viewfinder is recorded, never redrawn.
+    check("the viewfinder itself is a note, not a drawing",
+      !!cam.findOne((x) => x.name === "apple-note"));
+  }
+
+  const fail = page.children.find((x) => x.name === "Photo Acquisition Failed");
+  if (!fail) { check("screen Photo Acquisition Failed", false, "missing"); }
+  else {
+    // Always-black surface: every label is white. A mode-aware accent would resolve
+    // to the light-mode burgundy and measure 2.56:1 here.
+    for (const n of ["heading", "body", "dismiss"]) {
+      const t = fail.findOne((x) => x.name === n);
+      check("Photo Acquisition Failed " + n + " is white",
+        !!t && (await varNameOf(t.fills[0])) === "text/onInverse",
+        t && JSON.stringify(t.fills[0]));
+    }
+    check("Photo Acquisition Failed is drawn on black",
+      fail.fills[0] && fail.fills[0].color.r === 0 && fail.fills[0].color.g === 0,
+      JSON.stringify(fail.fills[0]));
+  }
+}
+
 async function verifyImportScreens() {
   const page = figma.root.children.find((p) => p.name === "Screens");
   if (!page) return check("Import screens", false, "Screens page missing");
@@ -6946,6 +7170,8 @@ const COMPONENTS = [
     build: buildImportSheetHeader, verify: verifyImportSheetHeader },
   { name: "Progress Bar", page: "Progress Bar", sets: ["Progress Bar"],
     build: buildProgressBar, verify: verifyProgressBar },
+  { name: "Camera Overlay Button", page: "Camera Overlay Button", sets: ["Camera Overlay Button"],
+    build: buildCameraOverlayButton, verify: verifyCameraOverlayButton },
   { name: "Recipe Canvas", page: "Screens", sets: [], build: buildRecipeCanvas, verify: verifyRecipeCanvas },
   { name: "Chat", page: "Screens", sets: [], build: buildChatScreen, verify: verifyChatScreen },
   { name: "Zero State", page: "Screens", sets: [], build: buildZeroStateScreen, verify: verifyZeroStateScreen },
@@ -6975,13 +7201,15 @@ const COMPONENTS = [
     build: buildImportLoadingScreen, verify: () => {} },
   { name: "Import Error", page: "Screens", sets: [],
     build: buildImportErrorScreen, verify: () => {} },
+  { name: "Photo Acquisition", page: "Screens", sets: [],
+    build: buildPhotoAcquisitionScreens, verify: verifyPhotoAcquisitionScreens },
 ];
 
 // Generated screens are rebuilt from the library on every run, so they are
 // cleared first: otherwise their instances would mark every component "in use"
 // and block the component rebuilds. Anything you want to keep, duplicate — a
 // copy is not generated, so it is never touched.
-const GENERATED_SCREENS = ["Recipe Canvas", "Chat", "Zero State", "Sidebar", "Settings", "Change Suggestion", "Voice Mode", "Talk to a Recipe", "Preferences", "Sign In", "Paywall", "Cap Reached", "Memories", "Memories Empty", "Import Paste", "Import Loading", "Import Error"];
+const GENERATED_SCREENS = ["Recipe Canvas", "Chat", "Zero State", "Sidebar", "Settings", "Change Suggestion", "Voice Mode", "Talk to a Recipe", "Preferences", "Sign In", "Paywall", "Cap Reached", "Memories", "Memories Empty", "Import Paste", "Import Loading", "Import Error", "Photo Acquisition", "Photo Acquisition Failed"];
 
 async function clearGeneratedScreens() {
   const page = figma.root.children.find((p) => p.name === "Screens");

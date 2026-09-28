@@ -22,6 +22,14 @@ struct PhotoAcquisitionSheet: View {
 
     @State private var acquisitionState: ImageAcquisitionState = .idle
 
+#if DEBUG
+    /// Opens straight into a given state, for simulator verification. The failure
+    /// state is otherwise unreachable without a corrupt image: it only occurs when
+    /// JPEG encoding fails, which cannot be provoked from the UI. Compiled out of
+    /// Release, and `.idle` everywhere in the real app.
+    var debugInitialState: ImageAcquisitionState? = nil
+#endif
+
     var body: some View {
         VStack {
             switch acquisitionState {
@@ -59,24 +67,52 @@ struct PhotoAcquisitionSheet: View {
                 .ignoresSafeArea()
 
             case .failed:
+                // This state used none of Sous's type, colour or buttons — it was raw
+                // system styling on a black sheet, which check-tokens.py cannot catch
+                // because it only rejects hand-built hex, not system defaults. Brought
+                // onto the tokens 2026-09-27, matching the import sheet's error screen:
+                // the recovery path is not offered here (there is nothing to retry
+                // without a fresh pick), so the way out is a single Text-style button.
                 VStack(spacing: 16) {
                     Text("Could not attach image.")
-                        .font(.headline)
+                        .font(.sousHeading1)
+                        .foregroundStyle(Color.white)
                     Text("The image could not be processed. Please try again.")
-                        .foregroundStyle(.secondary)
+                        .font(.sousBody)
+                        .foregroundStyle(Color.white.opacity(0.7))
                         .multilineTextAlignment(.center)
-                    Button("Dismiss") {
+                    // White, not the Text style's burgundy. This sheet is always
+                    // black — it sits on Apple's camera chrome and does not follow the
+                    // app's light/dark setting — so a mode-aware accent resolves to the
+                    // light-mode burgundy and measures 2.56:1 on black, well under AA.
+                    // The voice bar, the only other always-dark surface, already solves
+                    // this the same way: white labels, never the accent.
+                    Button {
                         acquisitionState = .idle
                         onCancel()
+                    } label: {
+                        Text("DISMISS")
+                            .font(.sousButton)
+                            .foregroundStyle(Color.white)
+                            .padding(.vertical, 10)
+                            .padding(.horizontal, 16)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.plain)
                 }
-                .padding()
+                .padding(24)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .background(Color.black.ignoresSafeArea())
-        .task { await resolveAndPresent() }
+        .task {
+#if DEBUG
+            if let forced = debugInitialState {
+                acquisitionState = forced
+                return          // never asks for the camera in a forced state
+            }
+#endif
+            await resolveAndPresent()
+        }
     }
 
     // MARK: - Permission resolution

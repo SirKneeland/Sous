@@ -640,6 +640,38 @@ function expect(label, condition, detail) {
       .find((n) => n.type === "COMPONENT");
     expect("the progress bar is 2pt, as measured on device", bar.height === 2, String(bar.height));
 
+    // Photo acquisition: the one control Sous draws inside Apple's viewfinder.
+    expect("report lists the photo acquisition pieces",
+      /Camera Overlay Button/.test(report) && /Photo Acquisition screen/.test(report) &&
+      /Photo Acquisition Failed screen/.test(report), report);
+    const overlay = figma.root.children.find((p) => p.name === "Camera Overlay Button").children
+      .find((n) => n.type === "COMPONENT");
+    // Round on purpose — the single deliberate exception to Sous's square rule.
+    expect("the camera overlay button is round, at 50pt",
+      overlay.width === 50 && overlay.height === 50 && overlay.cornerRadius === 25,
+      overlay.width + "x" + overlay.height + " r" + overlay.cornerRadius);
+    // Its fill stands in for a system blur, so it must not claim to be a token.
+    expect("its fill is an unbound white standing in for .ultraThinMaterial",
+      overlay.fills[0].color.r === 1 &&
+      Math.abs(overlay.fills[0].opacity - 0.18) < 1e-6 &&
+      !(overlay.fills[0].boundVariables && overlay.fills[0].boundVariables.color),
+      JSON.stringify(overlay.fills[0]));
+    const camScreen = screensPage.children.find((x) => x.name === "Photo Acquisition");
+    expect("the viewfinder is recorded as a note, never redrawn",
+      !!camScreen.findOne((x) => x.name === "apple-note"));
+    expect("the overlay button is placed at the offsets the app uses",
+      !!camScreen.findOne((x) => x.name === "library-button" && x.x === 30));
+    // The failure sheet is always black, so nothing on it may use a mode-aware accent:
+    // in light mode that resolves to #8B2E3F, which measures 2.56:1 on black.
+    const failScreen = screensPage.children.find((x) => x.name === "Photo Acquisition Failed");
+    const dismiss = failScreen.findOne((x) => x.name === "dismiss");
+    const dismissVar = state.variables.find(
+      (v) => dismiss && dismiss.fills[0].boundVariables &&
+             v.id === dismiss.fills[0].boundVariables.color.id);
+    expect("DISMISS is white, not the accent that would measure 2.56:1 on black",
+      !!dismissVar && dismissVar.name === "text/onInverse",
+      dismissVar ? dismissVar.name : "unbound");
+
     // The label and countdown must read as one line, and the label must stay in
     // sentence case — it is the recipe step, not a button label, even though it
     // borrows Sous/Button's metrics.

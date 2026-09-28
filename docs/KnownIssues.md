@@ -380,12 +380,44 @@ button fills, borders and waveform. Only the 0.2 border is tokenised
 running timer banner (`TimerBannerStack.swift`) is bordered with `Color.white.opacity(0.5)`.
 Measured on device it renders `#C5969F` in light mode — white at 50% over `#8B2E3F`.
 
-These three are one gap, not three bugs: **Sous has no token for white-on-accent chrome.**
-Every control that sits on a burgundy fill has to invent its own border and fill opacity, so
-each one picks a different number. The Figma **Icon Button → On Accent** variant records the
+**A fourth site, 2026-09-27** — and it widened the diagnosis. `PhotoAcquisitionSheet`'s
+failure state uses `Color.white` and `Color.white.opacity(0.7)` for its labels, and a bespoke
+white button instead of `SousButton`'s Text style. It has to: the sheet is **always black**
+(it sits on Apple's camera chrome and ignores the app's light/dark setting), so a mode-aware
+accent resolves to the light-mode burgundy and measures **2.56:1** on black. White measures
+21:1. The voice bar solved this the same way long ago.
+
+These are one gap, not four bugs: **Sous has no colour family, and no button style, for
+chrome on an always-dark surface.**
+Every control that sits on a burgundy or black fill has to invent its own border, label and
+fill opacity, so each one picks a different number. The Figma **Icon Button → On Accent** variant records the
 0.5 as a literal for exactly this reason, and its component notes say so rather than
 inventing a token in Figma that the app does not have. Worth deciding a small
 `accent/chromeBorder` family when the voice bar is next opened up.
+
+---
+
+## The camera overlay button is positioned against Apple's furniture, and exists twice
+
+- **Area:** `ios/SousApp/SousApp/Acquisition/PhotoAcquisitionSheet.swift`,
+  `ios/SousApp/SousApp/Import/RecipeImportSheet.swift`
+- **Type:** Fragility / duplication
+- **Flagged:** 2026-09-27
+
+The button that switches from the camera to the photo library is placed a fixed 30pt from the
+left and 80pt up from the bottom — measured against a control bar that **Apple owns** and can
+change between devices and iOS releases. On the operator's phone it lands cleanly in the
+shutter row. On a device with a taller or shorter control bar it could ride into the shutter
+or slip behind the close button. There is no way to ask `UIImagePickerController` where its
+controls are, so any fix is a heuristic; the cheap mitigation is to check it on a couple of
+device sizes whenever this area is touched.
+
+**It also exists twice**, written out identically in both files. One component in Figma, two
+copies in the app. Worth collapsing into a small shared view the next time either sheet is
+opened — the Figma **Camera Overlay Button** is the agreed shape.
+
+Measured 2026-09-27 from a device photo: 50.2pt across against Apple's 46.7pt close button,
+so it is slightly larger than its neighbours, and much lighter (`#585858` against `#1E1E1E`).
 
 ---
 

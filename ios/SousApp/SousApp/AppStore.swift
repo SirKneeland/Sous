@@ -105,6 +105,11 @@ final class AppStore: ObservableObject {
     @Published var showRecentRecipes: Bool = false
     /// True while the import sheet is presented. Set to false by AppStore on successful import or by the sheet on cancel.
     @Published var isShowingImportSheet: Bool = false
+#if DEBUG
+    /// Set only by `-sous-fixture photoFailed`, so the chat sheet opens the photo
+    /// sheet straight onto its failure state. Never set in the real app.
+    @Published var debugForcePhotoFailure: Bool = false
+#endif
     /// Non-nil when an import attempt failed. Observed by RecipeImportSheet to switch into error state.
     @Published var importError: String? = nil
     /// True while the mise en place LLM call is in flight. Drives the trigger loading state.
@@ -654,9 +659,9 @@ final class AppStore: ObservableObject {
         // Memories are real user context, so every fixture carries a few — it keeps the
         // Memories screen reachable and the LLM context realistic.
         if memories.isEmpty { memories = DebugFixture.memories() }
-        hasCanvas = fixture != .explore && fixture != .memoryToast
+        hasCanvas = fixture != .explore && fixture != .memoryToast && fixture != .photoFailed
         canGenerateRecipe = fixture == .explore
-        originalRecipe = (fixture == .explore || fixture == .memoryToast)
+        originalRecipe = (fixture == .explore || fixture == .memoryToast || fixture == .photoFailed)
             ? nil : DebugFixture.originalRecipe()
         chatTranscript = [
             ChatMessage(role: .assistant,
@@ -683,6 +688,14 @@ final class AppStore: ObservableObject {
             )
         case .canvas:
             uiState = .recipeOnly(recipe: recipe)
+        case .photoFailed:
+            // The photo sheet lives in the chat, so the chat has to be on screen.
+            uiState = .chatOpen(
+                recipe: Recipe(id: UUID(), version: 1, title: "New Recipe"),
+                draftUserText: "",
+                hidden: HiddenContext()
+            )
+            debugForcePhotoFailure = true
         case .importLoading:
             // The sheet opens straight into the crawl when the stage is .converting —
             // the same path a unit conversion takes. No request is in flight, so the

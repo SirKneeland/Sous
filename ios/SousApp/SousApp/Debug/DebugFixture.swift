@@ -25,6 +25,7 @@ import SousCore
 ///   -sous-fixture capReached              the 100-a-month hard stop
 ///   -sous-fixture memoryToast             the memory proposal toast, over the chat
 ///   -sous-fixture importLoading           the import sheet's loading crawl
+///   -sous-fixture photoFailed             the photo sheet's "could not attach" state
 ///   -sous-fixture-entitlement byok        entitlement to fake (default: subscriber)
 enum DebugFixture {
 
@@ -48,6 +49,10 @@ enum DebugFixture {
         /// two appearances. Uses the conversion stage, which is the one the sheet is
         /// designed to open straight into.
         case importLoading
+        /// The photo acquisition sheet on its failure state. Unreachable for real
+        /// without a corrupt image — it needs JPEG encoding to fail, which cannot be
+        /// provoked from the UI.
+        case photoFailed
     }
 
     /// A few saved memories, so the Memories screen has something in it. Normally these

@@ -319,7 +319,8 @@ the operator's list, not from a sweep of the codebase.
 voice bar, import chooser, preferences, **sign in**, **paywall**, **cap reached**,
 **the three wheel sheets** (one **Picker Sheet** component), **memories** (full and empty),
 **timer banners** (one **Timer Banner** component, running and done), **import's paste,
-loading and error modes** (plus a shared **Import Sheet Header** and a **Progress Bar**).
+loading and error modes** (plus a shared **Import Sheet Header** and a **Progress Bar**),
+**photo acquisition** (the **Camera Overlay Button** and the failure sheet).
 
 *Not yet in the library — worth a pass, roughly in order of how often a user meets them:*
 
@@ -327,7 +328,7 @@ loading and error modes** (plus a shared **Import Sheet Header** and a **Progres
 |---|---|---|
 | ~~**Timer banners**~~ | `TimerBannerStack`, `TimerDoneBanner` | **Built 2026-09-27** — see decision 17 |
 | ~~**Import: the other modes**~~ | `Import/RecipeImportSheet.swift` | **Built 2026-09-27** — see decision 18 |
-| **Photo acquisition** | `Acquisition/PhotoAcquisitionSheet.swift` | Camera/library picker sheet |
+| ~~**Photo acquisition**~~ | `Acquisition/PhotoAcquisitionSheet.swift` | **Built 2026-09-27** — see decision 19 |
 | **Mise en place confirmation** | `RecipeCanvasView` (modal) | Small modal, uses the Small checkbox that nothing else uses |
 | **In-chat furniture — part done** | `ChatSheetView` | The memory toast is its own component and the thinking/streaming bubbles became Chat Bubble variants (2026-09-25). The generate pill is now a Primary Button. **Left: the attachment strip and the quoted-context chip.** |
 | **API key callout** | `Views/APIKeyCallout.swift` | Onboarding nudge for BYOK users |
@@ -543,6 +544,62 @@ and the grabber rode up into it. All four numbers are asserted on every import s
 **The error screen confirmed its own redesign.** Seen on device, the stacked TRY AGAIN over
 a bare burgundy CANCEL reads exactly as intended — the recovery path first, the way out
 beneath it, and no grey-on-grey that would make a live control wear the disabled costume.
+
+### 19. The camera overlay button is round on purpose — and always-dark surfaces need their own rules (2026-09-27)
+
+Inside Apple's camera viewfinder, Sous draws exactly one control: the button at the bottom
+left that switches to the photo library. Everything else there is Apple's, and stays a note.
+
+**It is round, and that is the one deliberate exception to the square rule.** A square
+burgundy block sitting between Apple's shutter and flip controls would read as a rendering
+fault, not as Sous. This is the same instinct that keeps the wheel picker, the toggle, the
+swipe capsules and Apple's sign-in button as they are — *iOS chrome stays iOS-shaped* — with
+one difference: here the chrome is ours, drawn to sit convincingly among Apple's.
+
+**Measured against Apple's own controls**, from a device photo of the real viewfinder:
+
+| | Across | Fill |
+|---|---|---|
+| Ours | **50.2pt** | `#585858` |
+| Apple's close button | **46.7pt** | `#1E1E1E` |
+
+So it is **3.5pt larger than Apple's, not smaller** — the opposite of how it reads. What
+makes it look different is the *fill*: ours is translucent and much lighter. If it should
+sit more quietly, the lever is the opacity, not the diameter.
+
+Figma cannot reproduce `.ultraThinMaterial`, so the component draws white at 18% — measured,
+and labelled as a stand-in, the same way the paper texture and the blur-and-fade strip are
+left out rather than faked.
+
+---
+
+**The failure sheet found a real defect, and then a second one.**
+
+`PhotoAcquisitionSheet`'s "Could not attach image" state used no Sous type, colour or button
+at all — raw system styling. `check-tokens.py` misses it because it only rejects hand-built
+hex, not system defaults. Bringing it onto the tokens was the point of this surface.
+
+Then the tokenised version was **worse than what it replaced**. Putting the Text button style
+on it gave a burgundy DISMISS on a pure black sheet: **2.56:1**, well under AA. The old
+`.buttonStyle(.bordered)` had been legible because iOS tints it for the surface it is on.
+
+The cause is structural: **this sheet is always black** — it sits on Apple's camera chrome
+and does not follow the app's light/dark setting — so a mode-aware token resolves to its
+*light-mode* value, which is designed for cream. DISMISS is now white (21:1), matching the
+voice bar, the only other always-dark surface, which has always used white labels and never
+the accent.
+
+**This is the third surface to need it**, and none of them can reach for a token:
+
+| Surface | What it invents |
+|---|---|
+| Voice bar | `Color.white.opacity(0.08 / 0.15 / 0.2)` for fills, borders and waveform |
+| Timer banner pencil | `Color.white.opacity(0.5)` for its border |
+| Photo failure sheet | white, and white at 70%, for its labels |
+
+Sous has no **on-dark-chrome** family, and no button style for one. Each surface picks its own
+numbers. That is now a named gap rather than three separate oddities — logged in
+`KnownIssues.md`, and worth settling the next time any of the three is opened up.
 
 ---
 
