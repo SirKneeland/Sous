@@ -324,7 +324,9 @@ loading and error modes** (plus a shared **Import Sheet Header** and a **Progres
 **the mise en place modal** (and the **Split Action Bar** it shares with the wheel sheets),
 **the chat sheet's furniture in full** (**Attachment Strip** and **Quoted Context Chip**).
 
-*Not yet in the library — worth a pass, roughly in order of how often a user meets them:*
+*Not yet in the library — worth a pass, roughly in order of how often a user meets them.*
+**As of 2026-09-27 this table is empty of live work:** every row is either built or, in the
+last case, deleted from the app.
 
 | Screen / surface | Source | Why it matters |
 |---|---|---|
@@ -333,7 +335,7 @@ loading and error modes** (plus a shared **Import Sheet Header** and a **Progres
 | ~~**Photo acquisition**~~ | `Acquisition/PhotoAcquisitionSheet.swift` | **Built 2026-09-27** — see decision 19 |
 | ~~**Mise en place confirmation**~~ | `RecipeCanvasView` (modal) | **Built 2026-09-27** — see decision 20 |
 | ~~**In-chat furniture**~~ | `ChatSheetView` | **Finished 2026-09-27.** The memory toast, the Chat Bubble variants and the generate pill landed earlier; the attachment strip and quoted-context chip complete it — see decision 21. |
-| **API key callout** | `Views/APIKeyCallout.swift` | Onboarding nudge for BYOK users |
+| ~~**API key callout**~~ | *deleted* | **Dropped 2026-09-27** — the screen had not rendered since the nav-bar overhaul; orphaned code removed rather than drawn. See decision 22 |
 
 *Deliberately out of scope:* everything under `Debug/` and `RowLayoutDebugPreview` — developer
 tools, not product surfaces.
@@ -669,6 +671,35 @@ CANCEL, which was moved off grey-on-grey in September precisely because it made 
 wear the disabled costume. It is recorded here rather than changed, because both halves of it
 belong to the open destructive-colour question below: what red means in Sous, and what an
 error message should be coloured when there is no red.
+
+---
+
+### 22. The API key callout is deleted, not drawn (2026-09-27)
+
+The last uncovered surface in the audit turned out not to be a surface. `APIKeyCallout` — the
+arrow and burgundy tooltip pointing at the settings gear — was still in the codebase and still
+compiled, but nothing constructed it. Its call site went away with the nav bar in
+`6445196 BIG UI OVERHAUL`, when the gear moved into the chat sheet header, and nothing replaced
+it. Also orphaned with it: a `GearButtonFrameKey` preference published from `ChatSheetView` and
+read by nobody, and a `contentRoot` coordinate space that existed only to feed that preference.
+
+Two ways to finish the library from there, and only one of them honest. Drawing the component
+from the surviving code would have closed the audit with a screen no user can reach — and the
+whole point of assembling screens from components is that it *tests* the components against
+what ships. A component validated against dead code tests nothing.
+
+So the code was deleted and the surface closed as not-applicable. The library now covers every
+product surface that exists, which is a stronger claim than covering every surface that was
+once written.
+
+**What this consciously leaves broken:** a bring-your-own-key user gets no prompt to add their
+key. That is a product gap, not a design-system gap, and it is logged in `docs/KnownIssues.md`
+rather than papered over with a Figma component. If the nudge comes back it gets built fresh
+against the gear's current position, and it earns a component then.
+
+**The general rule this establishes:** when a surface in the audit cannot be reached in the
+running app, the audit is out of date, not the app. Check whether the screen still ships before
+drawing it — and prefer deleting dead code to enshrining it.
 
 ---
 

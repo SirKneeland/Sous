@@ -256,10 +256,6 @@ struct ChatSheetView: View {
                     SousIconButton(systemName: "plus") { onStartNew() }
                     SousIconButton(systemName: "clock") { onOpenRecents() }
                     SousIconButton(systemName: "gearshape") { onOpenSettings() }
-                        .background(GeometryReader { geo in
-                            Color.clear.preference(key: GearButtonFrameKey.self,
-                                                   value: geo.frame(in: .named("contentRoot")))
-                        })
                 }
             } else {
                 Button("CLOSE") { store.send(.closeChat) }

@@ -5,7 +5,7 @@
 The operator is a non-technical Product Manager. They cannot read Swift or evaluate code directly. They verify work through:
 - Tests passing
 - **Your** report of what you observed running the app in the Simulator
-- App behavior matching the PRD and UserStories.md
+- App behavior matching `docs/PRD.md` and `docs/UserStories.md`
 
 This means:
 - Your plans must be understood by a non-engineer
@@ -58,7 +58,7 @@ If you find yourself wanting to ask a routine clarifying question, make a reason
 
 ## Scope Rules
 
-- Work only within the current milestone (check Milestones.md)
+- Work only within the current milestone (check `docs/Milestones.md`)
 - No refactors unless explicitly requested
 - No new dependencies without asking
 - Do not touch files outside the scope of the task
@@ -68,7 +68,7 @@ If you find yourself wanting to ask a routine clarifying question, make a reason
 
 ## Architecture Rules (non-negotiable)
 
-These are absolute. Read ArchGuardrails.md before any work touching state, patches, or LLM integration.
+These are absolute. Read `docs/ArchGuardrails.md` before any work touching state, patches, or LLM integration.
 
 The short version:
 - LLM never directly mutates recipe state
@@ -97,7 +97,7 @@ decision 13 in `design/TOKEN-DECISIONS.md`.
 | `ios/SousApp/SousApp/Views/SousTheme.swift` | The Swift expression of the same values, plus the small shared components. |
 | `design/check-tokens.py` | Proves the two agree, and that no view hardcodes a colour or font size. |
 | `design/TOKEN-DECISIONS.md` | Numbered decision log. Every deviation and every "why" lives here. |
-| `design/MIGRATION-PLAN.md` | Which surfaces are migrated and which are still un-migrated vibes. |
+| `design/MIGRATION-PLAN.md` | Which surfaces are migrated and which are still un-migrated vibes. **Deliberately gitignored — a working document, not part of the shipped repo. Do not "fix" this by committing it.** |
 | `figma/` | The local Figma plugin that writes the library. |
 
 ### The loop for any new feature or view change
@@ -110,8 +110,8 @@ decision 13 in `design/TOKEN-DECISIONS.md`.
    `SousIconSize`.
 3. **If nothing fits, that is a design decision, not a code decision.** Do not add a sixth button
    style, a bespoke hex, or an inline `.system(size:)` because one screen wants one. Add the token
-   to **both** `tokens.json` and `SousTheme.swift`, then write it up as the next numbered decision
-   in `TOKEN-DECISIONS.md` with the reasoning. If a screen cannot be assembled from components,
+   to **both** `design/tokens.json` and `SousTheme.swift`, then write it up as the next numbered
+   decision in `design/TOKEN-DECISIONS.md` with the reasoning. If a screen cannot be assembled from components,
    the components are wrong — that is the test working.
 4. **Run both checks** before declaring the task done:
 
@@ -125,13 +125,14 @@ decision 13 in `design/TOKEN-DECISIONS.md`.
 
 ### Never
 
-- Hardcode a colour, or write `.system(size:)` in a view. `check-tokens.py` fails on both.
+- Hardcode a colour, or write `.system(size:)` in a view. `design/check-tokens.py` fails on both.
 - Change a value in `SousTheme.swift` without changing `design/tokens.json` to match.
-- Add a component variant or token without logging it in `TOKEN-DECISIONS.md`.
+- Add a component variant or token without logging it in `design/TOKEN-DECISIONS.md`.
 - **Use the Figma MCP tools for this work.** The local plugin does all the writing; the MCP
-  allowance is roughly twenty calls per *month* and is not to be spent on routine library updates.
-- Assume a surface is migrated. Check `design/MIGRATION-PLAN.md` — surfaces 3–6 (photo
-  acquisition onward) were not started as of 2026-09-27, so expect pre-system code there and say
+  allowance on Figma's free plan — which is the plan in use — is **twenty calls per month**, and is
+  not to be spent on routine library updates.
+- Assume a surface is migrated. `design/MIGRATION-PLAN.md` carries the live status — check it
+  rather than trusting this file, and if you find pre-system code in a surface it calls done, say
   so rather than quietly matching it.
 
 ---
@@ -272,18 +273,31 @@ The fixture never fakes a `PatchValidationResult` — the validator runs for rea
 fixture surfaces as an invalid patch rather than a review screen that lies.
 
 Use the `mcp__Claude_Code_iOS_Simulator__*` tools:
-- Call `attach` **first**, before building, so the operator can watch.
-- `build` → `launch`, then drive the app: `tap`, `swipe`, `text`, `screenshot`, `inspect`.
-- Prefer `inspect` over `screenshot` for reading labels, control state, and what's on screen.
-  Use `screenshot` for colour, layout and anything visual.
+- **Boot a simulator first.** `attach` fails with "No booted simulator found" on a cold machine,
+  and there is nothing to watch until one is up:
+
+  ```
+  xcrun simctl list devices available | grep iPhone     # pick one
+  xcrun simctl boot <udid> && xcrun simctl bootstatus <udid> -b
+  ```
+
+- Then call `attach` **before building**, so the operator can watch the build land.
+- `build` → `launch`, then drive the app: `tap`, `swipe`, `text`, `screenshot`.
 - **Check both light and dark mode** for any visual change (`xcrun simctl ui <udid>
   appearance dark|light`). Sous has tokens that deliberately do not invert (green, voice
   palette, white-on-burgundy labels), so dark mode is where colour bugs actually surface.
-- **`inspect` is unavailable** in this app build, so there is no accessibility tree to read:
-  locate controls by capturing `xcrun simctl io <udid> screenshot out.png` and measuring
-  pixels. The capture is @3x, so **device points = pixels ÷ 3**. Eyeballing fractions off a
-  scaled screenshot mis-taps; measuring the target's bounding box does not. Sampling pixel
-  colours this way also verifies a token exactly (`#2D6A4F`) rather than "looks green".
+- **There is no `inspect` action, so there is no accessibility tree to read.** Locate controls
+  by capturing `xcrun simctl io <udid> screenshot out.png` and measuring pixels. The capture is
+  @3x, so **device points = pixels ÷ 3**. Eyeballing fractions off a scaled screenshot mis-taps;
+  measuring the target's bounding box does not. Sampling pixel colours this way also verifies a
+  token exactly (`#2D6A4F`) rather than "looks green".
+
+  *Why it is missing, and when to revisit:* `inspect` arrives with **Xcode 27**. This machine is
+  on **26.3** (`xcodebuild -version`), so the action does not exist in the tool at all — it is not
+  a permission or a build-configuration problem, and there is nothing to enable. Once Xcode is
+  upgraded, `inspect` becomes the better way to read labels, control state and what is on screen,
+  and `screenshot` goes back to being for colour and layout only. **Check `xcodebuild -version`
+  before assuming this paragraph is still true.**
 
 **Escalate to the operator only for what the Simulator genuinely cannot do:** real Sign in
 with Apple, StoreKit sandbox purchases, camera capture, haptics, Siri/Realtime voice against

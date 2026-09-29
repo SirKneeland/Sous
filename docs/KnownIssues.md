@@ -597,3 +597,66 @@ Two things to do, in either order:
 
 Worth noting the bar-button size (14 semibold) is identical to `Sous/Button`, so that one may
 already have a home.
+
+---
+
+## BYOK users get no prompt to add their API key (2026-09-27)
+
+The first-launch callout that pointed at the settings gear and said *"Start here — add your
+API key in Settings"* has not rendered since `6445196 BIG UI OVERHAUL: nav bar is dead, long
+live sidebar`. That overhaul moved the gear out of the nav bar and into the chat sheet header,
+and the callout's call site in `ContentView` went with the nav bar. Nothing replaced it.
+
+The view itself survived as orphaned code for three commits — it compiled, it was never
+constructed. Found while starting surface 6 of the design system migration, which had assumed
+the screen still shipped. **Deleted 2026-09-27** by the operator's decision, along with its
+`GearButtonFrameKey` preference and the `contentRoot` coordinate space that existed only to
+serve it. Surface 6 was dropped from `design/MIGRATION-PLAN.md` rather than drawn, because
+drawing a screen no user can reach is the thing that plan explicitly forbids.
+
+**What is now true:** a bring-your-own-key user who signs in with no key saved gets no nudge
+at all. `store.hasAPIKey` still exists but is only read and written inside `SettingsView` — no
+onboarding path consults it. The user has to find Settings unaided.
+
+How much this matters depends on how BYOK is reached. Since Project 3, every non-BYOK user
+routes through the Sous proxy and never needs a key, so this affects only accounts with
+`entitlement == .byok`. If BYOK is only ever entered deliberately — by someone who went
+looking for it — the absence of a nudge may be fine. If an account can arrive at `.byok`
+without having chosen it, this is a dead end with no error message.
+
+**That question is unanswered and is the reason this is logged rather than closed.** Deciding
+it needs product input, not code reading. If a nudge is wanted again, it should point at the
+gear's current home in the chat sheet header, not be restored from the deleted view.
+
+---
+
+## ChatSheetView's fullscreen header branch is unreachable (2026-09-27)
+
+Found while deleting the API key callout, and left in place rather than fixed, because it is
+adjacent to that work rather than part of it.
+
+`chatHeader` in `Views/ChatSheetView.swift` has two branches. The `!isFullscreen` branch —
+"SOUS SAYS..." and a CLOSE button — is what ships. The `isFullscreen` branch — the "SOUS"
+wordmark and a row of three `SousIconButton`s for new / recents / settings — never renders,
+because `mainChatView` only includes `chatHeader` at all when `!isFullscreen`:
+
+```
+if !isFullscreen {
+    chatHeader
+    SousRule()
+}
+```
+
+So the fullscreen chat draws no header of its own. What the user sees at the top of that
+screen is the hamburger overlay from `ContentView`, and the new / recents / settings controls
+live in the history drawer instead. Same root cause as the deleted callout: the nav-bar
+overhaul in `6445196` moved this furniture and left the old branch behind.
+
+**Why it matters more than ordinary dead code.** It is not obviously dead — it is a live-looking
+branch of a view that does render, guarded by a flag that is genuinely set elsewhere. Reading
+`chatHeader` alone gives no hint that half of it is unreachable. The gear button in that branch
+carried a `GeometryReader` feeding the callout's preference key right up until today, which is
+how it was found at all.
+
+Deleting it is a small, safe change. Not done here only because the operator's decision covered
+the callout, not this.

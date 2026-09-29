@@ -239,7 +239,6 @@ struct ContentView: View {
                     }
             }
         }
-        .coordinateSpace(name: "contentRoot")
         // Bottom zone: timer banners (growing upward) + Talk to Sous button.
         // Rendered as an overlay so it never affects the recipe canvas layout.
         .overlay(alignment: .bottom) {
