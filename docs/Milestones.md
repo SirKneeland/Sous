@@ -12,17 +12,27 @@ Statuses:
 
 ## Project State
 
-**Current milestone:** Milestone 21 — Recipe Import
+**Last reconciled against the codebase:** 2026-09-29.
+
+**Current milestone:** Milestone 24 — Accounts + Sync. All four backend projects are code
+complete; what remains is operator setup in App Store Connect and Railway, plus a sandbox
+purchase test on a real device. None of that is code.
 
 **Recently completed:**
-- Milestone 20 — TestFlight Alpha + Instrumentation
-- Milestone 19 — Personality Modes
-- Milestone 18 — Streaming Chat Responses
+- Milestone 24 Projects 1–4 — backend, auth, proxy, billing (code complete)
+- Milestone 22 — Step Timers
+- Milestone 21 — Recipe Import
+- The design system migration — not a numbered milestone; see `design/TOKEN-DECISIONS.md`
 
 **Next milestone:**
-- Milestone 22 — Post-Cook Ratings
+- Milestone 23 — Post-Cook Ratings. The first feature to be built *through* the design system
+  rather than migrated into it.
 
-This section exists to make the active project phase immediately visible to humans and AI agents without scanning the entire roadmap.
+This section exists to make the active project phase immediately visible to humans and AI agents
+without scanning the entire roadmap. **It drifted badly once** — in September 2026 it named a
+finished milestone as current and pointed "next" at the wrong number, while three shipped
+milestones were still marked PLANNED or FUTURE. If you are reading it, spend the thirty seconds
+to confirm it against the code before trusting it, and correct it when it is wrong.
 
 
 ---
@@ -436,7 +446,11 @@ Explicit non-goals:
 
 ---
 ## Milestone 22 — Step Timers
-**Status:** PLANNED
+**Status:** DONE
+
+*(Corrected 2026-09-29: this was still marked PLANNED long after it shipped. `Timers/` holds the
+parser, manager, persistence and summariser; `StepTimeParserTests` covers the detection; the
+banners were migrated into the design system as surface 1 of that work.)*
 
 **Goal:** Let users start a countdown directly from a recipe step, so they never lose track of cooking time.
 
@@ -521,7 +535,16 @@ Potential capabilities:
 ---
 
 ## Milestone 26 — Voice & Hands-Free Cooking
-**Status:** FUTURE
+**Status:** PARTIALLY DELIVERED — needs the operator's call on what counts as done
+
+*(Corrected 2026-09-29.)* Voice mode ships today: `Voice/` holds the Realtime API client, the
+coordinator and its five states (ready, listening, thinking, speaking, patchPending), a voice
+system prompt, and the voice bar UI with its own colour palette. It is entitlement-gated —
+hidden during `trialing` and `soft_wall`.
+
+What is **not** confirmed against the original bullets below is step navigation and
+context-aware recovery. Those need judging against how the feature actually behaves in a real
+kitchen, which is a product call, not something readable from the code.
 
 Potential capabilities:
 - Voice input/output
@@ -533,9 +556,145 @@ Potential capabilities:
 ---
 
 ## Milestone 27 — Monetization
-**Status:** FUTURE
+**Status:** SUPERSEDED — delivered early, under Milestone 24 Project 4
+
+*(Corrected 2026-09-29.)* Monetization was deferred here, then overtaken: the StoreKit 2
+subscription, server-side receipt validation, the paywall, the trial, the grace period and the
+100-a-month hard cap all landed as Project 4 of the backend plan. This milestone is kept for its
+Pro-feature list, which is still an open question, not a delivered thing.
 
 Notes:
-- Monetization intentionally deferred
+- Monetization was originally deferred here; see Milestone 24 Project 4 for what shipped
 - Possible Pro features: inline image display, generated images, voice-first cooking mode, higher-fidelity models, longer context and history, advanced coaching
     
+
+
+---
+
+## Milestone 28 — Save to Memory: Fixes
+**Status:** PLANNED
+
+**Goal:** Make memory saving something the user chooses, rather than something that happens to
+them — and fix the correctness bugs found while instrumenting it.
+
+The memory decision log (`Debug/MemoryDecisionRecord.swift`) was added precisely because this
+system "gets goofy a bit." Its own documentation states the question it exists to answer: *is
+memory saving overzealous?* This milestone is answering that question and acting on it.
+
+Core capabilities:
+- **Decide the default.** Today a proposal saves itself when the six-second countdown expires,
+  and saves itself again if the user swipes it away. Both of those are opt-out — the user gets a
+  memory by ignoring a toast. The log's `MemorySaveTrigger` cases already distinguish a deliberate
+  SAVE from the two automatic ones, so the actual rate is measurable rather than guessed at.
+  Decide from that data whether the default flips to save-nothing-unless-tapped.
+- **Fix the person mismatch.** The eval suite asks the model for a third-person `proposed_memory`
+  while the shipped Swift prompt requires second person. See `docs/KnownIssues.md`. One of the two
+  is wrong and they disagree today.
+- **Tighten what qualifies.** Review real proposals from the log and sharpen the prompt's bar for
+  what counts as a durable preference versus a passing remark about tonight's dinner.
+- **Make the toast's timing legible.** If a countdown can save, the user has to be able to see it
+  running and stop it. If it cannot save, the countdown may not need to exist at all.
+- **Eval coverage** for every rule changed here, per the repo's eval policy.
+
+Explicit non-goals:
+- Changing where memories are stored or how they sync
+- Automatic memory application without user visibility — Milestone 16's non-goal still stands
+- The decisioning engine itself — that is Milestone 29
+
+---
+
+## Milestone 29 — On-Device Memory Decisioning
+**Status:** PLANNED — *technology to be confirmed with the operator (see note)*
+
+**Goal:** Move the judgement call of *is this worth remembering?* off the main chat model and onto
+something cheaper, faster, and more consistent.
+
+**Note on the name.** The operator asked for this as "Jev-powered" decisioning. That term appears
+nowhere in this repo and is not resolved yet, so this milestone is written around the shape of the
+work rather than the technology. Fill in the engine before starting, and rename the milestone.
+
+Why this is separate from Milestone 28: that one fixes the *behaviour* of the existing system
+using the model already in play. This one changes *what does the deciding*. Doing them together
+would make it impossible to tell which change caused which effect.
+
+Core capabilities:
+- Route the "should this be remembered, and as what" decision to the chosen engine, keeping the
+  main orchestrator's contract unchanged
+- A/B the new decisioning against today's behaviour on real logged turns before it becomes default
+- Fall back to current behaviour when the engine is unavailable, rather than silently proposing
+  nothing
+- Eval cases covering the new routing path, per the repo's eval policy
+
+Explicit non-goals:
+- Changing the memory *proposal UI* — that is Milestone 28
+- Routing anything other than memory decisioning to this engine, for now
+
+---
+
+## Milestone 30 — Chat Error Handling and Retry
+**Status:** PLANNED
+
+**Goal:** Make a failed message something the user can recover from in one tap, instead of a dead
+end that loses what they typed.
+
+Core capabilities:
+- A visible **RETRY** control on any message that failed, re-sending the original turn
+- Retry logic that distinguishes what is worth retrying automatically (a dropped connection, a
+  rate limit, a timeout) from what is not (a refusal, a cap-reached 402, an invalid key)
+- The user's text is never lost to a failure — it survives in the composer or the failed bubble
+- Error copy that says what happened and what to do, in Sous's voice, not the raw API message
+- Distinct handling for the billing errors that already exist: a 402 cap-reached is a wall, not a
+  network blip, and must not be retried into the same wall
+- Voice mode gets the same treatment: `VoiceModeCoordinator` already models `socketClosed` and
+  `timeout` and currently has its own recovery path
+
+Explicit non-goals:
+- Offline queueing of messages to send later
+- Retrying a turn that already partially mutated recipe state — the patch contract governs that
+
+---
+
+## Milestone 31 — Recipe Export as PDF
+**Status:** PLANNED
+
+**Goal:** Let a user take a recipe out of Sous — to print, to keep, or to send to someone who
+does not have the app.
+
+Core capabilities:
+- Export the current recipe as a PDF from the canvas
+- The PDF carries Sous's design system — New York titles, the burgundy section headers, the
+  square checkboxes — rather than a generic system-font dump. This is the first surface where
+  the design tokens have to render outside SwiftUI, which is the interesting part of the work
+- Includes ingredients, mise en place, and procedure; excludes chat transcript and timers
+- Shares through the standard iOS share sheet
+- Handles a long recipe across multiple pages without orphaning a section header
+
+Explicit non-goals:
+- Export formats other than PDF
+- Editing or re-importing an exported file
+- Exporting the whole recipe history at once
+
+---
+
+## Milestone 32 — Motion and Transitions
+**Status:** PLANNED
+
+**Goal:** Make the app feel considered in motion, the way it now does at rest.
+
+The design system settled colour, type and iconography. Motion was never part of it — every
+transition in the app is either a SwiftUI default or a one-off, which is exactly the state the
+palette was in before the migration.
+
+Core capabilities:
+- A small set of named motion tokens — durations and easing curves — living alongside the colour
+  and type tokens, so a transition is chosen from a scale rather than invented per screen
+- Applied to the transitions users meet most: the chat sheet, the history drawer, the patch
+  review screen, the timer banners arriving and leaving, and the memory toast
+- Motion respects **Reduce Motion**; the system's accessibility setting is honoured everywhere
+- Extend `design/check-tokens.py` to catch hand-written durations, the same way it catches
+  hand-written colours today
+- Document the decisions in `design/TOKEN-DECISIONS.md` as the next numbered entries
+
+Explicit non-goals:
+- Animated illustrations or decorative motion
+- Live Activities — still deferred, per Milestone 22
