@@ -48,6 +48,10 @@ and names every token or variant that's wrong, which is enough to fix it without
 | **Sous Spacing** | The 8-step spacing scale. Advisory — see the note below. |
 | **Sous Border** | Hairline width and the two permitted corner radii. |
 
+**Page order.** The plugin puts **Cover** first and **Screens** directly under it on every run.
+Everything else keeps whatever order it already had, so a page you dragged somewhere deliberate
+stays where you put it, and a page added later needs no change here.
+
 **Components**, each on its own page with a documentation panel:
 
 | Component | Variants |

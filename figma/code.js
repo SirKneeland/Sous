@@ -9068,6 +9068,32 @@ async function verifyComponents() {
   }
 }
 
+// --------------------------------------------------------------- page ordering
+
+// Pages land in whatever order their builders happen to run, which buried Screens
+// under twenty-odd component pages. Screens is the page anyone opening this file
+// actually wants: it is the library's output, and the components are its parts.
+//
+// Only two positions are asserted — Cover first, Screens straight after it. The
+// component pages keep whatever relative order they already had, so a page added
+// later does not need this list updated, and a page the operator dragged
+// somewhere deliberate is not fought over on the next run.
+async function orderPages() {
+  const pages = figma.root.children.slice();
+  const byName = (n) => pages.find((p) => p.name === n);
+
+  const cover = byName("Cover");
+  const screens = byName("Screens");
+  if (!screens) return; // nothing built yet; nothing to order
+
+  let at = 0;
+  if (cover) {
+    figma.root.insertChild(at, cover);
+    at += 1;
+  }
+  figma.root.insertChild(at, screens);
+}
+
 
 // ----------------------------------------------------------------------- main
 
@@ -9081,6 +9107,7 @@ async function verifyComponents() {
     await buildNumbers("Sous Spacing", TOKENS.spacing, "space");
     await buildNumbers("Sous Border", TOKENS.border, null);
     await buildComponents();
+    await orderPages();
 
     const result = await verify();
     await verifyComponents();

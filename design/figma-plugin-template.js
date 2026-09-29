@@ -411,6 +411,7 @@ function buildReport(result) {
     await buildNumbers("Sous Spacing", TOKENS.spacing, "space");
     await buildNumbers("Sous Border", TOKENS.border, null);
     await buildComponents();
+    await orderPages();
 
     const result = await verify();
     await verifyComponents();

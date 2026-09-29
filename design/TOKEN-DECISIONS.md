@@ -703,6 +703,35 @@ drawing it — and prefer deleting dead code to enshrining it.
 
 ---
 
+### 23. Screens sits directly under Cover (2026-09-29)
+
+Pages landed in whatever order their builders happened to run, which left **Screens** buried
+under twenty-odd component pages. That is backwards: Screens is what the library is *for* — the
+assembled output — and the component pages are its parts. Anyone opening the file wants the
+screens first, and had to scroll past every button variant to reach them.
+
+The plugin now pins two positions on every run, Cover first and Screens second, and pins nothing
+else. The component pages keep their existing relative order.
+
+**Pinning only two positions is the point.** A full ordered list would have to be edited every
+time a page is added, and would silently undo any page the operator dragged somewhere on purpose.
+Two assertions fix the thing that was actually wrong and leave the rest alone.
+
+Covered by two assertions in `design/test-figma-plugin.js`, inside the run-twice section — so the
+reordering is proven idempotent, not just correct once. Re-ordering moves the existing page; it
+never creates a second one.
+
+**Confirmed in the real file on 2026-09-29**: the operator ran the plugin and Screens landed
+directly under Cover. This mattered because the test harness runs against a stub, and page
+insertion had to be added to that stub to test this at all — so the stub proved the plugin's
+logic but could not prove Figma's `insertChild` behaves as documented. It does. Report: 785
+checks, digest `ac5575bff515da96`, unchanged from the run before the reorder — the page-order
+assertions live in the node harness, not in the plugin's own self-check, so the in-Figma report
+does not mention page order at all. Worth moving into `verifyComponents()` if the order ever
+regresses.
+
+---
+
 ## Still open
 
 **No destructive color token.** The "Delete Timer" button uses SwiftUI's system red at 80%

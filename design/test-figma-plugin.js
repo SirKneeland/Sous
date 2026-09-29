@@ -115,6 +115,11 @@ class Node {
     child.parent = this;
     this._children.push(child);
   }
+  insertChild(index, child) {
+    if (child.parent) child.parent._children = child.parent._children.filter((c) => c !== child);
+    child.parent = this;
+    this._children.splice(index, 0, child);
+  }
   remove() {
     if (this.parent) this.parent._children = this.parent._children.filter((c) => c !== this);
     this.parent = null;
@@ -546,6 +551,16 @@ function expect(label, condition, detail) {
         todo.findOne((x) => x.name === "indent").componentPropertyReferences.visible &&
       todo.findOne((x) => x.name === "sep-checkbox").componentPropertyReferences.visible ===
         todo.findOne((x) => x.name === "checkbox-slot").componentPropertyReferences.visible);
+    // Page order: Screens is the library's output, so it sits directly under Cover
+    // rather than wherever its builder happened to run. Only those two positions
+    // are asserted — the component pages keep their own relative order.
+    expect("Cover is first and Screens is second",
+      figma.root.children[0].name === "Cover" && figma.root.children[1].name === "Screens",
+      figma.root.children.slice(0, 4).map((p) => p.name).join(", "));
+    expect("ordering moved Screens rather than duplicating it",
+      figma.root.children.filter((p) => p.name === "Screens").length === 1,
+      String(figma.root.children.filter((p) => p.name === "Screens").length));
+
     expect("the three old row pages are gone",
       !["Ingredient Row", "Step Row", "Mise en Place Row"].some(
         (n) => figma.root.children.some((p) => p.name === n)),
