@@ -17,6 +17,8 @@ struct ChatSheetView: View {
     var onCameraPresented: (Bool) -> Void = { _ in }
     var onNavigateToMemories: () -> Void = {}
     @StateObject private var photoSend = PhotoSendCoordinator()
+    @State private var importPressed = false
+    @State private var generatePressed = false
     @State private var composerText = ""
     @State private var composerHeight: CGFloat = 36
     @State private var showPhotoSheet = false
@@ -147,9 +149,10 @@ struct ChatSheetView: View {
                     onOpenImport()
                 } label: {
                     SousButtonLabel(title: "TALK TO A RECIPE", style: .inverse,
-                                    height: nil, icon: "doc.viewfinder")
+                                    height: nil, icon: "doc.viewfinder",
+                                    isPressed: importPressed)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressReportingStyle(isPressed: $importPressed))
                 .padding(.horizontal, 20)
 
                 Button {
@@ -275,7 +278,12 @@ struct ChatSheetView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 8) {
                     ForEach(store.chatTranscript) { message in
-                        ChatBubbleView(message: message)
+                        ChatBubbleView(
+                            message: message,
+                            isRetryEnabled: !store.isLLMCallInFlight && !store.hasActivePatch,
+                            onRetry: { store.retryFailedTurn(messageID: message.id) },
+                            onWallTap: { store.handleFailureWallTap($0) }
+                        )
                     }
                     if let partial = store.streamingAssistantMessage {
                         StreamingBubbleView(text: partial)
@@ -433,9 +441,10 @@ struct ChatSheetView: View {
                 store.sendGenerateRecipeSilently()
             } label: {
                 SousButtonLabel(title: "MAKE THIS RECIPE", style: .primary,
-                                height: nil, verticalPadding: 8, icon: "wand.and.stars")
+                                height: nil, verticalPadding: 8, icon: "wand.and.stars",
+                                isPressed: generatePressed)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressReportingStyle(isPressed: $generatePressed))
             // 16 (composerBar outer padding) + 44 (camera/send button) + 8 (HStack spacing)
             // = 68px each side — aligns exactly with the text input field edges
             .padding(.horizontal, 68)
@@ -1055,6 +1064,11 @@ private struct QuotedContextChip: View {
 
 private struct ChatBubbleView: View {
     let message: ChatMessage
+    /// Retry is offered but inert while another call is in flight or a patch is
+    /// awaiting review — the same single-flight rule a first send obeys.
+    var isRetryEnabled: Bool = true
+    var onRetry: () -> Void = {}
+    var onWallTap: (ChatFailureWall) -> Void = { _ in }
 
     var isUser: Bool { message.role == .user }
 
@@ -1086,8 +1100,62 @@ private struct ChatBubbleView: View {
                         .foregroundStyle(Color.sousBackground)
                 }
             }
+        } else if let record = message.failure {
+            failureContent(record)
         } else {
             MarkdownTextView(text: message.text, textColor: .sousText)
+        }
+    }
+
+    // MARK: - Failed turn (Milestone 30)
+
+    /// A failed turn reads as an ordinary assistant bubble carrying one action.
+    /// There is no red: Sous has no error colour, and inventing one for this would
+    /// be a design decision, not a code decision. The burgundy CTA and the muted
+    /// label carry the weight instead.
+    @ViewBuilder
+    private func failureContent(_ record: ChatFailureRecord) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(record.failure.message)
+                .font(.sousBody)
+                .foregroundStyle(Color.sousText)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if record.canRetry {
+                SousRule()
+                SousButton(
+                    title: "RETRY",
+                    style: .text,
+                    isEnabled: isRetryEnabled,
+                    height: nil,
+                    verticalPadding: 4,
+                    fillsWidth: false,
+                    horizontalPadding: 0,
+                    icon: "arrow.clockwise",
+                    action: onRetry
+                )
+            } else if let wall = record.failure.wall, let title = wallCTATitle(wall) {
+                SousRule()
+                SousButton(
+                    title: title,
+                    style: .text,
+                    height: nil,
+                    verticalPadding: 4,
+                    fillsWidth: false,
+                    horizontalPadding: 0,
+                    action: { onWallTap(wall) }
+                )
+            }
+        }
+    }
+
+    /// A wall with nowhere to send the user gets no button — a dead control is
+    /// worse than none. `.missingKey` is that case: the copy points at Settings.
+    private func wallCTATitle(_ wall: ChatFailureWall) -> String? {
+        switch wall {
+        case .cap:        return "SEE OPTIONS"
+        case .auth:       return "SIGN IN AGAIN"
+        case .missingKey: return nil
         }
     }
 }

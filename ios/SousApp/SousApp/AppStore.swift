@@ -662,12 +662,16 @@ final class AppStore: ObservableObject {
         // Memories are real user context, so every fixture carries a few — it keeps the
         // Memories screen reachable and the LLM context realistic.
         if memories.isEmpty { memories = DebugFixture.memories() }
-        hasCanvas = fixture != .explore && fixture != .memoryToast && fixture != .photoFailed
-            && fixture != .attachPreparing && fixture != .attachFailed
+        // Canvasless fixtures land on the fullscreen chat. The overlay chat used over
+        // a canvas animates in from off-screen on a *change* of isChatOpen, which a
+        // fixture that launches already-open never triggers — see docs/KnownIssues.md.
+        let canvaslessFixtures: [DebugFixture.Kind] = [
+            .explore, .memoryToast, .photoFailed, .attachPreparing, .attachFailed,
+            .chatRetry, .chatWall,
+        ]
+        hasCanvas = !canvaslessFixtures.contains(fixture)
         canGenerateRecipe = fixture == .explore
-        originalRecipe = (fixture == .explore || fixture == .memoryToast || fixture == .photoFailed
-            || fixture == .attachPreparing || fixture == .attachFailed)
-            ? nil : DebugFixture.originalRecipe()
+        originalRecipe = canvaslessFixtures.contains(fixture) ? nil : DebugFixture.originalRecipe()
         chatTranscript = [
             ChatMessage(role: .assistant,
                         text: "Fixture loaded. This recipe came from DebugFixture, not the model.")
@@ -693,6 +697,32 @@ final class AppStore: ObservableObject {
             )
         case .canvas:
             uiState = .recipeOnly(recipe: recipe)
+        case .chatRetry, .chatWall:
+            // The failure bubble lives in the chat, so the chat has to be on screen.
+            // The failure is built through ChatFailure.classify — the same call the
+            // real failure path makes — so the fixture cannot show copy or a control
+            // that production would not.
+            uiState = .chatOpen(
+                recipe: Recipe(id: UUID(), version: 1, title: "New Recipe"),
+                draftUserText: "",
+                hidden: HiddenContext()
+            )
+            let userText = "Can I swap the butter for olive oil?"
+            let error: LLMError = (fixture == .chatRetry) ? .network : .capReached
+            let failure = ChatFailure.classify(error)
+            chatTranscript = [
+                ChatMessage(role: .user, text: userText),
+                ChatMessage(
+                    role: .assistant,
+                    text: failure.message,
+                    failure: ChatFailureRecord(
+                        failure: failure,
+                        retry: ChatFailureRecord.RetryPayload(
+                            userText: userText, referencedItem: nil, isNewRecipe: false
+                        )
+                    )
+                ),
+            ]
         case .miseEnPlace:
             // Strip the section so the trigger shows, and clear the "don't show
             // again" flag so the modal is reachable on every launch.
@@ -1115,7 +1145,8 @@ final class AppStore: ObservableObject {
                 request: request,
                 streamingClient: llmClient,
                 orchestrator: orchForCreation,
-                generation: generation
+                generation: generation,
+                retryUserText: userText
             )
             return
         }
@@ -1178,12 +1209,24 @@ final class AppStore: ObservableObject {
             handleProposedMemory(proposedMemory, turnSource: userText)
             if !hasCanvas, let sg = suggestGenerate { canGenerateRecipe = sg }
 
-        case .failure(let fallbackPatchSet, let assistantMessage, _, let debug, _):
+        case .failure(let fallbackPatchSet, let assistantMessage, _, let debug, let error):
             lastDebugBundle = debug
             if let fallback = fallbackPatchSet {
                 send(.patchReceived(fallback))
             }
-            append(ChatMessage(role: .assistant, text: assistantMessage))
+            // Milestone 30: the failure bubble carries its own recovery. The turn is
+            // stored verbatim on the message so RETRY re-sends exactly what the user
+            // asked, and so it survives a relaunch with the transcript.
+            let failure = ChatFailure.classify(error)
+            let record = ChatFailureRecord(
+                failure: failure,
+                retry: ChatFailureRecord.RetryPayload(
+                    userText: userText,
+                    referencedItem: referencedItem,
+                    isNewRecipe: isNewRecipe
+                )
+            )
+            append(ChatMessage(role: .assistant, text: assistantMessage, failure: record))
             llmDebugStatus = "failed"
         }
     }
@@ -1914,6 +1957,67 @@ final class AppStore: ObservableObject {
         }
     }
 
+    // MARK: - Failed turn recovery (Milestone 30)
+
+    /// Set when a failed turn hit a billing wall and the user tapped its CTA.
+    /// ContentView owns the paywall/cap routing, so it observes this rather than
+    /// AppStore reaching into presentation state.
+    @Published var billingWallRequested = false
+    /// Set when a failed turn hit an auth wall and the user tapped its CTA.
+    @Published var signInWallRequested = false
+
+    /// Re-sends the turn recorded on a failed message, unchanged.
+    ///
+    /// The failure bubble is removed first, which leaves the user's own message as
+    /// the transcript tail — exactly the shape `sendWithLLM` expects, so the retry
+    /// builds the same request the original send did.
+    ///
+    /// Blocked while a patch is pending or another call is in flight: single-flight
+    /// is the same invariant as a first send, and a retry must not become a second
+    /// way to get two calls running at once.
+    func retryFailedTurn(messageID: UUID) {
+        guard let index = chatTranscript.firstIndex(where: { $0.id == messageID }),
+              let record = chatTranscript[index].failure,
+              let payload = record.retry,
+              record.failure.isRetryable
+        else { return }
+        guard !hasPendingPatch else { return }
+        if useLiveLLM && llmTask != nil {
+            llmDebugStatus = "blocked_inflight_llm"
+            return
+        }
+
+        chatTranscript.remove(at: index)
+        saveSession()
+
+        guard useLiveLLM else {
+            let patchSet = proposer.propose(userText: payload.userText, recipe: uiState.recipe)
+            send(.patchReceived(patchSet))
+            append(ChatMessage(role: .assistant, text: "Proposed changes are ready — review them on the recipe."))
+            return
+        }
+
+        llmGeneration += 1
+        let gen = llmGeneration
+        llmTask = Task {
+            await self.sendWithLLM(
+                payload.userText,
+                referencedItem: payload.referencedItem,
+                isNewRecipe: payload.isNewRecipe,
+                generation: gen
+            )
+        }
+    }
+
+    /// Routes the CTA on a non-retryable failure to whoever can actually clear it.
+    func handleFailureWallTap(_ wall: ChatFailureWall) {
+        switch wall {
+        case .cap:        billingWallRequested = true
+        case .auth:       signInWallRequested = true
+        case .missingKey: break   // copy points at Settings; nothing to present here
+        }
+    }
+
     private func append(_ message: ChatMessage) {
         chatTranscript.append(message)
         if chatTranscript.count > maxMessages {
@@ -1941,6 +2045,9 @@ final class AppStore: ObservableObject {
     func buildConversationHistory(dropLastEntry: Bool = true) -> [LLMMessage] {
         let base = dropLastEntry ? Array(chatTranscript.dropLast()) : chatTranscript
         return base
+            // Failure bubbles are UI chrome ("I couldn't connect"), not something
+            // Sous said. Replaying them would teach the model to apologise.
+            .filter { $0.failure == nil }
             .filter { $0.role == .user || $0.role == .assistant }
             .suffix(20)
             .map { msg in
@@ -2158,7 +2265,8 @@ final class AppStore: ObservableObject {
         request: LLMRequest,
         streamingClient: any StreamingLLMClient,
         orchestrator: OpenAILLMOrchestrator,
-        generation: Int
+        generation: Int,
+        retryUserText: String? = nil
     ) async {
         let clientRequest = orchestrator.buildCreationStreamClientRequest(for: request)
         let llmStream = streamingClient.stream(clientRequest)
@@ -2220,7 +2328,19 @@ final class AppStore: ObservableObject {
         } catch {
             if hasBegunRecipe { finalizeStreamedRecipe() }
             guard llmGeneration == generation else { return }
-            append(ChatMessage(role: .assistant, text: "Network issue. Check connection and try again."))
+            // Milestone 30: the creation turn gets the same recovery as every other
+            // turn. A stream that already began writing a recipe mutated state, so
+            // that turn is reported without a RETRY — re-sending it is the patch
+            // contract's business, not a one-tap affordance.
+            let failure = ChatFailure.classify((error as? LLMError) ?? .network)
+            let payload: ChatFailureRecord.RetryPayload? = (hasBegunRecipe ? nil : retryUserText.map {
+                ChatFailureRecord.RetryPayload(userText: $0, referencedItem: nil, isNewRecipe: true)
+            })
+            append(ChatMessage(
+                role: .assistant,
+                text: failure.message,
+                failure: ChatFailureRecord(failure: failure, retry: payload)
+            ))
             llmDebugStatus = "failed"
             return
         }

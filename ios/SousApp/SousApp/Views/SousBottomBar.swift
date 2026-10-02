@@ -3,14 +3,21 @@ import UIKit
 
 // MARK: - HapticOnPressStyle
 
-/// A medium impact on press. Lives with the bottom bar because its two buttons are the
-/// only things that use it — the bar is the app's main action, and it is the one place
-/// a press is worth feeling.
+/// A medium impact on press, plus the visual press state every button now has
+/// (decision 25). Lives with the bottom bar because its two buttons are the only
+/// things that use it — the bar is the app's main action, and it is the one place
+/// a press is worth *feeling* as well as seeing.
 struct HapticOnPressStyle: ButtonStyle {
+    /// Mirrors the press outward, exactly as `PressReportingStyle` does, because the
+    /// label's chrome sits outside the Button. Optional so the bar's other control
+    /// can keep the haptic alone.
+    var isPressed: Binding<Bool>? = nil
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .onChange(of: configuration.isPressed) { _, pressed in
                 if pressed { UIImpactFeedbackGenerator(style: .medium).impactOccurred() }
+                isPressed?.wrappedValue = pressed
             }
     }
 }
@@ -39,6 +46,8 @@ struct SousBottomBar: View {
     private static let micWidth: CGFloat = 60
     private static let height: CGFloat = 52
 
+    @State private var talkPressed = false
+
     var body: some View {
         VStack(spacing: 0) {
             SousRule()
@@ -46,9 +55,10 @@ struct SousBottomBar: View {
             HStack(spacing: 0) {
                 Button(action: onTalk) {
                     SousButtonLabel(title: "TALK TO SOUS", style: .primary,
-                                    height: Self.height, icon: "message")
+                                    height: Self.height, icon: "message",
+                                    isPressed: talkPressed)
                 }
-                .buttonStyle(HapticOnPressStyle())
+                .buttonStyle(HapticOnPressStyle(isPressed: $talkPressed))
 
                 if voiceEnabled {
                     // White at 25% on the shared burgundy. Not a token: it is one of the

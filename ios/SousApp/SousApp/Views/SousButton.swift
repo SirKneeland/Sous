@@ -21,17 +21,31 @@ enum SousButtonStyle {
     /// Burgundy label only. Cancel, Reject.
     case text
 
-    fileprivate func fill(enabled: Bool) -> Color {
+    /// Pressed state (decision 25). Two clauses, decided by whether the button
+    /// already carries a fill:
+    ///
+    /// - **Unfilled** (`secondary`, `secondaryAccent`, `text`) **inverts**: its own
+    ///   ink becomes the fill and the label flips to sit on it legibly.
+    /// - **Filled** (`primary`, `inverse`) cannot invert further, so the fill
+    ///   **shifts one step** — deeper for burgundy, toward mid-gray for ink/cream.
+    ///
+    /// A pale wash was tried for `text` first, on the theory that a label-only
+    /// button wants the lightest possible treatment. It measured 1.02:1 against the
+    /// cream canvas — not a weak affordance, no affordance. Inverting it reads at
+    /// 7.1:1 and costs only a momentary flash of burgundy on Cancel and Reject.
+    func fill(enabled: Bool, pressed: Bool = false) -> Color {
         switch self {
-        case .primary:         return .sousTerracotta
-        case .inverse:         return enabled ? .sousText : .sousMuted
-        case .secondary,
-             .secondaryAccent,
-             .text:            return .clear
+        case .primary:         return pressed ? .sousPressedAccent : .sousTerracotta
+        case .inverse:
+            guard enabled else { return .sousMuted }
+            return pressed ? .sousPressedInverse : .sousText
+        case .secondary:       return pressed ? .sousText : .clear
+        case .secondaryAccent,
+             .text:            return pressed ? .sousTerracotta : .clear
         }
     }
 
-    fileprivate func border(enabled: Bool) -> Color? {
+    func border(enabled: Bool, pressed: Bool = false) -> Color? {
         switch self {
         case .primary, .inverse, .text: return nil
         case .secondary:                return .sousText
@@ -39,15 +53,18 @@ enum SousButtonStyle {
         }
     }
 
-    fileprivate func label(enabled: Bool) -> Color {
+    func label(enabled: Bool, pressed: Bool = false) -> Color {
         switch self {
         // Labels on burgundy are white in both modes (decided 2026-09-20): the
         // burgundy does not invert, so a label that did would go near-black in dark.
         case .primary:         return .white
         case .inverse:         return .sousBackground
-        case .secondary:       return enabled ? .sousText : .sousMuted
+        case .secondary:
+            guard enabled else { return .sousMuted }
+            // Inverted: the label sits on the ink fill it normally only outlines.
+            return pressed ? .sousBackground : .sousText
         case .secondaryAccent,
-             .text:            return .sousTerracotta
+             .text:            return pressed ? .white : .sousTerracotta
         }
     }
 }
@@ -72,11 +89,12 @@ private struct SousButtonContent: View {
     let isEnabled: Bool
     let icon: String?
     let isBusy: Bool
+    var isPressed: Bool = false
 
     var body: some View {
         HStack(spacing: 8) {
             if isBusy {
-                ProgressView().tint(style.label(enabled: isEnabled))
+                ProgressView().tint(style.label(enabled: isEnabled, pressed: isPressed))
             } else {
                 if let icon {
                     Image(systemName: icon)
@@ -86,7 +104,7 @@ private struct SousButtonContent: View {
                     .font(.sousButton)
             }
         }
-        .foregroundStyle(style.label(enabled: isEnabled))
+        .foregroundStyle(style.label(enabled: isEnabled, pressed: isPressed))
     }
 }
 
@@ -98,12 +116,13 @@ private struct SousButtonChrome: ViewModifier {
     let verticalPadding: CGFloat
     let fillsWidth: Bool
     let horizontalPadding: CGFloat
+    var isPressed: Bool = false
 
     func body(content: Content) -> some View {
         sized(width(content))
-            .background(style.fill(enabled: isEnabled))
+            .background(style.fill(enabled: isEnabled, pressed: isPressed))
             .overlay {
-                if let border = style.border(enabled: isEnabled) {
+                if let border = style.border(enabled: isEnabled, pressed: isPressed) {
                     Rectangle().stroke(border, lineWidth: 1)
                 }
             }
@@ -147,17 +166,21 @@ struct SousButtonLabel: View {
     /// Swaps the label for a spinner while work is in flight — the paywall's
     /// purchase button. The Figma component has no Busy variant yet; it should.
     var isBusy: Bool = false
+    /// Draws the pressed look (decision 25). `SousButton` tracks this itself; a call
+    /// site that supplies its own control has to drive it, typically by pairing
+    /// `PressReportingStyle` with a `@State` flag.
+    var isPressed: Bool = false
 
     var body: some View {
         SousButtonContent(title: title, style: style, isEnabled: isEnabled,
-                          icon: icon, isBusy: isBusy)
+                          icon: icon, isBusy: isBusy, isPressed: isPressed)
             .modifier(chrome)
     }
 
     fileprivate var chrome: SousButtonChrome {
         SousButtonChrome(style: style, isEnabled: isEnabled, height: height,
                          verticalPadding: verticalPadding, fillsWidth: fillsWidth,
-                         horizontalPadding: horizontalPadding)
+                         horizontalPadding: horizontalPadding, isPressed: isPressed)
     }
 }
 
@@ -177,16 +200,50 @@ struct SousButton: View {
     var isBusy: Bool = false
     let action: () -> Void
 
+    /// Mirrored out of the button style below, because the chrome that has to react
+    /// to a press lives *outside* the Button — see the note on `SousButtonContent`.
+    @State private var isPressed = false
+
     var body: some View {
         Button(action: action) {
             SousButtonContent(title: title, style: style, isEnabled: isEnabled,
-                              icon: icon, isBusy: isBusy)
+                              icon: icon, isBusy: isBusy, isPressed: isPressed)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressReportingStyle(isPressed: $isPressed))
         .disabled(!isEnabled)
         // Chrome outside the button, so `.disabled()` dims only the words.
         .modifier(SousButtonChrome(style: style, isEnabled: isEnabled, height: height,
                                    verticalPadding: verticalPadding, fillsWidth: fillsWidth,
-                                   horizontalPadding: horizontalPadding))
+                                   horizontalPadding: horizontalPadding,
+                                   isPressed: isPressed))
+    }
+}
+
+// MARK: - Press reporting
+
+/// Reports a button's press state outward without drawing anything itself.
+///
+/// `SousButton` cannot read `configuration.isPressed` the obvious way: a ButtonStyle
+/// only wraps the *label*, and Sous deliberately keeps fill and border outside the
+/// Button so `.disabled()` dims the words rather than washing out the fill. This
+/// style therefore renders the label untouched and mirrors the press flag into a
+/// binding the surrounding chrome can read.
+///
+/// The flag is written in `onChange` rather than during `makeBody`, which would be
+/// a state mutation inside a view update. `HapticOnPressStyle` on the bottom bar
+/// takes the same approach.
+///
+/// Deliberately unanimated: Sous has no motion tokens yet (Milestone 32), and
+/// inventing a duration here would pre-empt that decision. The state snaps on and
+/// off, which for a press is defensible on its own terms.
+struct PressReportingStyle: ButtonStyle {
+    @Binding var isPressed: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .contentShape(Rectangle())
+            .onChange(of: configuration.isPressed) { _, pressed in
+                isPressed = pressed
+            }
     }
 }

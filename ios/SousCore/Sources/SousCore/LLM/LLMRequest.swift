@@ -76,8 +76,8 @@ public struct NextLLMContext: Equatable, Sendable, Codable {
 /// Identifies a specific recipe row the user is asking about via the "Ask Sous" swipe action.
 /// Injected as structured context alongside the user message so the LLM knows which item
 /// the question applies to.
-public struct ReferencedItem: Sendable {
-    public enum ItemType: String, Sendable {
+public struct ReferencedItem: Sendable, Codable, Equatable {
+    public enum ItemType: String, Sendable, Codable {
         case ingredient
         case step
     }

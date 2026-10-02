@@ -348,7 +348,9 @@ struct OpenAILLMOrchestratorTests {
         guard case .failure(_, let msg, _, _, _) = result else {
             Issue.record("Expected .failure, got \(result)"); return
         }
-        #expect(msg == "OpenAI quota/rate limit hit. Try again shortly.")
+        // Copy is owned by ChatFailure.classify (Milestone 30); assert the
+        // orchestrator surfaces it rather than re-stating the sentence here.
+        #expect(msg == ChatFailure.classify(.rateLimited(retryAfterSec: nil)).message)
     }
 
     // MARK: - Multimodal run() tests

@@ -14,6 +14,7 @@ struct RecipeImportSheet: View {
     @ObservedObject var store: AppStore
     let onCancel: () -> Void
 
+    @State private var importPressed = false
     @State private var mode: Mode = .chooser
     @State private var pasteText: String = ""
     @State private var cameraAcquisitionState: CameraAcquisitionState = .idle
@@ -281,10 +282,11 @@ struct RecipeImportSheet: View {
                     title: "IMPORT RECIPE",
                     style: trimmed.isEmpty ? .secondary : .inverse,
                     isEnabled: !trimmed.isEmpty,
-                    height: nil            // hugs the label with 14pt above and below
+                    height: nil,           // hugs the label with 14pt above and below
+                    isPressed: importPressed
                 )
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressReportingStyle(isPressed: $importPressed))
             .disabled(trimmed.isEmpty)
             .padding(16)
         }

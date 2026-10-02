@@ -30,6 +30,8 @@ import SousCore
 ///                                         MISE EN PLACE trigger and its modal are reachable
 ///   -sous-fixture attachPreparing         the composer's attachment strip, mid-preparation
 ///   -sous-fixture attachFailed            the composer's attachment strip, after a failure
+///   -sous-fixture chatRetry               a failed chat turn with its RETRY control
+///   -sous-fixture chatWall                a failed chat turn that hit the recipe cap
 ///   -sous-fixture-entitlement byok        entitlement to fake (default: subscriber)
 enum DebugFixture {
 
@@ -68,6 +70,14 @@ enum DebugFixture {
         /// The attachment strip after preparation failed. Needs a corrupt image to
         /// reach for real, which cannot be provoked from the UI.
         case attachFailed
+        /// A chat turn that failed transiently, showing its RETRY control. Reaching
+        /// this for real means killing the network mid-call, which cannot be timed
+        /// reliably and leaves nothing to photograph in light *and* dark.
+        case chatRetry
+        /// A chat turn that hit the recipe cap (proxy 402) — the wall case, which
+        /// must show a route to billing and no RETRY. Reaching it for real needs a
+        /// genuinely capped account.
+        case chatWall
     }
 
     /// A few saved memories, so the Memories screen has something in it. Normally these

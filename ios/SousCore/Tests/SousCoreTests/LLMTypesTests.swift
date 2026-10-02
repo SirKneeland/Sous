@@ -65,6 +65,8 @@ struct LLMTypesTests {
             .rateLimited(retryAfterSec: nil),
             .auth,
             .badRequest,
+            .capReached,
+            .offTopic(message: nil),
             .server,
         ]
 
@@ -85,6 +87,8 @@ struct LLMTypesTests {
             case .rateLimited:           "transport"
             case .auth:                  "transport"
             case .badRequest:            "transport"
+            case .capReached:            "billing"
+            case .offTopic:              "policy"
             case .server:                "transport"
             }
             #expect(!category.isEmpty)

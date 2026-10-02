@@ -122,6 +122,14 @@ public enum LLMError: Error, Equatable, Sendable {
     case auth
     /// HTTP 4xx (other than 401/403/429) — malformed request.
     case badRequest
+    /// HTTP 402 from the Sous proxy — the user is at their recipe cap. This is a
+    /// billing wall, not a transient failure: retrying it lands in the same wall.
+    /// Only ever produced by `ProxyOpenAIClient`; BYOK users never see it.
+    case capReached
+    /// HTTP 400 `off_topic` from the Sous proxy — the request was classified as
+    /// not about cooking. The backend supplies the user-facing copy; carrying it
+    /// here keeps that wording instead of falling back to generic 4xx copy.
+    case offTopic(message: String?)
     /// HTTP 5xx — server-side error.
     case server
 }

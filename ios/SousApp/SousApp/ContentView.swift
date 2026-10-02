@@ -123,7 +123,7 @@ struct ContentView: View {
                     capSummary = DebugFixture.cappedUsage()
                     billingPresentation = .capReached
                 case .canvas, .review, .explore, .memoryToast, .importLoading, .photoFailed,
-                     .miseEnPlace, .attachPreparing, .attachFailed:
+                     .miseEnPlace, .attachPreparing, .attachFailed, .chatRetry, .chatWall:
                     // importLoading presents itself: applyDebugFixture sets
                     // isShowingImportSheet, which the canvas already observes.
                     break
@@ -319,6 +319,19 @@ struct ContentView: View {
                 store.importError = nil
                 store.isShowingImportSheet = false
             })
+        }
+        // Milestone 30: a failed chat turn that hit a wall routes here. The cap CTA
+        // reuses gateGenerative so a trial user sees the paywall and a subscriber at
+        // the cap sees the hard stop — the same fork every other entry point uses.
+        .onChange(of: store.billingWallRequested) { _, requested in
+            guard requested else { return }
+            store.billingWallRequested = false
+            gateGenerative {}
+        }
+        .onChange(of: store.signInWallRequested) { _, requested in
+            guard requested else { return }
+            store.signInWallRequested = false
+            authState.handleUnauthorized()
         }
         .fullScreenCover(isPresented: Binding(
             get: { billingPresentation != .none },

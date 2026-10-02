@@ -732,6 +732,123 @@ regresses.
 
 ---
 
+### 24. Sous's design system is not synced to Claude Design (2026-09-29)
+
+Evaluated `/design-sync`, the Claude Code skill that uploads a design system to a Claude Design
+project so the design agent builds with your real components. Stopped before running it. Recorded
+here so nobody spends a day rediscovering why.
+
+**The blocker is structural, not a setting.** The skill compiles an existing JavaScript component
+library into a bundle and ships that — its stated core principle is *"ship what the customer
+already built — the bundle is their compiled `dist/`, never a reimplementation."* It emits
+`_ds_bundle.js`, per-component `.d.ts` prop contracts and `.jsx` previews.
+
+Sous has none of the inputs: zero `.tsx`/`.jsx` files, no Storybook, no `dist/`, and no component
+package — the only two `package.json` files are the eval suite and the backend API. The 164 source
+files are Swift, and the component library proper lives in `design/figma-components.js`, which is
+Figma's node API rather than anything bundlable.
+
+**The escape hatch was considered and rejected.** The skill allows hand-authoring its output
+layout for repos outside the converter's envelope. For Sous that means writing HTML or React
+renditions of 32 components — a reimplementation, which is the thing the skill's own principle
+warns against, and a third representation of the design system with nothing enforcing it. The
+whole point of `check-tokens.py` is that `tokens.json` and `SousTheme.swift` cannot drift. A
+hand-built third copy would have no such guard.
+
+**What was nearly done instead, and why it is parked rather than dismissed.** The cheap half is
+real: `tokens.json` is already a W3C-style token file, so exporting it as CSS custom properties is
+mechanical, and it is the part that would make every Claude Design output on-brand. It is parked
+only because without a component library the rest of the sync has nothing to carry, and a
+tokens-only sync may not satisfy the skill's gates. If Sous ever grows a web surface — a marketing
+site, a recipe share page — this is worth revisiting, and that exporter is the first step.
+
+**`/design` itself needs none of this.** It works today without a synced system; it simply will
+not know Sous's palette and type, so its output needs correcting by hand each time.
+
+---
+
+### 25. Every button has a pressed state, and a contrast floor decides it (2026-10-02)
+
+Sous had no press feedback anywhere. All 63 button call sites route through
+`.buttonStyle(.plain)` — the style that opts out of the system's own treatment — and nothing in
+the code read `configuration.isPressed`. The one exception was `HapticOnPressStyle` on the
+bottom bar: a haptic, no visual, scoped on purpose to "the one place a press is worth feeling."
+Interaction state had simply never been decided.
+
+**The rule: unfilled styles invert, filled styles shift one step.**
+
+| Style | Resting | Pressed |
+|---|---|---|
+| Primary | burgundy fill, white label | fill deepens to `state/pressedAccent` |
+| Inverse | ink fill (cream in dark) | fill moves toward mid-gray, `state/pressedInverse` |
+| Secondary | 1pt ink border | ink fills it; label flips to the surface |
+| Secondary Accent | 1pt burgundy border | burgundy fills it; label flips to white |
+| Text | burgundy label only | burgundy fills it; label flips to white |
+
+Borders do not change. A press alters a button's weight, never its shape.
+
+**Two clauses rather than one, because an outline and a fill cannot press the same way.** An
+unfilled button has somewhere obvious to go — it already names its own ink in its border or its
+label, so pressing fills with it. A filled button is already inverted and has nowhere further to
+go, so it steps along its own ramp instead.
+
+**What this got wrong first, and what caught it.** The initial version was prettier and nearly
+invisible. `Text` took the pale burgundy wash (`burgundy.50`) on the theory that a label-only
+button wants the lightest possible treatment; `Inverse` stepped from `ink.900` to the adjacent
+`ink.800`. Both read perfectly well as token names. Measured against what they replace:
+
+- `Text` wash on the cream canvas — **1.02:1**
+- `Inverse` light — **1.09:1**
+
+Not weak affordances. No affordance. Neither would have survived a screenshot, except that a
+press cannot be screenshotted: `touch_path` holds are not delivered to SwiftUI as presses, so
+there was no picture to look at. The numbers found what the eye could not be shown.
+
+So the floor is now a test. `SousButtonPressStateTests` asserts every pressed state clears
+**1.25:1** against what it replaces — the resting fill for a filled style, the canvas for an
+unfilled one — and that every pressed label still clears **4:1** on the fill arriving under it,
+in both appearances. 1.25:1 is not an accessibility threshold; it is the point below which a
+press is not visible at all. The test was confirmed to fail on the original wash before the
+fix was kept.
+
+**Costs accepted.** `Text` is used for Cancel and Reject, so those now flash burgundy while
+held. A momentary fill on a destructive-adjacent control is a fair price for the alternative
+being nothing at all; revisit if a `status.destructive` token ever lands (see Still open).
+`Primary` clears the floor at 1.32:1 in light and 1.83:1 in dark — the narrowest of the five,
+but it is a 353×52 fill rather than a label, and a CTA that flashes hard would read as a bug.
+
+**One new primitive, two new semantic tokens.** `burgundy.800` (#6C2431) exists only as
+Primary's pressed fill. `state/pressedAccent` and `state/pressedInverse` are scoped to
+`FRAME_FILL`/`SHAPE_FILL` in Figma — a pressed fill never lands on type or a stroke. Everything
+else reuses tokens already in the system, which is why inverting cost nothing new.
+
+**Deliberately unanimated.** Sous has no motion tokens until Milestone 32, and inventing a
+duration here would pre-empt that decision. The state snaps on and off. Revisit when motion
+lands — this is one of the first things that should get a token.
+
+**The rule was already there, hand-rolled.** RESET RECIPE on the canvas carried the comment
+*"Pressed, it fills burgundy with a white label — which is Primary"* and swapped its own style
+on press. That is exactly what Secondary Accent pressed now resolves to, arrived at
+independently by whoever built that button. It is the only call site left un-migrated, because
+its flag latches while the confirmation dialog is open rather than tracking the finger — a
+different behaviour that a true press state would quietly break.
+
+**Implementation note.** `SousButton` cannot read `configuration.isPressed` the obvious way: a
+`ButtonStyle` wraps only the label, and Sous deliberately keeps fill and border *outside* the
+Button so `.disabled()` dims the words instead of washing out the fill. `PressReportingStyle`
+therefore renders the label untouched and mirrors the press flag into a binding the surrounding
+chrome reads, writing it in `onChange` rather than during `makeBody`.
+
+`SousButtonLabel` — the label-only half, for call sites that supply their own control — gained
+an `isPressed` parameter so those can opt in, and all eight were migrated: TALK TO SOUS, TALK TO
+A RECIPE, MAKE THIS RECIPE, NEW RECIPE, RESTORE ORIGINAL RECIPE, IMPORT RECIPE, SHARE SOUS WITH
+A FRIEND, and the bottom bar's mic. `HapticOnPressStyle` now reports the press as well as firing
+the impact, so TALK TO SOUS is felt *and* seen; the haptic itself is still the bottom bar's
+alone.
+
+
+---
+
 ## Still open
 
 **No destructive color token.** The "Delete Timer" button uses SwiftUI's system red at 80%

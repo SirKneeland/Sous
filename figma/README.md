@@ -92,6 +92,20 @@ to the code.
 
 ## Two things to know
 
+**Sketching on your own page blocks rebuilds.** If you drag library components onto a page of your
+own to try out a screen, the next run will *skip* rebuilding those components — the plugin refuses
+to replace anything that still has a live instance in the file, because replacing it would break
+your page. The warning says which ones and where:
+
+> Button was not rebuilt: 3 instance(s) still use it (Explorations: 3). Delete them if they are
+> stray, then run again — or leave them and edit the component in Figma.
+
+It cascades: skip Icon Button and Timer Banner skips too, since it is built from one. **And the
+report still says `VERIFIED`** — the checks that ran did pass — with the warning under Notes. So
+read the Notes section, not just the last line. Delete the sketch page (or detach the copies)
+before re-running.
+
+
 **Light and dark.** Two modes in one collection is the right structure, but modes are a paid
 Figma feature. On the Starter plan the plugin falls back to two collections — `Sous Color`
 (light) and `Sous Color Dark`. If you ever move to a paid plan, just run the plugin again: it

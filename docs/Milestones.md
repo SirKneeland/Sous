@@ -632,7 +632,7 @@ Explicit non-goals:
 ---
 
 ## Milestone 30 — Chat Error Handling and Retry
-**Status:** PLANNED
+**Status:** DONE (chat) — voice mode deferred, see "Still open" below
 
 **Goal:** Make a failed message something the user can recover from in one tap, instead of a dead
 end that loses what they typed.
@@ -651,6 +651,35 @@ Core capabilities:
 Explicit non-goals:
 - Offline queueing of messages to send later
 - Retrying a turn that already partially mutated recipe state — the patch contract governs that
+
+**What shipped (2026-09-29):**
+- `ChatFailure.classify` (SousCore) sorts every `LLMError` into *retryable* (transient
+  transport), *rephrase* (the turn itself is the problem) or *wall* (cap, auth, missing key),
+  and owns the user-facing sentence. The orchestrator's old copy map now delegates to it, so
+  the wording and the decision about whether RETRY appears can never disagree.
+- A failed turn carries its own recovery on the chat bubble (`ChatFailureRecord`): the
+  classified failure plus the original turn, verbatim. RETRY re-sends that turn unchanged;
+  it rides along in `SessionSnapshot`, so a retry offered before backgrounding is still
+  there on return.
+- Walls get a route, not a dead end: a 402 cap offers SEE OPTIONS (through the same
+  `gateGenerative` fork every other entry point uses), a 401/403 offers SIGN IN AGAIN, and a
+  missing BYOK key offers no button because the copy points at Settings.
+- **The proxy no longer collapses every 4xx into `.badRequest`.** 402 is now `capReached`
+  and 400 `off_topic` keeps the backend's own copy. Without this, "never retry into the same
+  wall" was not expressible.
+- The pre-canvas recipe-creation stream, which previously dead-ended on a hardcoded network
+  sentence, now goes through the same classifier — except when the stream already began
+  writing a recipe, which is the non-goal above.
+- Failure bubbles are filtered out of the conversation history sent to the model, so error
+  chrome never teaches it to apologise.
+- Fixtures `-sous-fixture chatRetry` and `chatWall`.
+
+**Still open:**
+- **Voice mode.** `VoiceModeCoordinator` keeps its own recovery path. The classifier is
+  transport-agnostic and ready for it; this was deferred deliberately to keep the milestone
+  to one surface.
+- No automatic retry layer was added. The orchestrator already backs off internally on
+  transient errors; a second one would double token spend on every blip to save one tap.
 
 ---
 

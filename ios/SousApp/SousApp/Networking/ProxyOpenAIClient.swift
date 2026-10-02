@@ -102,7 +102,7 @@ struct ProxyOpenAIClient: LLMClient {
         let ms = Int(Date().timeIntervalSince(start) * 1000)
         guard let httpResp = urlResponse as? HTTPURLResponse else { throw LLMError.network }
         let status = httpResp.statusCode
-        guard status == 200 else { throw Self.mapHTTPError(status: status, headers: httpResp) }
+        guard status == 200 else { throw Self.mapHTTPError(status: status, headers: httpResp, body: data) }
 
         guard
             let json    = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -148,13 +148,30 @@ struct ProxyOpenAIClient: LLMClient {
         }
     }
 
-    private static func mapHTTPError(status: Int, headers: HTTPURLResponse) -> LLMError {
+    /// Maps a non-200 proxy response to an `LLMError`.
+    ///
+    /// The Sous proxy overloads two 4xx codes with product meaning, so they are
+    /// pulled out of the generic bucket (Milestone 30):
+    /// - **402** is always `cap_reached` — a billing wall that must never be retried.
+    /// - **400 `{"error":"off_topic"}`** carries backend-authored copy worth keeping.
+    ///
+    /// `body` is optional because the streaming path may not have buffered it; an
+    /// unparsed 400 simply degrades to `.badRequest`, which the failure classifier
+    /// treats identically to `.offTopic` (both ask the user to rephrase).
+    private static func mapHTTPError(status: Int, headers: HTTPURLResponse, body: Data? = nil) -> LLMError {
         switch status {
         case 429:
             let retryAfter = headers.value(forHTTPHeaderField: "Retry-After").flatMap { Int($0) }
             return .rateLimited(retryAfterSec: retryAfter)
         case 401, 403:  return .auth
-        case 400..<500: return .badRequest   // includes 402 cap_reached / 400 off_topic
+        case 402:       return .capReached
+        case 400:
+            guard let body,
+                  let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+                  json["error"] as? String == "off_topic"
+            else { return .badRequest }
+            return .offTopic(message: json["message"] as? String)
+        case 400..<500: return .badRequest
         default:        return .server
         }
     }
@@ -206,7 +223,18 @@ extension ProxyOpenAIClient: StreamingLLMClient {
                         return
                     }
                     guard httpResp.statusCode == 200 else {
-                        continuation.finish(throwing: Self.mapHTTPError(status: httpResp.statusCode, headers: httpResp))
+                        // Drain the (small) error body so 400 off_topic keeps the
+                        // backend's copy instead of degrading to generic 4xx copy.
+                        var errorBody = Data()
+                        for try await byte in asyncBytes {
+                            errorBody.append(byte)
+                            if errorBody.count > 8_192 { break }
+                        }
+                        continuation.finish(
+                            throwing: Self.mapHTTPError(
+                                status: httpResp.statusCode, headers: httpResp, body: errorBody
+                            )
+                        )
                         return
                     }
                     for try await line in asyncBytes.lines {

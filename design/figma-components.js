@@ -290,6 +290,17 @@ const BUTTON_DISABLED = {
   Inverse: { fill: "background/disabled", stroke: null, label: "text/inverse" },
   Secondary: { fill: null, stroke: "border/strong", label: "text/muted" },
 };
+// Pressed (decision 25). Unfilled styles invert — their own ink becomes the fill
+// and the label flips onto it. Filled styles cannot invert, so the fill shifts one
+// step. Every style has one: a pressed state that is merely different rather than
+// visible is what the first attempt got wrong.
+const BUTTON_PRESSED = {
+  Primary: { fill: "state/pressedAccent", stroke: null, label: "text/onInverse" },
+  Inverse: { fill: "state/pressedInverse", stroke: null, label: "text/inverse" },
+  Secondary: { fill: "border/strong", stroke: "border/strong", label: "text/inverse" },
+  "Secondary Accent": { fill: "accent/primary", stroke: "accent/primary", label: "text/onInverse" },
+  Text: { fill: "accent/primary", stroke: null, label: "text/onInverse" },
+};
 const BUTTON_W = 353;   // 393 - 2x20pt gutter
 const BUTTON_H = 52;
 
@@ -297,6 +308,7 @@ function buttonSpecs() {
   const specs = [];
   for (const s of BUTTON_STYLES) {
     specs.push(Object.assign({ state: "Default" }, s));
+    specs.push(Object.assign({ state: "Pressed", style: s.style }, BUTTON_PRESSED[s.style]));
     if (BUTTON_DISABLED[s.style]) {
       specs.push(Object.assign({ state: "Disabled", style: s.style }, BUTTON_DISABLED[s.style]));
     }
@@ -306,7 +318,7 @@ function buttonSpecs() {
 
 async function buildButton() {
   const page = await ensurePage("Button");
-  const cols = ["Default", "Disabled"];
+  const cols = ["Default", "Pressed", "Disabled"];
   const rows = BUTTON_STYLES.map((s) => s.style);
   const owned = ["Button / Documentation"]
     .concat(cols.map((c) => "button/col/" + c))
@@ -371,8 +383,9 @@ async function buildButton() {
     "Square, full width by default. Primary = burgundy fill (main action). Inverse = ink fill " +
     "that flips to cream in dark mode (OK, confirm). Secondary = 1pt ink border. Secondary " +
     "Accent = 1pt burgundy border. Text = burgundy label only (Cancel, Reject). Labels always " +
-    "ALL CAPS; labels on burgundy are white in both modes.\n\n" +
-    "Swift: no shared button yet — each view draws its own with Font.sousButton.";
+    "ALL CAPS; labels on burgundy are white in both modes. Pressed: unfilled styles " +
+    "invert, filled styles shift one step.\n\n" +
+    "Swift: SousButton / SousButtonLabel in Views/SousButton.swift.";
 
   const labelKey = set.addComponentProperty("Label", "TEXT", "Button");
   const iconKey = set.addComponentProperty("Icon", "BOOLEAN", false);
@@ -396,6 +409,9 @@ async function buildButton() {
     ["Sous/Body",
       "Labels are always ALL CAPS. Labels on burgundy are white in both modes. Only Inverse and Secondary have a disabled look in the app today; the others have none yet. Toggle Icon to show a leading SF Symbol, as TALK TO SOUS does.",
       "text/primary", "usage"],
+    ["Sous/Body",
+      "Pressed (decision 25): an unfilled style inverts — its own ink becomes the fill and the label flips onto it. A filled style cannot invert, so the fill shifts one step: Primary deepens, Inverse moves toward mid-gray from whichever end it starts at. Borders stay put — a press changes a button's weight, never its shape. Unanimated for now: Sous has no motion tokens until Milestone 32.",
+      "text/primary", "pressed"],
     ["Sous/Body",
       'Not yet true in code: there is no shared SwiftUI button — each screen draws its own. The ALL CAPS rule and the white-on-burgundy label now hold everywhere (fixed 2026-09-24); four buttons still add letter-spacing the token does not: CapReachedView ×2, PaywallView, SettingsView.',
       "text/muted", "code-debt"],

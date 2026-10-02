@@ -74,7 +74,8 @@
   - `LLM/LLMProtocols.swift` — `LLMClient`, `StreamingLLMClient`, and `LLMOrchestrator` protocols (both Sendable); `LLMOrchestrator` declares `run(_:onStreamToken:)` as a protocol requirement with a default no-op extension
   - `LLM/StreamingJSONExtractor.swift` — package-internal `extractPartialAssistantMessage(from:)` function; incrementally extracts the `assistant_message` string value from a partial JSON buffer as tokens accumulate
   - `LLM/LLMRequest.swift` — Immutable snapshot: recipeId, recipeVersion, hasCanvas, userMessage, recipeSnapshotForPrompt, userPrefs, nextLLMContext; PatchDecision/NextLLMContext are Codable here
-  - `LLM/LLMResult.swift` — Enum: `.valid(patchSet, assistantMessage, ...)` | `.noPatches(...)` | `.failure(...)`
+  - `LLM/LLMResult.swift` — Enum: `.valid(patchSet, assistantMessage, ...)` | `.noPatches(...)` | `.failure(...)`; also `LLMError`, which as of M30 distinguishes `capReached` (proxy 402) and `offTopic(message:)` from the generic `badRequest`
+  - `LLM/ChatFailure.swift` — **(M30)** `ChatFailure.classify(LLMError)` → `.retryable` / `.rephrase` / `.wall(cap|auth|missingKey)` plus the user-facing sentence. The single owner of failure copy: `OpenAILLMOrchestrator.assistantMessage(for:)` delegates to it
   - `LLM/LLMRawResponse.swift` — Transport response: rawText, requestId, attempt, timingMs, httpStatus, token counts
   - `LLM/OpenAILLMOrchestrator.swift` — Concrete orchestrator: prompt construction, retry/backoff, JSON repair, validation (~655 lines)
   - `Decoding/PatchSetDecoder.swift` — Two-pass decoder: strict JSON parse → extraction fallback; returns DecodeResult (~300 lines)
@@ -95,7 +96,7 @@
   - `UIState.swift` — Enum: recipeOnly | chatOpen | patchProposed | patchReview; contains HiddenContext (accumulates rejection facts)
   - `UIStateMachine.swift` — Pure reducer: (UIState, UIEvent) → UIState; 8 defined transitions
   - `UIEvent.swift` — Enum: openChat, closeChat, userDraftChanged, patchReceived, validatePatch, acceptPatch, rejectPatch
-  - `ChatModels.swift` — ChatMessage (UUID id, role, text, timestamp); MessageRole enum
+  - `ChatModels.swift` — ChatMessage (UUID id, role, text, timestamp, photoPath, failure); MessageRole enum; **(M30)** `ChatFailureRecord` — the classified failure plus the original turn, carried on the bubble so RETRY survives a relaunch via `SessionSnapshot`
   - `UIStateMachine/LLMContextComposer.swift` — Builds userMessage by appending HiddenContext silently
   - `Networking/OpenAIClient.swift` — Concrete LLMClient; hits `api.openai.com/v1/chat/completions`; maps HTTP errors to LLMError cases; also conforms to `StreamingLLMClient` via an extension that uses `URLSession.bytes(for:)` to parse SSE lines and yield raw delta tokens (~350 lines). **Used directly only by BYOK users** as of Project 3.
   - `Networking/ProxyOpenAIClient.swift` — **(Project 3)** `StreamingLLMClient` that routes non-BYOK users' chat calls through the Sous backend proxy (`POST /api/v1/proxy/chat`). Same OpenAI body/parse logic as `OpenAIClient`, but Bearer = Sous session token and sets `X-Sous-Is-New-Recipe` / `X-Sous-Recipe-Id`. Constructed per-call by `AppStore.makeLLMClient(isNewRecipe:recipeId:)`

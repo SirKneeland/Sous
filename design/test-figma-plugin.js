@@ -507,7 +507,7 @@ function expect(label, condition, detail) {
   console.log("\n6. Components: Button");
   {
     const { report, state, figma } = await run({ allowModes: false, fonts: MAC });
-    expect("report verifies components too", /^VERIFIED/m.test(report) && /Button \(7 variants\)/.test(report), report);
+    expect("report verifies components too", /^VERIFIED/m.test(report) && /Button \(12 variants\)/.test(report), report);
     expect("report lists every component",
       /Section Header \(3 variants\)/.test(report) && /Ingredient Group Header/.test(report) &&
       /List Row \(7 variants\)/.test(report), report);
@@ -915,7 +915,7 @@ function expect(label, condition, detail) {
     expect("nothing is blocked by instances deleted earlier in the same run",
       !/not rebuilt/.test(again.report), again.report);
     expect("a second run still rebuilds every component despite the assembled screen",
-      /Button \(7 variants\)/.test(again.report) && /List Row \(7 variants\)/.test(again.report) &&
+      /Button \(12 variants\)/.test(again.report) && /List Row \(7 variants\)/.test(again.report) &&
       /Recipe Canvas screen/.test(again.report) && !/not rebuilt/.test(again.report), again.report);
     expect("second run keeps it untouched",
       /Checkbox \(kept/.test(again.report) &&

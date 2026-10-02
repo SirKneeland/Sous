@@ -26,6 +26,7 @@ struct HistoryDrawer: View {
     var onSettings: () -> Void = {}
     var isHamburgerVisible: Bool = false
 
+    @State private var newRecipePressed = false
     @State private var progress: CGFloat = 0
     @State private var gestureActive = false
     /// Cached from GeometryReader so snap() can compute the target canvasOffset.
@@ -83,9 +84,10 @@ struct HistoryDrawer: View {
                             snap(open: false) { onNewRecipe() }
                         } label: {
                             SousButtonLabel(title: "NEW RECIPE", style: .primary,
-                                            icon: "plus.square.fill")
+                                            icon: "plus.square.fill",
+                                            isPressed: newRecipePressed)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(PressReportingStyle(isPressed: $newRecipePressed))
                         .padding(.horizontal, 20)
                         .padding(.vertical, 12)
                         .background(Color.sousBackground.ignoresSafeArea(edges: .bottom))

@@ -18,6 +18,8 @@ struct CapReachedView: View {
 
     var onClose: (() -> Void)? = nil
 
+    @State private var sharePressed = false
+
     @Environment(\.openURL) private var openURL
 
     private static let johnMessage =
@@ -88,9 +90,10 @@ struct CapReachedView: View {
                 // Secondary: share Sous with a friend.
                 // ShareLink supplies its own control, so it takes the label directly.
                 ShareLink(item: shareText) {
-                    SousButtonLabel(title: "SHARE SOUS WITH A FRIEND", style: .secondary)
+                    SousButtonLabel(title: "SHARE SOUS WITH A FRIEND", style: .secondary,
+                                    isPressed: sharePressed)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressReportingStyle(isPressed: $sharePressed))
                 .padding(.horizontal, 20)
                 .padding(.top, 12)
                 .padding(.bottom, 28)

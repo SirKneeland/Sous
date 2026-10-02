@@ -62,6 +62,8 @@ SCOPES = {
     "border":     ["STROKE_COLOR"],
     "status":     ["FRAME_FILL", "SHAPE_FILL", "TEXT_FILL"],
     "voice":      ["FRAME_FILL", "SHAPE_FILL", "TEXT_FILL", "STROKE_COLOR"],
+    # Pressed fills only ever land behind a button, never on type or a stroke.
+    "state":      ["FRAME_FILL", "SHAPE_FILL"],
 }
 
 # Token name -> the name a designer sees on the Figma text style.

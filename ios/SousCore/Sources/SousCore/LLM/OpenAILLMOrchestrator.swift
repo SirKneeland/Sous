@@ -335,19 +335,12 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
         try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
     }
 
+    /// User-facing copy for a failed turn.
+    ///
+    /// Owned by `ChatFailure.classify` (Milestone 30) so the sentence the user reads
+    /// and the decision about whether RETRY appears can never disagree.
     private func assistantMessage(for error: LLMError) -> String {
-        switch error {
-        case .missingAPIKey:                             return "OpenAI API key missing. Add it in Debug settings."
-        case .auth:                                      return "OpenAI key invalid or unauthorized."
-        case .rateLimited:                               return "OpenAI quota/rate limit hit. Try again shortly."
-        case .server:                                    return "OpenAI service error. Try again."
-        case .badRequest:                                return "Request failed. Please try a different phrasing."
-        case .network, .timeout, .cancelled:             return "Network issue. Check connection and try again."
-        case .decodeNonJSON, .decodeInvalidJSON,
-             .schemaInvalid, .validationRecoverable,
-             .validationExpired, .validationFatal,
-             .recipeIdMismatchFatal:                     return "Something went wrong. Please try again."
-        }
+        ChatFailure.classify(error).message
     }
 
     // MARK: - Decode + Validate
@@ -1312,6 +1305,8 @@ public struct OpenAILLMOrchestrator: LLMOrchestrator {
         case .validationFatal, .recipeIdMismatchFatal:   return "validationFatal"
         case .validationExpired:                         return "validationExpired"
         case .validationRecoverable:                     return "validationRecoverable"
+        case .capReached:                                return "capReached"
+        case .offTopic:                                  return "offTopic"
         }
     }
 }

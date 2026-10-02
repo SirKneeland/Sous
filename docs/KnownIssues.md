@@ -660,3 +660,19 @@ how it was found at all.
 
 Deleting it is a small, safe change. Not done here only because the operator's decision covered
 the callout, not this.
+
+## A fixture that launches with the chat already open renders it off-screen
+
+- **Area:** `ios/SousApp/SousApp/ContentView.swift` — `chatOverlayOffset`
+- **Type:** Pre-existing bug, surfaced by Milestone 30
+- **Flagged:** 2026-09-29
+
+The chat overlay drawn *over a canvas* starts at `chatOverlayOffset = screen height` and only
+animates to 0 inside `.onChange(of: isChatOpen)`. A fixture (or a restored session) that is
+already in `.chatOpen` at launch never produces that change, so the scrim dims the canvas and
+the chat itself stays below the screen. The `chatRetry` / `chatWall` fixtures work around it by
+being canvasless, which lands them on the fullscreen chat instead — the same workaround
+`memoryToast`, `photoFailed` and the attachment fixtures already use.
+
+Fix when touched: set the offset on appear when `isChatOpen` is already true. Left alone here
+because it is shared launch-animation code outside the milestone's scope.

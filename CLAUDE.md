@@ -100,6 +100,32 @@ decision 13 in `design/TOKEN-DECISIONS.md`.
 | `design/MIGRATION-PLAN.md` | Which surfaces are migrated and which are still un-migrated vibes. **Deliberately gitignored — a working document, not part of the shipped repo. Do not "fix" this by committing it.** |
 | `figma/` | The local Figma plugin that writes the library. |
 
+### Before building: how a new feature gets designed
+
+**The design step and the code step are usually the same step.** A mockup exists to reduce the
+risk of building the wrong thing, and the design system already removes most of that risk —
+anything assembled from these components in these tokens will look like Sous. So do not reach for
+a design tool by reflex. Pick by how novel the thing actually is:
+
+1. **Made of parts that already exist** — most features. Build it in SwiftUI from the real
+   components, run it in the Simulator, and show the operator screenshots in **both light and
+   dark**. Twenty to forty minutes, and they react to a running screen rather than a picture of
+   one. There is no mockup to translate and no gap between what was approved and what ships.
+   **This is the default. Do not ask permission to use it.**
+2. **The operator wants to arrange it themselves.** They compose a scratch page in Figma from the
+   library and send a screenshot. Pasting an image costs nothing; reading the file through the
+   Figma MCP spends from twenty calls a month. **See the instance trap below before suggesting
+   this.**
+3. **Genuinely new vocabulary — the system has no opinion yet.** Motion is the live example:
+   Milestone 32 exists because there are no motion tokens, so there is nothing to build from.
+   `/design` (Claude Design, available in Claude Code) is for this case only. It does **not** know
+   Sous's palette or type — treat its output as shape and structure, never colour. Whatever it
+   settles then becomes a token plus a numbered decision, and the feature drops back to case 1.
+
+`/design-sync` does not work on this repo and is not worth retrying — it compiles a JavaScript
+component library and Sous is SwiftUI. See decision 24 in `design/TOKEN-DECISIONS.md` for the full
+reasoning and the one condition that would change it.
+
 ### The loop for any new feature or view change
 
 1. **Read first:** `docs/DesignSpec.md`, plus the "Still open" and "What is enforced now"
@@ -110,7 +136,8 @@ decision 13 in `design/TOKEN-DECISIONS.md`.
    `SousIconSize`.
 3. **If nothing fits, that is a design decision, not a code decision.** Do not add a sixth button
    style, a bespoke hex, or an inline `.system(size:)` because one screen wants one. Add the token
-   to **both** `design/tokens.json` and `SousTheme.swift`, then write it up as the next numbered
+   to **both** `design/tokens.json` and `ios/SousApp/SousApp/Views/SousTheme.swift`, then write it up as the next
+   numbered
    decision in `design/TOKEN-DECISIONS.md` with the reasoning. If a screen cannot be assembled from components,
    the components are wrong — that is the test working.
 4. **Run both checks** before declaring the task done:
@@ -120,17 +147,27 @@ decision 13 in `design/TOKEN-DECISIONS.md`.
    node design/test-figma-plugin.js
    ```
 
-5. **Verify in the Simulator in both light and dark mode** (see "Verification"), then push any new
-   or changed component to Figma with the **local plugin** in `figma/` — see `figma/README.md`.
+5. **Verify in the Simulator in both light and dark mode** (see "Verification"). Then, **only if
+   the work introduced a new component or changed an existing one**, add it to
+   `design/figma-components.js` with test assertions and ask the operator to run the local plugin
+   in `figma/` and paste the report back. A feature assembled entirely from existing components
+   needs no plugin run — **Figma is a record of the system, not a gate on shipping.**
 
 ### Never
 
 - Hardcode a colour, or write `.system(size:)` in a view. `design/check-tokens.py` fails on both.
-- Change a value in `SousTheme.swift` without changing `design/tokens.json` to match.
+- Change a value in `ios/SousApp/SousApp/Views/SousTheme.swift` without changing
+  `design/tokens.json` to match.
 - Add a component variant or token without logging it in `design/TOKEN-DECISIONS.md`.
 - **Use the Figma MCP tools for this work.** The local plugin does all the writing; the MCP
   allowance on Figma's free plan — which is the plan in use — is **twenty calls per month**, and is
   not to be spent on routine library updates.
+- **Leave component instances on a hand-made Figma page.** `clearOwned` refuses to rebuild any
+  component that still has a live instance anywhere in the file, and it cascades — skip Icon
+  Button and Timer Banner skips with it. The report still says `VERIFIED`, with the warning buried
+  under Notes, so components silently stop updating while everything looks fine. If the operator
+  sketches with library instances, that page must be deleted (or the copies detached) before the
+  next plugin run.
 - Assume a surface is migrated. `design/MIGRATION-PLAN.md` carries the live status — check it
   rather than trusting this file, and if you find pre-system code in a surface it calls done, say
   so rather than quietly matching it.

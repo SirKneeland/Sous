@@ -62,6 +62,17 @@ extension UIColor {
     /// Thin separator / divider line
     static let sousSeparatorUI = sousDynamic(light: 0xD0CBC3, dark: 0x3A3530)
 
+    /// Pressed fill of the primary button — one step deeper than its resting
+    /// burgundy. In dark mode the resting fill is the lifted burgundy, so the
+    /// deeper step is the brand burgundy itself.
+    static let sousPressedAccentUI = sousDynamic(light: 0x6C2431, dark: 0x8B2E3F)
+
+    /// Pressed fill of the inverse button — moves toward mid-gray from whichever
+    /// end it starts at: near-black in light, cream in dark. Stepping to the
+    /// adjacent shade instead measured 1.09:1 against the resting fill, which is
+    /// no affordance at all.
+    static let sousPressedInverseUI = sousDynamic(light: 0x757471, dark: 0x9A9590)
+
     // Voice mode renders on a burgundy fill in both modes, so these do not invert.
 
     /// Voice: "listening" label and listening waveform
@@ -85,6 +96,8 @@ extension Color {
     static let sousScrim = Color(UIColor.sousScrimUI)
     static let sousGreen = Color(UIColor.sousGreenUI)
     static let sousSeparator = Color(UIColor.sousSeparatorUI)
+    static let sousPressedAccent = Color(UIColor.sousPressedAccentUI)
+    static let sousPressedInverse = Color(UIColor.sousPressedInverseUI)
     static let sousVoiceBright = Color(UIColor.sousVoiceBrightUI)
     static let sousVoiceSpeaking = Color(UIColor.sousVoiceSpeakingUI)
     static let sousVoiceWarm = Color(UIColor.sousVoiceWarmUI)

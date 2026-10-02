@@ -150,6 +150,7 @@ Cream, ink, and neutral values invert in dark mode as above. The key principle: 
 - **Borders:** 1pt solid. Color is `#1A1A1A` (ink, for strong borders) or `#D0CBC3` (separator, for light dividers between rows and sections). Use borders actively — they define structure rather than shadows.
 - **Cards / grouped content:** Bordered rectangles. Not shadowed floating cards.
 - **Buttons:** Bordered rectangles as the default. The primary "Talk to Sous" / CTA button is the exception — filled burgundy rectangle, full-width, no border.
+- **Pressed:** an unfilled button inverts — its own ink becomes the fill, and the label flips onto it. A filled button cannot invert, so its fill shifts one step instead. Borders never change: a press alters weight, not shape. Unanimated until motion tokens land. See decision 25 in `design/TOKEN-DECISIONS.md`; `SousButtonPressStateTests` enforces a 1.25:1 visibility floor.
 - **Checkboxes:** Square, bordered, not circular.
 - **No drop shadows** on any UI element.
 

@@ -48,6 +48,7 @@ struct RecipeCanvasView: View {
     @State private var modalDontShowAgain: Bool = false
     @State private var showingResetConfirmation: Bool = false
     @State private var showingRestoreOriginalConfirmation: Bool = false
+    @State private var restorePressed = false
     @State private var showingServingsPicker: Bool = false
     @State private var resetButtonPressed: Bool = false
     @State private var isEditingTitle: Bool = false
@@ -496,9 +497,10 @@ struct RecipeCanvasView: View {
                         showingRestoreOriginalConfirmation = true
                     } label: {
                         SousButtonLabel(title: "RESTORE ORIGINAL RECIPE", style: .secondaryAccent,
-                                        height: 44, icon: "arrowshape.turn.up.backward.2.fill")
+                                        height: 44, icon: "arrowshape.turn.up.backward.2.fill",
+                                        isPressed: restorePressed)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PressReportingStyle(isPressed: $restorePressed))
                     .contentShape(Rectangle())
                     .padding(.horizontal, 20)
                     .padding(.bottom, 8)

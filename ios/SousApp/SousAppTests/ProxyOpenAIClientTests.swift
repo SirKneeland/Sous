@@ -93,4 +93,47 @@ final class ProxyOpenAIClientTests: XCTestCase {
             XCTAssertNil(session.captured, "must not touch the network without a token")
         }
     }
+
+    // MARK: - Milestone 30: product-meaningful 4xx codes
+
+    /// Builds a non-200 proxy response with the given status and JSON body.
+    private func errorResponse(status: Int, body: [String: Any]) -> (Data, URLResponse) {
+        let data = try! JSONSerialization.data(withJSONObject: body)
+        let resp = HTTPURLResponse(
+            url: SousBackendConfig.proxyChatURL, statusCode: status, httpVersion: nil, headerFields: nil
+        )!
+        return (data, resp)
+    }
+
+    private func sendExpectingError(status: Int, body: [String: Any]) async -> LLMError? {
+        let session = CapturingSession(result: .success(errorResponse(status: status, body: body)))
+        let client = ProxyOpenAIClient(sessionToken: "tok", isNewRecipe: false, session: session)
+        do {
+            _ = try await client.send(request())
+            return nil
+        } catch let error as LLMError {
+            return error
+        } catch {
+            return nil
+        }
+    }
+
+    func testCapReachedIsNotCollapsedIntoBadRequest() async {
+        let error = await sendExpectingError(status: 402, body: ["error": "cap_reached"])
+        XCTAssertEqual(error, .capReached,
+                       "A 402 must stay distinguishable so the UI never offers a retry into the same wall")
+    }
+
+    func testOffTopicCarriesTheBackendCopy() async {
+        let error = await sendExpectingError(
+            status: 400,
+            body: ["error": "off_topic", "message": "Let's keep it in the kitchen."]
+        )
+        XCTAssertEqual(error, .offTopic(message: "Let's keep it in the kitchen."))
+    }
+
+    func testOtherBadRequestsStayBadRequest() async {
+        let error = await sendExpectingError(status: 400, body: ["error": "malformed"])
+        XCTAssertEqual(error, .badRequest)
+    }
 }
