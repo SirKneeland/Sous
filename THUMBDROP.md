@@ -8,8 +8,8 @@ ThumbDrop is a downward swipe gesture that moves the user between the recipe can
 
 | Direction | Entry point | Result |
 |---|---|---|
-| Recipe canvas → Chat | Swipe down anywhere in the bottom 30% of the screen while the recipe canvas is active | Opens the chat sheet |
-| Chat → Recipe canvas | Swipe down anywhere in the bottom 30% of the screen while the chat sheet is presented in non-fullscreen (sheet) mode | Dismisses the chat sheet |
+| Recipe canvas → Chat | Swipe down anywhere in the bottom 15% of the screen while the recipe canvas is active | Opens the chat sheet |
+| Chat → Recipe canvas | Swipe down anywhere in the bottom 15% of the screen while the chat sheet is presented in non-fullscreen (sheet) mode | Dismisses the chat sheet |
 
 ---
 
@@ -26,7 +26,16 @@ Both directions use `ThumbDropOverlay` (`Views/ThumbDropOverlay.swift`), a `UIVi
 
 ## Trigger zone
 
-Touches that do not start in the **bottom 30% of the screen** (`touchInWindow.y >= screenHeight * 0.7`) are rejected in `gestureRecognizerShouldBegin` before the gesture begins. This applies in both directions.
+Touches that do not start in the **bottom 15% of the screen** (`touchInWindow.y >= screenHeight * 0.85`) are rejected in `gestureRecognizerShouldBegin` before the gesture begins. This applies in both directions.
+
+The zone is a parameter — `TriggerZone` — not a constant:
+
+| Case | Meaning |
+|---|---|
+| `.bottomScreenFraction(0.15)` | The bottom 15% of the screen. **The default**, and what every call site uses today. |
+| `.viewEdge(.top, height:)` / `.viewEdge(.bottom, height:)` | A band that many points tall, pinned to an edge of the view the overlay is a `.background` of — for a grab bar or a dismiss zone inside a panel. |
+
+The zone gates only where the gesture *starts*. Both commit directions work from any zone position, including one pinned to the top of the screen.
 
 ---
 
@@ -61,11 +70,29 @@ Fired during a downward ThumbDrop. Each band fires **at most once per gesture** 
 
 All bands reset at the start of each new gesture.
 
+The ladder lives in `SousHapticRamp` (`Haptics/SousHaptics.swift`) and is shared with the chat input bar's own `DragGesture`, which uses the same 30 / 60 / 90 pt bands with no entry tick and a single gate set keyed on absolute travel. Every haptic in ThumbDrop goes through `SousHaptics`, which caches and pre-warms the generators so the entry tick lands without Taptic Engine spin-up latency.
+
 ---
 
 ## Visual feedback
 
 The "Talk to Sous" button (recipe→chat direction) and the chat input bar (chat→recipe direction) both translate downward during the drag as visual feedback. The offset is computed as `min(dy * 0.65, 60)` — dampened to 65% of raw translation, capped at 60pt. On cancel, the element springs back with `response: 0.3, dampingFraction: 0.7`.
+
+---
+
+## Parameters
+
+Every geometric and threshold value is an argument on `ThumbDropOverlay`. The defaults are exactly the canvas↔chat values described above, so a call site that passes none behaves as it always has.
+
+| Parameter | Default | What it does |
+|---|---|---|
+| `triggerZone` | `.bottomScreenFraction(0.15)` | Where the touch must start (see Trigger zone). |
+| `offsetClamp` | `60` | Magnitude cap, in points, on the offset reported to `onOffsetChanged`. Pass `ThumbDropOverlay.unlimitedOffset` to track a panel across the whole screen. |
+| `damping` | `0.65` | Fraction of raw translation reported as offset. |
+| `commitDistance` | `50` | Translation in points that commits. |
+| `commitVelocity` | `400` | Peak velocity in pt/s that commits. |
+
+Upward tracking — offset, haptics, and commit — is enabled by passing an `onUpwardCommit` handler. With no handler, upward drag parks the element at rest and fires nothing.
 
 ---
 

@@ -102,7 +102,7 @@ struct BottomZoneView: View {
                 isActive: isEnabled,
                 onOffsetChanged: { dragOffset = $0 },
                 onCommit: {
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    SousHaptics.impact(.medium)
                     onOpenChat()
                 },
                 onCancel: {
@@ -111,7 +111,7 @@ struct BottomZoneView: View {
                     }
                 },
                 onUpwardCommit: {
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    SousHaptics.impact(.medium)
                     onOpenChat()
                 }
             )

@@ -25,10 +25,10 @@ struct ChatSheetView: View {
     @State private var inputBarDragOffset: CGFloat = 0
     @State private var sheetBounceOffset: CGFloat = 0
     @State private var peakDragVelocity: CGFloat = 0
-    // Slingshot haptic gates — reset at the start of each gesture.
-    @State private var sling1Fired = false  // 30 pt → .light
-    @State private var sling2Fired = false  // 60 pt → .medium
-    @State private var sling3Fired = false  // 90 pt → .rigid
+    /// The shared ThumbDrop haptic ladder (30 / 60 / 90 pt). The input bar's own
+    /// gesture has no entry tick and keys its gates on absolute travel, so
+    /// reversing direction mid-drag does not re-fire a band.
+    @State private var inputBarRamp = SousHapticRamp(entryStyle: nil, directional: false)
     @FocusState private var isComposerFocused: Bool
     /// One-shot gate: set on sheet open, consumed by keyboardWillShowNotification to snap
     /// to bottom as the keyboard begins rising rather than after it lands.
@@ -567,9 +567,8 @@ struct ChatSheetView: View {
                 // Reset peak and haptic gates at the start of each new gesture.
                 if abs(value.translation.height) < 15 && abs(value.translation.width) < 15 {
                     peakDragVelocity = 0
-                    sling1Fired = false
-                    sling2Fired = false
-                    sling3Fired = false
+                    inputBarRamp.reset()
+                    inputBarRamp.prepare()
                 }
                 let raw = value.translation.height
                 let vy = value.velocity.height
@@ -588,18 +587,7 @@ struct ChatSheetView: View {
                 }
                 // Slingshot haptics — fire once as |translation| crosses each threshold,
                 // regardless of drag direction. Back-and-forth motion does not re-trigger.
-                if dist >= 30 && !sling1Fired {
-                    sling1Fired = true
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                }
-                if dist >= 60 && !sling2Fired {
-                    sling2Fired = true
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                }
-                if dist >= 90 && !sling3Fired {
-                    sling3Fired = true
-                    UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
-                }
+                inputBarRamp.update(travel: dist)
             }
             .onEnded { value in
                 guard !isFullscreen else { return }
@@ -617,7 +605,7 @@ struct ChatSheetView: View {
     /// Fires the ThumbDrop commit action: haptic, anticipation bounce, then dismiss.
     /// Called by both the input bar DragGesture and the root-level ThumbDropOverlay.
     private func thumbDropCommit() {
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        SousHaptics.impact(.medium)
         UIApplication.shared.sendAction(
             #selector(UIResponder.resignFirstResponder),
             to: nil, from: nil, for: nil
