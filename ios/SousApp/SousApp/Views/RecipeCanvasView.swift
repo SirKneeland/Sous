@@ -5,6 +5,12 @@ private struct ScrollState: Equatable {
     var offset: CGFloat
     var contentHeight: CGFloat
     var containerHeight: CGFloat
+    /// The List's own top content inset. `offset + insetTop <= 0` is the top,
+    /// whatever the safe area is doing.
+    var insetTop: CGFloat = 0
+
+    /// True at rest at the top, and while rubberbanding past it.
+    var isAtTop: Bool { offset + insetTop <= 0.5 }
 }
 
 struct RecipeCanvasView: View {
@@ -41,6 +47,13 @@ struct RecipeCanvasView: View {
     @Binding var miseEnPlaceExpanded: Bool
     @Binding var navBarVisible: Bool
     var bottomZoneHeight: CGFloat = 0
+    /// False where the window shade has replaced the hamburger: the title then
+    /// uses the ordinary gutter instead of reserving room for a button that is
+    /// no longer drawn.
+    var reservesHamburgerInset: Bool = true
+    /// Mirrors whether the list is scrolled to its top, so the shade's pull-down
+    /// knows where the rubberband starts.
+    @Binding var isScrolledToTop: Bool
 
     @State private var checkedIngredients: Set<UUID> = []
     @AppStorage("miseEnPlaceConfirmed") private var miseEnPlaceConfirmed: Bool = false
@@ -89,7 +102,9 @@ struct RecipeCanvasView: View {
         stepsCompletedExpanded: Binding<Bool> = .constant(true),
         miseEnPlaceExpanded: Binding<Bool> = .constant(true),
         navBarVisible: Binding<Bool> = .constant(true),
-        bottomZoneHeight: CGFloat = 0
+        bottomZoneHeight: CGFloat = 0,
+        reservesHamburgerInset: Bool = true,
+        isScrolledToTop: Binding<Bool> = .constant(true)
     ) {
         self.recipe = recipe
         self.onMarkStepDone = onMarkStepDone
@@ -120,6 +135,8 @@ struct RecipeCanvasView: View {
         self._miseEnPlaceExpanded = miseEnPlaceExpanded
         self._navBarVisible = navBarVisible
         self.bottomZoneHeight = bottomZoneHeight
+        self.reservesHamburgerInset = reservesHamburgerInset
+        self._isScrolledToTop = isScrolledToTop
     }
 
     @ViewBuilder
@@ -170,7 +187,9 @@ struct RecipeCanvasView: View {
                 // the full canvas width matching all other rows.
                 // titleInset pads only the title+revision content to clear the 44pt hamburger
                 // button (16pt safe-area offset + 44pt button + 16pt margin = 76pt).
-                let titleInset: CGFloat = 76
+                // Where the window shade has taken the hamburger's place there is no
+                // button to clear, so the title gets the ordinary 20pt gutter back.
+                let titleInset: CGFloat = reservesHamburgerInset ? 76 : 20
                 VStack(spacing: 0) {
                     VStack(alignment: .center, spacing: 4) {
                         if isEditingTitle {
@@ -538,9 +557,11 @@ struct RecipeCanvasView: View {
                 ScrollState(
                     offset: geo.contentOffset.y,
                     contentHeight: geo.contentSize.height,
-                    containerHeight: geo.containerSize.height
+                    containerHeight: geo.containerSize.height,
+                    insetTop: geo.contentInsets.top
                 )
             } action: { oldVal, newVal in
+                if isScrolledToTop != newVal.isAtTop { isScrolledToTop = newVal.isAtTop }
                 let distanceFromBottom = newVal.contentHeight - newVal.containerHeight - newVal.offset
                 if newVal.offset < 60 {
                     navBarVisible = true

@@ -897,7 +897,13 @@ function expect(label, condition, detail) {
   console.log("\n6a. Symbols come from the table, and an existing Checkbox is preserved");
   {
     const { report, figma, state } = await run({ allowModes: false, fonts: MAC });
-    expect("symbols drawn from the table", /SF Symbols: \d+ of \d+ drawn; table has 34/.test(report), report);
+    // Derived from the table rather than hardcoded: adding a symbol is a routine
+    // edit and should not need this number changed in two places.
+    const TABLE_SIZE = Object.keys(
+      JSON.parse(fs.readFileSync(path.join(__dirname, "sf-symbols.json"), "utf8")).symbols
+    ).length;
+    expect("symbols drawn from the table",
+      new RegExp("SF Symbols: \\d+ of \\d+ drawn; table has " + TABLE_SIZE).test(report), report);
     expect("no blank symbols", !/blank:/.test(report), report);
     expect("first run builds the Checkbox", /Checkbox \(4 variants\)/.test(report), report);
     // An existing Checkbox is never rebuilt, so corrections must reach it in place.

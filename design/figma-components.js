@@ -1564,7 +1564,8 @@ async function buildBottomBar() {
   set.name = "Bottom Bar";
   set.description =
     "The bar pinned to the bottom of cook mode: TALK TO SOUS, the mic button when voice is " +
-    "available, and a muted chevron hinting that the bar can be pulled down (ThumbDrop). " +
+    "available, and a muted chevron hinting that the bar is a two-way handle — pull it down " +
+    "for the window shade, swipe it up for chat. " +
     "Voice=No is what trial and soft-wall users see.\n\n" +
     "Swift: WindowButtonHost. Running timers stack above this bar.";
   const PAD = 32, GAP = 32, cell = { w: ROW_W, h: 110 };
@@ -1572,7 +1573,7 @@ async function buildBottomBar() {
     cell, PAD, GAP, BOTTOM_BAR_SPECS.length, 1);
   const doc = await docPanel(page, v, "Bottom Bar", [
     ["Sous/Body",
-      "Always within thumb reach at the bottom of cook mode. TALK TO SOUS opens the chat; the mic opens voice mode. The two sit flush with a hairline between them, and the chevron underneath hints that you can pull the bar down out of the way.",
+      "Always within thumb reach at the bottom of cook mode. TALK TO SOUS opens the chat; the mic opens voice mode. The two sit flush with a hairline between them, and the chevron underneath hints that the bar is a handle: pull it down and the window shade comes down over the canvas, swipe it up and chat comes up from the bottom.",
       "text/primary", "description"],
     ["Sous/Body",
       "Voice=No is not a disabled state — the mic is absent entirely for trial and soft-wall users. Running timers stack directly above this bar.",
@@ -1605,6 +1606,151 @@ async function verifyBottomBar() {
     if (mic) check(t + " mic is 60x52", mic.width === 60 && mic.height === 52, mic.width + "x" + mic.height);
     check(t + " has the chevron hint", !!c.findOne((x) => x.name === "chevron"));
     check(t + " sits on the canvas colour", (await varNameOf(c.fills[0])) === "background/canvas");
+  }
+}
+
+// ------------------------------------------------------------------ Grab Bar
+//
+// Source: SousGrabBar — the hem of a panel that slides in from an edge. Full-bleed
+// burgundy, 52pt tall like the bottom bar, a chevron pointing the way the panel
+// will travel and an optional ALL CAPS label. The hairline always sits on the side
+// facing the panel's content, which is what Edge decides.
+//
+// Full-bleed is the deliberate difference from Button: every Sous button sits
+// inside the 20pt gutter, and a hem has no gutter. See decision 26.
+
+const GRAB_BAR_SPECS = [
+  { name: "Direction=Down, Edge=Bottom", symbol: "chevron.down", edge: "bottom" },
+  { name: "Direction=Up, Edge=Bottom", symbol: "chevron.up", edge: "bottom" },
+  { name: "Direction=Down, Edge=Top", symbol: "chevron.down", edge: "top" },
+  { name: "Direction=Up, Edge=Top", symbol: "chevron.up", edge: "top" },
+];
+
+async function buildGrabBar() {
+  const page = await ensurePage("Grab Bar");
+  const owned = ["Grab Bar / Documentation"].concat(GRAB_BAR_SPECS.map((s) => "grabbar/col/" + s.name));
+  if (!(await clearOwned(page, "Grab Bar", owned))) return;
+  const v = await colorVars();
+  const iconFont = await loadIconFont();
+
+  const comps = [];
+  for (const spec of GRAB_BAR_SPECS) {
+    const c = figma.createComponent();
+    c.name = spec.name;
+    c.layoutMode = "VERTICAL";
+    c.resize(ROW_W, 53);
+    c.primaryAxisSizingMode = "AUTO";
+    c.counterAxisSizingMode = "FIXED";
+    c.itemSpacing = 0;
+    c.fills = [];
+
+    const rule = hairlineRow(v, "rule");
+    const bar = figma.createFrame();
+    bar.name = "bar";
+    bar.layoutMode = "HORIZONTAL";
+    bar.primaryAxisAlignItems = "CENTER";
+    bar.counterAxisAlignItems = "CENTER";
+    bar.itemSpacing = 8;                       // HStack(spacing: 8)
+    bar.resize(ROW_W, 52);                     // SousGrabBar.height
+    bar.primaryAxisSizingMode = "FIXED";
+    bar.counterAxisSizingMode = "FIXED";
+    bar.fills = [boundPaint(v("Sous Color", "accent/primary"))];
+
+    // Content side first: the rule faces the panel the bar belongs to.
+    if (spec.edge === "bottom") {
+      c.appendChild(rule.row);
+      c.appendChild(bar);
+    } else {
+      c.appendChild(bar);
+      c.appendChild(rule.row);
+    }
+    rule.row.layoutSizingHorizontal = "FILL";
+    rule.hair.layoutSizingHorizontal = "FILL";
+    bar.layoutSizingHorizontal = "FILL";
+
+    const chevron = figma.createText();
+    chevron.name = "chevron";
+    chevron.fontName = iconFont;
+    chevron.characters = sfSymbol(spec.symbol);
+    chevron.setBoundVariable("fontSize", v("Sous Icon Sizes", "icon/small"));
+    chevron.fills = [boundPaint(v("Sous Color", "text/onInverse"))];
+    bar.appendChild(chevron);
+
+    const label = await textNode("Sous/Button", "RECIPES",
+      v("Sous Color", "text/onInverse"), "label");
+    bar.appendChild(label);
+
+    page.appendChild(c);
+    comps.push(c);
+  }
+
+  const set = figma.combineAsVariants(comps, page);
+  set.name = "Grab Bar";
+  const labelKey = set.addComponentProperty("Label", "TEXT", "RECIPES");
+  for (const variant of set.children) {
+    variant.findOne((x) => x.name === "label").componentPropertyReferences = { characters: labelKey };
+  }
+  set.description =
+    "The hem of a sliding panel. Full-bleed burgundy, 52pt tall, a chevron pointing " +
+    "the way the panel will travel and an ALL CAPS label saying what is behind it.\n\n" +
+    "Direction=Down at the bottom of a screen means pull this down. Direction=Up means " +
+    "push it back. Edge says which side the hairline sits on — always the side facing " +
+    "the panel's own content.\n\n" +
+    "Swift: SousGrabBar. Used by the window shade; the explore screen's grab bar is the " +
+    "same component at the top of the screen, pointing down.";
+  const PAD = 32, GAP = 32, cell = { w: ROW_W, h: 80 };
+  layoutGrid(set,
+    (c) => (c.name.indexOf("Direction=Down") === 0 ? 0 : 1),
+    (c) => (c.name.indexOf("Edge=Bottom") > 0 ? 0 : 1),
+    cell, PAD, GAP, 2, 2);
+  const doc = await docPanel(page, v, "Grab Bar", [
+    ["Sous/Body",
+      "A handle, not a button you aim at. It spans the whole width because it is the edge of something — the shade's hem — rather than a control sitting on a surface. That is why it has no gutter, which every other Sous button does.",
+      "text/primary", "description"],
+    ["Sous/Body",
+      "It is also a drag zone: swiping it moves the panel, and tapping it completes the move. The chevron always points where the panel is going, so the same bar reads RECIPES on the way down and CLOSE on the way back up.",
+      "text/primary", "usage"],
+  ]);
+  set.x = doc.x + doc.width + 80;
+  set.y = doc.y + 40;
+  await gridLabels(page, v, set,
+    ["Down", "Up"], ["Edge bottom", "Edge top"], cell, PAD, GAP, "grabbar");
+  COMPONENT_LOG.push("Grab Bar (" + set.children.length + " variants)");
+}
+
+async function verifyGrabBar() {
+  const page = figma.root.children.find((p) => p.name === "Grab Bar");
+  if (!page) return check("component Grab Bar", false, "page missing");
+  await figma.setCurrentPageAsync(page);
+  const set = page.children.find((x) => x.type === "COMPONENT_SET" && x.name === "Grab Bar");
+  if (!set) return check("component Grab Bar", false, "component set missing");
+  check("Grab Bar variant count", set.children.length === GRAB_BAR_SPECS.length,
+    String(set.children.length));
+  check("Grab Bar has a Label property",
+    Object.keys(set.componentPropertyDefinitions || {}).some((k) => k.indexOf("Label") === 0));
+  for (const spec of GRAB_BAR_SPECS) {
+    const c = set.children.find((x) => x.name === spec.name);
+    if (!c) { check("Grab Bar " + spec.name, false, "missing"); continue; }
+    const t = "Grab Bar " + spec.name;
+    const bar = c.findOne((x) => x.name === "bar");
+    check(t + " is full-bleed and 52pt tall",
+      !!bar && bar.width === ROW_W && bar.height === 52,
+      bar ? bar.width + "x" + bar.height : "missing");
+    check(t + " is burgundy", !!bar && (await varNameOf(bar.fills[0])) === "accent/primary");
+    const chevron = c.findOne((x) => x.name === "chevron");
+    check(t + " chevron points " + spec.symbol,
+      !!chevron && chevron.characters === sfSymbol(spec.symbol));
+    check(t + " chevron and label are white on the burgundy",
+      !!chevron && (await varNameOf(chevron.fills[0])) === "text/onInverse");
+    const label = c.findOne((x) => x.name === "label");
+    check(t + " label is white on the burgundy",
+      !!label && (await varNameOf(label.fills[0])) === "text/onInverse");
+    // The hairline faces the panel's content: above the bar at the bottom edge,
+    // below it at the top edge.
+    const rule = c.findOne((x) => x.name === "rule");
+    const barFirst = c.children.indexOf(bar) < c.children.indexOf(rule);
+    check(t + " hairline faces the panel content", barFirst === (spec.edge === "top"),
+      spec.edge + " / bar first: " + barFirst);
   }
 }
 
@@ -2680,6 +2826,182 @@ async function verifySidebarScreen() {
   const gear = screen.findOne((x) => x.name === "settings");
   const main = gear && (await gear.getMainComponentAsync());
   check("settings uses the Inverse icon button", !!main && main.name === "Style=Inverse", main ? main.name : "missing");
+}
+
+// ---------------------------------------------------------------- Shade screen
+//
+// Source: ShadeView. The same panel the Sidebar screen shows, arriving from the
+// top instead of the left and covering the whole screen rather than 80% of it —
+// no sliver of the app beside it, and no shadow, because nothing is floating.
+// The grab bar is the shade's hem and the only way back.
+
+async function buildShadeScreen() {
+  const page = await ensurePage("Screens");
+  const v = await colorVars();
+  const screen = await newScreen(page, "Shade", "background/canvas", v);
+  // Directly below Sidebar: the two are the same panel arriving from different
+  // edges, and the row of screens is already full across.
+  screen.x = 40 + 600 + 120 + (CANVAS_W + 80) * 3;
+  screen.y = 40 + CANVAS_H + 120;
+
+  const shade = figma.createFrame();
+  shade.name = "shade";
+  shade.layoutMode = "VERTICAL";
+  shade.itemSpacing = 0;
+  shade.resize(CANVAS_W, CANVAS_H);
+  shade.primaryAxisSizingMode = "FIXED";
+  shade.counterAxisSizingMode = "FIXED";
+  shade.fills = [boundPaint(v("Sous Color", "background/canvas"))];
+  shade.clipsContent = true;
+  screen.appendChild(shade);
+  shade.x = 0; shade.y = 0;
+
+  // Header: wordmark centred, settings pinned right. No hamburger — the shade
+  // is what replaced it.
+  const headerWrap = figma.createFrame();
+  headerWrap.name = "header";
+  headerWrap.resize(CANVAS_W, 76);
+  headerWrap.fills = [];
+  shade.appendChild(headerWrap);
+  headerWrap.layoutSizingHorizontal = "FILL";
+  const mark = (await getVariant("Wordmark", "Wordmark", "Tagline=No")).createInstance();
+  await figma.setCurrentPageAsync(page);
+  mark.name = "wordmark";
+  headerWrap.appendChild(mark);
+  mark.resize(CANVAS_W, mark.height);
+  mark.x = 0; mark.y = SAFE_TOP + 16;
+  const gear = (await getVariant("Icon Button", "Icon Button", "Style=Inverse")).createInstance();
+  await figma.setCurrentPageAsync(page);
+  gear.name = "settings";
+  headerWrap.appendChild(gear);
+  gear.x = CANVAS_W - 44 - 16;
+  gear.y = mark.y + Math.round((mark.height - gear.height) / 2);
+  headerWrap.resize(CANVAS_W, mark.y + mark.height + 16);
+
+  const headerRule = hairlineRow(v, "header-rule");
+  shade.appendChild(headerRule.row);
+  headerRule.row.layoutSizingHorizontal = "FILL";
+  headerRule.hair.layoutSizingHorizontal = "FILL";
+
+  const list = autoLayout("VERTICAL");
+  list.name = "recents";
+  list.itemSpacing = 0;
+  list.fills = [];
+  shade.appendChild(list);
+  list.layoutSizingHorizontal = "FILL";
+  const entries = [
+    ["Kind=Recipe", "Crispy baked chicken cutlets", "NOW"],
+    ["Kind=Recipe", "Seared chicken thighs with lemon", "2 HR"],
+    ["Kind=Idea", "Something with the leftover sausage", "3 DAY"],
+    ["Kind=Recipe", "Buttermilk pancakes", "1 WK"],
+    ["Kind=Recipe", "Slow-roast tomato sauce", "MAR 2"],
+  ];
+  for (const [variant, text, age] of entries) {
+    const row = (await getVariant("Recent Recipe Row", "Recent Recipe Row", variant)).createInstance();
+    await figma.setCurrentPageAsync(page);
+    list.appendChild(row);
+    row.layoutSizingHorizontal = "FILL";
+    const label = row.findOne((x) => x.name === "label");
+    const ageNode = row.findOne((x) => x.name === "age");
+    for (const f of label.getRangeAllFontNames(0, label.characters.length)) await figma.loadFontAsync(f);
+    label.characters = text;
+    for (const f of ageNode.getRangeAllFontNames(0, ageNode.characters.length)) await figma.loadFontAsync(f);
+    ageNode.characters = age;
+  }
+
+  const spacer = figma.createFrame();
+  spacer.name = "spacer";
+  spacer.fills = [];
+  spacer.resize(CANVAS_W, 10);
+  shade.appendChild(spacer);
+  spacer.layoutSizingHorizontal = "FILL";
+  spacer.layoutGrow = 1;
+
+  const footerRule = hairlineRow(v, "footer-rule");
+  shade.appendChild(footerRule.row);
+  footerRule.row.layoutSizingHorizontal = "FILL";
+  footerRule.hair.layoutSizingHorizontal = "FILL";
+
+  const footer = autoLayout("VERTICAL");
+  footer.name = "footer";
+  bindPadding(footer, v, { left: "space/gutter", right: "space/gutter", top: "space/md", bottom: "space/md" });
+  footer.fills = [];
+  shade.appendChild(footer);
+  footer.layoutSizingHorizontal = "FILL";
+  const btnSet = (await getVariant("Button", "Button", "Style=Primary, State=Default")).parent;
+  await figma.setCurrentPageAsync(page);
+  const newRecipe = (await getVariant("Button", "Button", "Style=Primary, State=Default")).createInstance();
+  await figma.setCurrentPageAsync(page);
+  newRecipe.name = "new-recipe";
+  footer.appendChild(newRecipe);
+  newRecipe.layoutSizingHorizontal = "FILL";
+  newRecipe.setProperties({ [propKey(btnSet, "Label")]: "NEW RECIPE", [propKey(btnSet, "Icon")]: true });
+  const nrIcon = newRecipe.findOne((x) => x.name === "icon");
+  if (nrIcon) {
+    await figma.loadFontAsync(nrIcon.fontName);
+    nrIcon.characters = sfSymbol("plus.square.fill");
+  }
+
+  // The hem. Pointing up, because this is the open shade.
+  const grabSet = (await getVariant("Grab Bar", "Grab Bar", "Direction=Up, Edge=Bottom")).parent;
+  await figma.setCurrentPageAsync(page);
+  const grab = (await getVariant("Grab Bar", "Grab Bar", "Direction=Up, Edge=Bottom")).createInstance();
+  await figma.setCurrentPageAsync(page);
+  grab.name = "grab-bar";
+  shade.appendChild(grab);
+  grab.layoutSizingHorizontal = "FILL";
+  grab.setProperties({ [propKey(grabSet, "Label")]: "CLOSE" });
+
+  // The burgundy continues under the home indicator; the bar's own 52pt stays clear.
+  const hemPad = figma.createFrame();
+  hemPad.name = "hem-under-home-indicator";
+  hemPad.fills = [boundPaint(v("Sous Color", "accent/primary"))];
+  hemPad.resize(CANVAS_W, SAFE_BOTTOM);
+  shade.appendChild(hemPad);
+  hemPad.layoutSizingHorizontal = "FILL";
+
+  await safeAreaGuides(screen, v);
+  COMPONENT_LOG.push("Shade screen");
+}
+
+async function verifyShadeScreen() {
+  const page = figma.root.children.find((p) => p.name === "Screens");
+  if (!page) return check("Shade screen", false, "Screens page missing");
+  await figma.setCurrentPageAsync(page);
+  const screen = page.children.find((x) => x.name === "Shade");
+  if (!screen) return check("Shade screen", false, "missing");
+  const shade = screen.children.find((x) => x.name === "shade");
+  check("the shade covers the whole screen",
+    !!shade && shade.width === CANVAS_W && shade.height === CANVAS_H,
+    shade ? shade.width + "x" + shade.height : "missing");
+  check("the shade casts no shadow — nothing is floating",
+    !!shade && (!shade.effects || shade.effects.length === 0));
+  const names = [];
+  for (const i of screen.findAll((n) => n.type === "INSTANCE")) {
+    const m = await i.getMainComponentAsync();
+    names.push(m ? (m.parent && m.parent.type === "COMPONENT_SET" ? m.parent.name : m.name) : "detached");
+  }
+  check("the shade is built from components", !names.includes("detached"), names.join(", "));
+  check("the shade has the wordmark, settings, 5 recents, NEW RECIPE and a grab bar",
+    names.filter((n) => n === "Wordmark").length === 1 &&
+    names.filter((n) => n === "Icon Button").length === 1 &&
+    names.filter((n) => n === "Recent Recipe Row").length === 5 &&
+    names.filter((n) => n === "Button").length === 1 &&
+    names.filter((n) => n === "Grab Bar").length === 1, names.join(", "));
+  check("the shade has no hamburger — it is what replaced it",
+    !screen.findOne((x) => x.name === "menu"));
+  const grab = screen.findOne((x) => x.name === "grab-bar");
+  const grabMain = grab && (await grab.getMainComponentAsync());
+  check("the hem points up, with its hairline facing the content",
+    !!grabMain && grabMain.name === "Direction=Up, Edge=Bottom",
+    grabMain ? grabMain.name : "missing");
+  check("the hem sits at the bottom of the shade",
+    !!grab && !!shade && shade.children.indexOf(grab) === shade.children.length - 2,
+    grab && shade ? shade.children.indexOf(grab) + " of " + shade.children.length : "missing");
+  const hemPad = screen.findOne((x) => x.name === "hem-under-home-indicator");
+  check("the hem reaches the bottom edge of the screen",
+    !!hemPad && (await varNameOf(hemPad.fills[0])) === "accent/primary" && hemPad.height === SAFE_BOTTOM,
+    hemPad ? String(hemPad.height) : "missing");
 }
 
 // ----------------------------------------------------------------------- Badge
@@ -7689,6 +8011,8 @@ const COMPONENTS = [
     build: buildRecipeTitle, verify: verifyRecipeTitle },
   { name: "Bottom Bar", page: "Bottom Bar", sets: ["Bottom Bar"],
     build: buildBottomBar, verify: verifyBottomBar },
+  { name: "Grab Bar", page: "Grab Bar", sets: ["Grab Bar"],
+    build: buildGrabBar, verify: verifyGrabBar },
   { name: "Chat Bubble", page: "Chat Bubble", sets: ["Chat Bubble"],
     build: buildChatBubble, verify: verifyChatBubble },
   { name: "Composer Bar", page: "Composer Bar", sets: ["Composer Bar"],
@@ -7768,13 +8092,14 @@ const COMPONENTS = [
     build: buildPhotoAcquisitionScreens, verify: verifyPhotoAcquisitionScreens },
   { name: "Mise en Place", page: "Screens", sets: [],
     build: buildMiseEnPlaceModalScreen, verify: verifyMiseEnPlaceModalScreen },
+  { name: "Shade", page: "Screens", sets: [], build: buildShadeScreen, verify: verifyShadeScreen },
 ];
 
 // Generated screens are rebuilt from the library on every run, so they are
 // cleared first: otherwise their instances would mark every component "in use"
 // and block the component rebuilds. Anything you want to keep, duplicate — a
 // copy is not generated, so it is never touched.
-const GENERATED_SCREENS = ["Recipe Canvas", "Chat", "Zero State", "Sidebar", "Settings", "Change Suggestion", "Voice Mode", "Talk to a Recipe", "Preferences", "Sign In", "Paywall", "Cap Reached", "Memories", "Memories Empty", "Import Paste", "Import Loading", "Import Error", "Photo Acquisition", "Photo Acquisition Failed", "Mise en Place"];
+const GENERATED_SCREENS = ["Recipe Canvas", "Chat", "Zero State", "Sidebar", "Settings", "Change Suggestion", "Voice Mode", "Talk to a Recipe", "Preferences", "Sign In", "Paywall", "Cap Reached", "Memories", "Memories Empty", "Import Paste", "Import Loading", "Import Error", "Photo Acquisition", "Photo Acquisition Failed", "Mise en Place", "Shade"];
 
 async function clearGeneratedScreens() {
   const page = figma.root.children.find((p) => p.name === "Screens");

@@ -128,7 +128,52 @@
   - `Preferences/MemoryItem.swift` — `MemoryItem` Codable struct (id, text, createdAt) + `MemoriesPersistence` (UserDefaults-backed, injectable for tests)
   - `Views/MemoriesView.swift` — List of saved memories with swipe-to-delete and tap-to-edit sheet
   - `Haptics/SousHaptics.swift` — **The single entry point for every haptic.** `SousHaptics.impact(_:)` / `.notify(_:)` fire; `.prepare(_:)` warms the Taptic Engine before a latency-sensitive moment. Generators are cached per style rather than built per tap, so a prepared engine stays warm for the length of a gesture. Non-isolated by design — `ThumbDropOverlay`'s `@objc` gesture handler could not reach a `@MainActor` helper; every caller is already on the main thread. The same file holds `SousHapticRamp`, the reusable escalating ladder for drag gestures: an optional entry tick plus one-shot bands at 30 / 60 / 90 pt, with `entryStyle` and `directional` (separate gate sets per direction, or one keyed on absolute travel) as the two knobs. Used by `ThumbDropOverlay` and by `ChatSheetView`'s input-bar `DragGesture`. Other haptic call sites still construct generators inline and are untouched for now.
-  - `Views/ThumbDropOverlay.swift` — `UIViewRepresentable` that installs a window-level `UIPanGestureRecognizer` for the ThumbDrop swipe (see `THUMBDROP.md`). Fully parameterized so a new surface can reuse the gesture engine and haptics: `triggerZone` (`.bottomScreenFraction(0.15)` by default, or `.viewEdge(.top/.bottom, height:)` for a band inside the host view), `offsetClamp` (60pt; pass `ThumbDropOverlay.unlimitedOffset` to track a panel across the whole screen), `damping` (0.65), `commitDistance` (50pt) and `commitVelocity` (400 pt/s). Every default is the canvas↔chat value, so the three existing call sites — `WindowButtonHost.BottomZoneView`, `ChatSheetView`, and the voice bar in `ContentView` — pass none of them. Upward tracking and commit are enabled by supplying an `onUpwardCommit` handler; the zone gates only where a gesture *starts*, so both commit directions work from a zone anywhere on screen, including the top.
+  - `Shade/ShadePresentation.swift` — **(window shade)** `@Observable` state machine for the
+    shade: `closed / opening(progress) / open / closing(progress)`. Deliberately knows nothing
+    about *what* opens it — a gesture's whole contract is `beginOpening()`,
+    `driveOpening(progress:)`, `finishOpening(commit:)` and the `close` mirror — so the explore
+    screen's grab bar is wiring, not surgery — the bottom bar's pull already proved it. Owns the presentation haptics (medium
+    on commit, light on landing), the two springs, and `showsContent` — blank sheet or real
+    panel, which is deliberately *not* derived from `phase`, because `.closed` has to mean
+    "blank" after a cancelled pull and "panel" after a dismissal. A Reduce Motion flag swaps
+    both springs for a 0.15s fade. `@Observable` rather than `ObservableObject` on purpose: progress changes every
+    frame of a drag, and only the views reading it should redraw.
+  - `Shade/ShadeView.swift` — the full-screen panel: `DrawerContent`, then `SousGrabBar` as its
+    hem, then a burgundy strip under the home indicator. Rendered as the **last** overlay in
+    `ContentView` so it covers the bottom zone, the voice bar and the drawer's hamburger. Carries
+    the `.isModal` accessibility trait and a "Close" action; the canvas behind it stays mounted,
+    so scroll position, checked ingredients, a streaming recipe, a pending patch and running
+    timers all survive.
+  - `Shade/ShadePullInstaller.swift` — the canvas entry point: a window-level
+    `UIPanGestureRecognizer` that observes without consuming (same contract as
+    `ThumbDropOverlay`), gated on the list already being scrolled to the top **and on the
+    touch starting clear of `ThumbDropOverlay.defaultZoneTopY`** — the bottom bar owns that
+    strip, and a shade that starts there unmounts the bar and so kills the ThumbDrop swipe
+    that was already in flight. **Mounted twice**, which is the shade's second entry point:
+    once on the canvas (`requiresCanvasAtTop: true`, the band above the bar) and once beside
+    the bottom bar (`requiresCanvasAtTop: false`, the band the bar occupies, with
+    `ShadeTuningValues.forBarPull`'s shorter distances — a thumb on the bar has about 90pt of
+    glass left beneath it). The two `startYRange`s are disjoint, so one touch is never claimed
+    by both. Owns the gesture's
+    own haptics — the soft tick when the peek is fully out, and the rigid/light detent at each
+    crossing of the commit distance. A `.background` on the canvas, so it unmounts with it.
+  - `Shade/ShadeTuning.swift` — `ShadeMetrics` (window safe-area insets, and `peekTravel`: how
+    far the shade must come down for its hem to clear the status bar) plus `ShadeTuningValues`,
+    the eleven numbers the shade's feel depends on, and the `@AppStorage` keys behind them.
+    **TEMP** — these are motion, which the design system has no tokens for yet (Milestone 32),
+    so they live only as debug sliders in Settings until they have been felt on a device.
+  - `Views/SousGrabBar.swift` — the shade's hem: a full-bleed burgundy bar with a directional
+    chevron and an optional ALL CAPS label, 52pt like the Talk to Sous bar. Full-bleed is the
+    point — see decision 26 in `design/TOKEN-DECISIONS.md`. Reused pointing down at the top of
+    the explore screen in the next build.
+  - `Views/DrawerContent.swift` — the recipe-navigation panel (SOUS wordmark + Settings gear,
+    Recent Recipes, NEW RECIPE), lifted unchanged out of `HistoryDrawer` so the drawer and the
+    shade show the same thing. Its two parameters are both about where its edges are.
+  - `WindowButtonHost.swift` — `BottomZoneView`: timer banners, the Talk to Sous bar, the
+    chevron hint. The bar is a **two-way handle**: up is ThumbDrop and opens chat (which
+    slides up from the bottom), down is the window shade's and brings it down over the canvas.
+    `ThumbDropOverlay` is therefore passed `tracksDownward: false` here.
+  - `Views/ThumbDropOverlay.swift` — `UIViewRepresentable` that installs a window-level `UIPanGestureRecognizer` for the ThumbDrop swipe (see `THUMBDROP.md`). Fully parameterized so a new surface can reuse the gesture engine and haptics: `triggerZone` (`.bottomScreenFraction(0.15)` by default, or `.viewEdge(.top/.bottom, height:)` for a band inside the host view), `offsetClamp` (60pt; pass `ThumbDropOverlay.unlimitedOffset` to track a panel across the whole screen), `damping` (0.65), `commitDistance` (50pt) and `commitVelocity` (400 pt/s). Every default is the canvas↔chat value, so the three existing call sites — `WindowButtonHost.BottomZoneView`, `ChatSheetView`, and the voice bar in `ContentView` — pass none of them. Upward tracking and commit are enabled by supplying an `onUpwardCommit` handler; the zone gates only where a gesture *starts*, so both commit directions work from a zone anywhere on screen, including the top. The window shade's grab bar is the first caller to pass any of them — `.viewEdge(.bottom, height:)`, `unlimitedOffset` and `damping: 1` give it a dismiss zone that tracks the finger one-to-one across the whole screen.
   - `Import/RecipeImportSheet.swift` — Full-screen import sheet; internal Mode enum (chooser | camera | library | paste | loading | error); observes `store.importError` via `.onChange`; success auto-dismisses via AppStore setting `isShowingImportSheet = false`
   - `Import/RecipeOCRService.swift` — Static `recognizeText(in:)` using `VNRecognizeTextRequest` at `.accurate` level; returns extracted lines joined by `\n`, or `nil` on empty/unreadable input; Vision framework (first-party, no package dependency)
   - `Import/UnitSystemDetector.swift` — Pure function `UnitSystemDetector.detect(recipe:) -> DetectedUnitSystem?`; scans ingredient and step text via regex for imperial vs. metric indicators; returns dominant system or nil if ambiguous/absent

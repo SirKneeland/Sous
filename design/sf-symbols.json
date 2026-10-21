@@ -1,9 +1,9 @@
 {
   "$meta": {
     "description": "SF Symbol name -> Private Use Area codepoint (hex), for every symbol the Sous app uses. Apple assigns these; SF Pro renders the character. The local Figma plugin needs this table because figma.util.getSfSymbolCharacter exists only in Figma's remote (MCP) runtime, not in the desktop plugin API.",
-    "source": "figma.util.getSfSymbolCharacter via the Figma MCP server, 2026-09-24",
-    "verified": "checkmark = U+100185 matches the glyph in Apple's SFSymbolsFallback.otf on macOS",
-    "howToAdd": "Add the symbol to the app first, then re-run the lookup through the Figma MCP server (one request covers any number of names) and paste the result here."
+    "source": "figma.util.getSfSymbolCharacter via the Figma MCP server, 2026-09-24. chevron.up (2026-10-06) was resolved locally instead — see howToAdd.",
+    "verified": "checkmark = U+100185 matches the glyph in Apple's SFSymbolsFallback.otf on macOS. chevron.up = U+100187 was confirmed by rendering it in SF Pro on macOS alongside checkmark, chevron.down, chevron.left and chevron.right, all four of which drew exactly the glyph this table already claims.",
+    "howToAdd": "Preferred: render the candidate codepoints in SF Pro on macOS and look at them, with two or three entries this table already has in the same image as a control. A ~30-line AppKit script does it, costs nothing, and proves the glyph rather than trusting a lookup. Apple's codepoints are not in symbol_order.plist order, so they cannot be derived from an index — but families are contiguous, so a missing symbol is almost always within a few codepoints of its siblings. Fallback, if that fails: re-run the lookup through the Figma MCP server (one request covers any number of names) and paste the result here. That allowance is ~20 calls a MONTH on the free plan, so it is the fallback, not the first move."
   },
   "symbols": {
     "arrow.up": "100128",
@@ -17,6 +17,7 @@
     "chevron.down": "100188",
     "chevron.left": "100189",
     "chevron.right": "10018A",
+    "chevron.up": "100187",
     "clock": "10042B",
     "doc.on.clipboard": "100243",
     "doc.viewfinder": "1003BE",

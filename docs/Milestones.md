@@ -12,11 +12,13 @@ Statuses:
 
 ## Project State
 
-**Last reconciled against the codebase:** 2026-09-29.
+**Last reconciled against the codebase:** 2026-10-06.
 
-**Current milestone:** Milestone 24 — Accounts + Sync. All four backend projects are code
-complete; what remains is operator setup in App Store Connect and Railway, plus a sandbox
-purchase test on a real device. None of that is code.
+**Current milestone:** Milestone 33 — Window Shade Navigation. The canvas pull-down and the
+shade itself are built; the explore screen's grab bar and the one-time discoverability hint are
+the remaining pieces. Milestone 24 — Accounts + Sync is code complete and waiting on operator
+setup in App Store Connect and Railway plus a sandbox purchase test on a real device; none of
+that is code.
 
 **Recently completed:**
 - Milestone 24 Projects 1–4 — backend, auth, proxy, billing (code complete)
@@ -727,3 +729,44 @@ Core capabilities:
 Explicit non-goals:
 - Animated illustrations or decorative motion
 - Live Activities — still deferred, per Milestone 22
+
+---
+
+## Milestone 33 — Window Shade Navigation
+**Status:** IN PROGRESS
+
+**Goal:** Replace the hamburger with a gesture that matches the app's mental model — the recipe
+canvas is the base layer, and everything else is a temporary layer above it.
+
+The hamburger was the last piece of generic chrome on the canvas. It also lied about the
+structure: it looked like a route to a home screen, when Sous has no home screen. The shade is
+the honest version — recipe navigation pulls down over the recipe you are cooking, and goes back
+up when you are done with it. The recipe never leaves.
+
+**Delivered in this build:**
+- A standalone `ShadePresentation` — closed, interactively opening, open, interactively closing
+  — that knows nothing about which gesture drives it, so a second entry point is wiring
+- The canvas pull-down: keep pulling past the top of the list and the shade follows, with a
+  burgundy grab bar reading RECIPES as its leading edge, a detent at the commit distance, and a
+  commit on distance or flick velocity
+- A second entry point already: pulling the Talk to Sous bar down brings the shade down too,
+  which puts recipe navigation in the thumb zone. Same gesture engine, its own shorter
+  distances. The bar's upward swipe still opens chat, so the two directions now go to the two
+  places those panels come from
+- The shade itself: full screen over a canvas that stays mounted, showing the drawer's content
+  unchanged, with the grab bar as both a dismiss zone (reusing the generalised ThumbDrop) and a
+  tap target
+- The grab bar as a real design-system component, logged as decision 26 and drawn in Figma
+- The hamburger hidden wherever the shade is available, and the title inset it reserved reclaimed
+- Debug toggle and eleven live tunables in Settings, because the motion has no tokens yet
+
+**Still to build:**
+- The grab bar at the top of the explore screen, which pulls the same shade down (the third
+  entry point; the bottom bar was the second and cost almost nothing, which is the
+  `ShadePresentation` split doing its job)
+- The one-time discoverability hint for the pull-down
+
+Explicit non-goals:
+- Replacing the left-edge swipe drawer, which stays exactly as it is
+- Motion tokens for the shade's thresholds and springs — those wait for Milestone 32, after the
+  values have been tuned on a device

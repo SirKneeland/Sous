@@ -3,6 +3,9 @@ import SousCore
 
 struct RecentRecipesView: View {
     @ObservedObject var store: AppStore
+    /// True while the surface showing this list is on screen. The list reloads on
+    /// every rising edge — see the note on the `.onChange` below.
+    var isPresented: Bool = false
     var onDismiss: () -> Void
 
     @State private var sessions: [SessionSnapshot] = []
@@ -140,10 +143,11 @@ struct RecentRecipesView: View {
                 loadSummaries(for: sessions)
             }
         }
-        // The drawer keeps this view mounted (offset off-screen), so `.onAppear`
-        // only fires once at launch. Reload whenever the drawer opens so a recipe
-        // generated since the last open shows up without a relaunch.
-        .onChange(of: store.showRecentRecipes) { _, isOpen in
+        // Both the drawer and the window shade keep this view mounted while they
+        // are away, so `.onAppear` only fires once at launch. Reload whenever the
+        // surface opens, so a recipe generated since the last open shows up without
+        // a relaunch.
+        .onChange(of: isPresented) { _, isOpen in
             if isOpen {
                 sessions = store.loadRecentSessions()
                 loadSummaries(for: sessions)

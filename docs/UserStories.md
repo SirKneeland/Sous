@@ -508,3 +508,77 @@
   failure/expire → lapsed with a 7-day grace window, refund/revoke → soft wall)
 - And during the grace window the user keeps subscriber-level access while being
   nudged to fix billing
+
+---
+
+## Window Shade Navigation (Milestone 33)
+
+### US-69: Pull Down to Open the Shade
+- Given the recipe canvas in cook mode, with chat dismissed and the list scrolled
+  to the top
+- When the user keeps pulling down where the canvas would otherwise rubberband
+- Then the shade comes down from the top of the screen, tracking the finger with
+  resistance
+- And its bottom edge shows a burgundy grab bar reading "RECIPES" with a down
+  chevron, which is the affordance
+- And releasing past the commit distance — or flicking fast enough — opens it the
+  rest of the way; releasing short of it springs the shade back up
+- And normal scrolling, swipe actions, collapsible sections, long-press and timer
+  rows are all unaffected
+
+### US-69a: Pull the Talk to Sous Bar Down to Open the Shade
+- Given the recipe canvas in cook mode, at any scroll position
+- When the user pulls down on the Talk to Sous bar
+- Then the burgundy RECIPES hem comes down from the top of the screen, and the bar
+  follows the thumb — the affordance says what the gesture will do before it does it
+- And releasing past the bar's commit distance opens the shade; releasing short of
+  it springs both back
+- And the bar's distances are shorter than the canvas pull's, because a thumb on
+  the bar has only about 90pt of screen beneath it
+- And swiping **up** on the same bar still opens chat, which slides up from the
+  bottom — the two directions go to the two places those panels come from
+
+### US-70: The Shade Is Not Available Elsewhere
+- Given chat is open, voice mode is active, the user is editing the recipe title,
+  a full-screen patch review is showing, or the left-edge drawer is open
+- When the user pulls down on the canvas
+- Then nothing happens — the shade is only reachable from the recipe canvas in
+  cook mode
+- And while the shade is open, the left-edge drawer cannot be opened
+
+### US-71: Swipe or Tap the Grab Bar to Dismiss
+- Given the shade is open
+- When the user swipes up anywhere in the grab bar at the bottom
+- Then the shade follows the finger back up across the whole screen and, past the
+  dismiss threshold, returns to the canvas
+- And tapping the bar does the same thing
+- And the canvas is exactly as it was left: scroll position, checked ingredients
+  and collapsed sections all intact
+
+### US-72: Work Continues Behind the Shade
+- Given a recipe is still streaming in, a patch is pending, or timers are running
+- When the shade is open
+- Then the recipe keeps generating, the patch stays pending, and the timers keep
+  running
+- And a timer finishing behind the shade raises its notification, because the
+  canvas no longer counts as the frontmost screen
+
+### US-73: Choosing a Recipe Closes the Shade
+- Given the shade is open
+- When the user selects a recent recipe, taps NEW RECIPE, or opens Settings
+- Then the shade retracts first and the action follows — the same order the
+  history drawer has always used
+
+### US-74: The Hamburger Is Gone From Cook Mode
+- Given the recipe canvas in cook mode
+- Then the hamburger button is not drawn, and the recipe title uses the full
+  width instead of reserving room for it
+- And in explore mode, where there is no canvas yet, the hamburger is unchanged
+- And the left-edge swipe drawer is unchanged everywhere
+
+### US-75: Shade Accessibility
+- Given VoiceOver is running on the recipe canvas
+- Then a "Show recipes" action opens the shade
+- And once open, the shade is modal: VoiceOver cannot reach the canvas behind it,
+  its controls are labelled, and a "Close" action dismisses it
+- And with Reduce Motion on, the shade crossfades instead of sliding

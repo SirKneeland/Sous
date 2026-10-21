@@ -46,10 +46,12 @@ struct KeyboardPrewarmField: UIViewRepresentable {
 /// ContentView measures this view's height via onHeightChange and applies a matching
 /// .safeAreaInset to RecipeCanvasView so scroll content is never hidden behind the bar.
 ///
-/// ThumbDrop (recipe canvas → chat) is handled by a root-level ThumbDropOverlay that
-/// installs a UIPanGestureRecognizer on the window, covering the bottom 15% of the
-/// screen. It uses OR commit logic (≥50pt translation OR ≥400pt/s peak velocity) and
-/// fires the same slingshot haptic sequence as the chat→canvas direction.
+/// The bar is a two-way handle, and the two directions go to different places.
+/// **Up** is ThumbDrop (a root-level ThumbDropOverlay on the window, covering the
+/// bottom 15% of the screen) and opens chat, which slides up from the bottom.
+/// **Down** belongs to the window shade: a `ShadePullInstaller` mounted beside this
+/// view brings the shade down over the canvas, with the burgundy RECIPES hem
+/// appearing at the top as the affordance and this bar following the thumb.
 struct BottomZoneView: View {
     var timerManager: StepTimerManager
     var onOpenChat: () -> Void
@@ -60,6 +62,10 @@ struct BottomZoneView: View {
     var isEnabled: Bool = true
     /// Voice mode is hidden during the free trial and in soft wall (see BillingGate).
     var voiceEnabled: Bool = true
+    /// How far the bar has been dragged down by the window shade's pull. Owned by
+    /// ContentView, because the gesture that drives it is the shade's, not this
+    /// view's — the bar follows the thumb while the shade comes down from the top.
+    var pullOffset: CGFloat = 0
 
     @State private var dragOffset: CGFloat = 0
 
@@ -77,7 +83,7 @@ struct BottomZoneView: View {
                 },
                 onVoice: onOpenVoiceMode
             )
-            .offset(y: dragOffset)
+            .offset(y: dragOffset + pullOffset)
             .zIndex(1)
             // ThumbDrop affordance hint
             Image(systemName: "chevron.down")
@@ -95,16 +101,17 @@ struct BottomZoneView: View {
                 .onAppear { onHeightChange(geo.size.height) }
                 .onChange(of: geo.size.height) { _, h in onHeightChange(h) }
         })
-        // Root-level ThumbDrop zone for the recipe canvas → voice mode direction.
-        // Downward commit opens chat; upward commit opens voice mode.
+        // Root-level ThumbDrop zone for the bottom bar. Only the upward direction
+        // now: swipe up and chat comes up from the bottom, which is where chat
+        // lives. Downward is the window shade's — pull the bar down and the shade
+        // comes down over the canvas — so ThumbDrop does not track it at all, and
+        // the two gestures never run their haptic ramps over each other.
         .background {
             ThumbDropOverlay(
                 isActive: isEnabled,
+                tracksDownward: false,
                 onOffsetChanged: { dragOffset = $0 },
-                onCommit: {
-                    SousHaptics.impact(.medium)
-                    onOpenChat()
-                },
+                onCommit: {},
                 onCancel: {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                         dragOffset = 0

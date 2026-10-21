@@ -31,6 +31,45 @@ struct ContentView: View {
     /// close can use different animations (spring bounce on open, straight easeIn on close).
     @State private var chatOverlayOffset: CGFloat = UIScreen.main.bounds.height
     @State private var isCameraPresented: Bool = false
+    /// The window shade — the recipe-navigation panel pulled down over cook mode.
+    @State private var shade = ShadePresentation()
+    /// Mirrored out of the canvas's scroll geometry; gates the shade's pull-down.
+    @State private var isCanvasAtTop: Bool = true
+    /// How far the Talk to Sous bar has been dragged down by the shade's bar pull.
+    @State private var bottomBarPullOffset: CGFloat = 0
+
+    // MARK: - TEMP: shade tunables
+    //
+    // Motion, which the design system has no tokens for yet (Milestone 32). These
+    // live in the Settings DEBUG section until they have been felt on a device.
+    @AppStorage(ShadeTuning.enabledKey) private var shadeNavigationEnabled: Bool = true
+    @AppStorage(ShadeTuning.pullCommitDistanceKey) private var shadePullCommitDistance: Double = Double(ShadeTuningValues.Defaults.pullCommitDistance)
+    @AppStorage(ShadeTuning.pullCommitVelocityKey) private var shadePullCommitVelocity: Double = Double(ShadeTuningValues.Defaults.pullCommitVelocity)
+    @AppStorage(ShadeTuning.pullResistanceKey) private var shadePullResistance: Double = Double(ShadeTuningValues.Defaults.pullResistance)
+    @AppStorage(ShadeTuning.peekAppearDistanceKey) private var shadePeekAppearDistance: Double = Double(ShadeTuningValues.Defaults.peekAppearDistance)
+    @AppStorage(ShadeTuning.openResponseKey) private var shadeOpenResponse: Double = ShadeTuningValues.Defaults.openResponse
+    @AppStorage(ShadeTuning.openDampingKey) private var shadeOpenDamping: Double = ShadeTuningValues.Defaults.openDamping
+    @AppStorage(ShadeTuning.closeResponseKey) private var shadeCloseResponse: Double = ShadeTuningValues.Defaults.closeResponse
+    @AppStorage(ShadeTuning.closeDampingKey) private var shadeCloseDamping: Double = ShadeTuningValues.Defaults.closeDamping
+    @AppStorage(ShadeTuning.dismissZoneHeightKey) private var shadeDismissZoneHeight: Double = Double(ShadeTuningValues.Defaults.dismissZoneHeight)
+    @AppStorage(ShadeTuning.dismissCommitDistanceKey) private var shadeDismissCommitDistance: Double = Double(ShadeTuningValues.Defaults.dismissCommitDistance)
+    @AppStorage(ShadeTuning.dismissCommitVelocityKey) private var shadeDismissCommitVelocity: Double = Double(ShadeTuningValues.Defaults.dismissCommitVelocity)
+
+    private var shadeTuning: ShadeTuningValues {
+        ShadeTuningValues(
+            pullCommitDistance: CGFloat(shadePullCommitDistance),
+            pullCommitVelocity: CGFloat(shadePullCommitVelocity),
+            pullResistance: CGFloat(shadePullResistance),
+            peekAppearDistance: CGFloat(shadePeekAppearDistance),
+            openResponse: shadeOpenResponse,
+            openDamping: shadeOpenDamping,
+            closeResponse: shadeCloseResponse,
+            closeDamping: shadeCloseDamping,
+            dismissZoneHeight: CGFloat(shadeDismissZoneHeight),
+            dismissCommitDistance: CGFloat(shadeDismissCommitDistance),
+            dismissCommitVelocity: CGFloat(shadeDismissCommitVelocity)
+        )
+    }
 
     private var hasDoneBanner: Bool { !timerManager.doneQueue.isEmpty }
 
@@ -81,6 +120,50 @@ struct ContentView: View {
             && !hasDoneBanner
             && !isTitleEditing
             && !isVoiceActive
+            // The shade's grab bar owns the bottom of the screen once the shade is
+            // actually down there. During an opening pull the shade is still only
+            // at the top, so the bar stays — see `coversBottomZone`.
+            && !shade.coversBottomZone
+    }
+
+    /// True on every screen the shade is responsible for navigating away from:
+    /// cook mode, whatever is happening on top of it. This is what hides the
+    /// hamburger and reclaims the title's inset — deliberately coarser than
+    /// `canPullShade`, so the button does not blink back during a title edit.
+    private var shadeGovernsCanvas: Bool {
+        shadeNavigationEnabled && store.hasCanvas
+    }
+
+    /// Where the pull-down is actually armed. Chat, voice, title editing and patch
+    /// review each take the canvas away; the left-edge drawer owns the gesture
+    /// space while it is open.
+    private var canPullShade: Bool {
+        shadeGovernsCanvas
+            && !isChatOpen
+            && !store.uiState.isSheetPresented
+            && !store.uiState.isPatchReview
+            && !isVoiceActive
+            && !isTitleEditing
+            && !store.showRecentRecipes
+            && isCanvasEnabled
+            && shade.isClosed
+    }
+
+    /// The band of the screen the bottom bar owns. Everything above it belongs to
+    /// the canvas. The shade can be pulled from either, and the two gestures are
+    /// kept apart by where the touch starts rather than by what it does.
+    private var bottomBarBand: Range<CGFloat> {
+        ThumbDropOverlay.defaultZoneTopY ..< (UIScreen.main.bounds.height + 1)
+    }
+
+    private var canvasBand: Range<CGFloat> {
+        0 ..< ThumbDropOverlay.defaultZoneTopY
+    }
+
+    /// The canvas counts as frontmost only when nothing is over it — the shade
+    /// included, so a timer finishing behind the shade still raises its notification.
+    private var isCanvasFrontmost: Bool {
+        isRecipeCanvasActive && !shade.isVisible
     }
 
     var body: some View {
@@ -199,9 +282,33 @@ struct ContentView: View {
                     stepsCompletedExpanded: $store.stepsCompletedExpanded,
                     miseEnPlaceExpanded: $store.miseEnPlaceExpanded,
                     navBarVisible: $navBarVisible,
-                    bottomZoneHeight: bottomZoneHeight
+                    bottomZoneHeight: bottomZoneHeight,
+                    reservesHamburgerInset: !shadeGovernsCanvas,
+                    isScrolledToTop: $isCanvasAtTop
                 )
                 .disabled(!isCanvasEnabled)
+                // Pull down past the top of the canvas to bring the shade down. A
+                // background on the canvas, so the window recognizer is removed the
+                // moment the canvas is.
+                .background {
+                    if shadeNavigationEnabled {
+                        ShadePullInstaller(
+                            isActive: canPullShade,
+                            isAtTop: isCanvasAtTop,
+                            startYRange: canvasBand,
+                            tuning: shadeTuning,
+                            shadeHeight: UIScreen.main.bounds.height,
+                            onBegin: { shade.beginOpening() },
+                            onProgress: { progress, _ in shade.driveOpening(progress: progress) },
+                            onEnd: { shade.finishOpening(commit: $0) }
+                        )
+                    }
+                }
+                .accessibilityActions {
+                    if shadeGovernsCanvas {
+                        Button("Show recipes") { shade.open() }
+                    }
+                }
                 // Extend the paper-texture background under the home indicator. The
                 // List's own .contentMargins(.bottom) reserves the scroll-content space
                 // for the Talk to Sous bar, so no .safeAreaInset is needed here (a second
@@ -256,10 +363,41 @@ struct ContentView: View {
                     },
                     onHeightChange: { bottomZoneHeight = $0 },
                     isEnabled: isCanvasEnabled,
-                    voiceEnabled: voiceEnabled
+                    voiceEnabled: voiceEnabled,
+                    pullOffset: bottomBarPullOffset
                 )
                 .offset(x: canvasOffset)
                 .disabled(!isCanvasEnabled)
+                // The shade's second entry point: pull the bar down and the shade
+                // comes down from the top. Same gesture engine, same haptics, its
+                // own shorter distances — a thumb on the bar has about 90pt of
+                // screen left beneath it.
+                .background {
+                    if shadeNavigationEnabled {
+                        ShadePullInstaller(
+                            isActive: canPullShade,
+                            requiresCanvasAtTop: false,
+                            isAtTop: isCanvasAtTop,
+                            startYRange: bottomBarBand,
+                            tuning: shadeTuning.forBarPull,
+                            shadeHeight: UIScreen.main.bounds.height,
+                            onBegin: { shade.beginOpening() },
+                            onProgress: { progress, pull in
+                                shade.driveOpening(progress: progress)
+                                // The bar yields under the thumb exactly as it did
+                                // when this drag opened chat: 65% of the travel,
+                                // capped at 60pt.
+                                bottomBarPullOffset = min(pull * 0.65, 60)
+                            },
+                            onEnd: { commit in
+                                shade.finishOpening(commit: commit)
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                    bottomBarPullOffset = 0
+                                }
+                            }
+                        )
+                    }
+                }
             }
         }
         .overlay(alignment: .bottom) {
@@ -293,9 +431,9 @@ struct ContentView: View {
             voiceCoordinator.onVoiceAccept = { store.send(.acceptPatch) }
             voiceCoordinator.onVoiceReject = { store.send(.rejectPatch(userText: "")) }
             timerManager.registerNotificationDelegate()
-            timerManager.isRecipeCanvasActive = isRecipeCanvasActive
+            timerManager.isRecipeCanvasActive = isCanvasFrontmost
         }
-        .onChange(of: isRecipeCanvasActive) { _, active in
+        .onChange(of: isCanvasFrontmost) { _, active in
             timerManager.isRecipeCanvasActive = active
         }
         .onChange(of: store.hasCanvas) { _, hasCanvas in
@@ -311,8 +449,22 @@ struct ContentView: View {
                 canvasOffset: $canvasOffset,
                 onNewRecipe: { gateGenerative { store.requestNewSession(); timerManager.clearAll() } },
                 onSettings: { showSettings = true },
-                isHamburgerVisible: !isChatOpen
+                isHamburgerVisible: !isChatOpen && !shadeGovernsCanvas,
+                isEdgeSwipeEnabled: !shade.isVisible
             )
+        }
+        // The shade is the last overlay, so it covers the bottom zone, the voice
+        // bar, the drawer's hamburger and the timer banners — everything.
+        .overlay {
+            if shadeGovernsCanvas {
+                ShadeView(
+                    store: store,
+                    presentation: shade,
+                    tuning: shadeTuning,
+                    onSettings: { showSettings = true },
+                    onNewRecipe: { gateGenerative { store.requestNewSession(); timerManager.clearAll() } }
+                )
+            }
         }
         .sheet(isPresented: $store.isShowingImportSheet) {
             RecipeImportSheet(store: store, onCancel: {

@@ -42,6 +42,23 @@ struct ThumbDropOverlay: UIViewRepresentable {
     /// The default trigger zone: the bottom 15% of the screen.
     static let defaultZone: TriggerZone = .bottomScreenFraction(0.15)
 
+    /// Window-space y where the default zone begins — the top of the strip the
+    /// bottom bar owns.
+    ///
+    /// Published so another window-level gesture can stay out of it. The window
+    /// shade's pull-down reads this: without it, a downward swipe on the Talk to
+    /// Sous bar started the shade, the shade hid the bottom zone, and hiding the
+    /// bottom zone removed this recognizer mid-swipe — so the swipe did nothing.
+    static var defaultZoneTopY: CGFloat {
+        let screenHeight = UIScreen.main.bounds.height
+        switch defaultZone {
+        case .bottomScreenFraction(let fraction):
+            return screenHeight * (1 - fraction)
+        case .viewEdge:
+            return screenHeight
+        }
+    }
+
     // MARK: Inputs
 
     /// True when ThumbDrop should be listening (e.g. the chat sheet is
@@ -58,6 +75,12 @@ struct ThumbDropOverlay: UIViewRepresentable {
     var commitDistance: CGFloat = 50
     /// Peak velocity in pt/s that commits the gesture. Defaults to 400.
     var commitVelocity: CGFloat = 400
+    /// Whether downward drags are tracked at all. False hands the downward
+    /// direction to somebody else entirely — no offset, no haptics, no commit —
+    /// the way upward is ignored unless `onUpwardCommit` is supplied. The canvas's
+    /// bottom bar passes false: pulling it down now brings the window shade down,
+    /// which is the shade's own gesture, and two ramps on one drag is one too many.
+    var tracksDownward: Bool = true
     /// Called with the current drag offset as the gesture progresses, damped and
     /// clamped. Negative values mean the element is being dragged upward.
     var onOffsetChanged: (CGFloat) -> Void
@@ -75,6 +98,7 @@ struct ThumbDropOverlay: UIViewRepresentable {
 
     /// The geometry and thresholds, bundled for the coordinator.
     struct Config {
+        var tracksDownward: Bool
         var triggerZone: TriggerZone
         var offsetClamp: CGFloat
         var damping: CGFloat
@@ -83,7 +107,8 @@ struct ThumbDropOverlay: UIViewRepresentable {
     }
 
     private var config: Config {
-        Config(triggerZone: triggerZone,
+        Config(tracksDownward: tracksDownward,
+               triggerZone: triggerZone,
                offsetClamp: offsetClamp,
                damping: damping,
                commitDistance: commitDistance,
@@ -198,7 +223,7 @@ struct ThumbDropOverlay: UIViewRepresentable {
                     return
                 }
 
-                if dy > 0 {
+                if dy > 0, config.tracksDownward {
                     // Track peak downward velocity across the full gesture.
                     let vy = gesture.velocity(in: gesture.view).y
                     if vy > peakVelocity { peakVelocity = vy }
@@ -224,8 +249,9 @@ struct ThumbDropOverlay: UIViewRepresentable {
             case .ended:
                 guard !hasFailed else { return }
                 let translation = gesture.translation(in: gesture.view)
-                let commitsDown = translation.y >= config.commitDistance
-                    || peakVelocity >= config.commitVelocity
+                let commitsDown = config.tracksDownward
+                    && (translation.y >= config.commitDistance
+                        || peakVelocity >= config.commitVelocity)
                 let commitsUp = translation.y <= -config.commitDistance
                     || peakUpwardVelocity >= config.commitVelocity
                 if commitsDown {

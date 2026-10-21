@@ -849,6 +849,66 @@ alone.
 
 ---
 
+### 26. The grab bar is full-bleed, and that is the whole reason it is a component (2026-10-06)
+
+The window shade needed a handle: something at the bottom edge of the panel that says what is
+behind it, moves with a finger, and completes the move on a tap. The obvious move was a
+`SousButton` with `style: .primary`, a chevron icon and the label CLOSE. It was tried first and it
+was wrong for one reason that turned out to be the whole point.
+
+**A Sous button sits inside the 20pt gutter. A hem does not have a gutter.** Every button in the
+app — TALK TO SOUS, NEW RECIPE, SAVE KEY — is a shape placed *on* a surface, with the margin
+making it clear that the surface continues underneath. The shade's bar is not on the panel; it
+**is** the panel's bottom edge. Inset it by 20pt and it stops reading as an edge and starts
+reading as a button that happens to be near the bottom, which is a different object and a
+different gesture. Full-bleed is not styling here, it is the thing's identity.
+
+Two consequences follow, and they are why it is `SousGrabBar` and not a sixth button style:
+
+1. **It is directional.** The chevron points where the panel is going, so the same bar reads
+   `⌄ RECIPES` while the shade is coming down and `⌃ CLOSE` once it is open. A button has a
+   label; this has a heading.
+2. **It carries a hairline on one side only** — the side facing the panel's own content. At the
+   bottom of the shade the rule is above it; at the top of the explore screen (next build) the
+   rule will be below it. `Edge` is therefore a property, not a layout accident.
+
+Everything else is borrowed rather than invented. **52pt tall and `accent/primary` filled with a
+white label, exactly like the Talk to Sous bar**, so the two read as the same furniture at
+opposite ends of the app. The chevron is `icon/small`, the label is `Sous/Button`, the pressed
+fill is `accent/pressed` — decision 25's filled-button clause, unchanged. No new token was added
+and none was needed, which is the test passing rather than the test being skipped.
+
+**What is deliberately *not* here: the motion.** The shade's commit distances, commit velocities,
+pull resistance, peek distance and two springs are all live debug tunables in Settings and
+nowhere else. They are not in `tokens.json`, they are not named, and they are not a decision yet.
+Sous has no motion tokens at all (Milestone 32), and inventing eleven of them from a simulator
+rather than a hand would be exactly the invent-per-screen habit the palette migration existed to
+kill. They become tokens after the operator has felt them on a device.
+
+**Addendum, 2026-10-20 — while it is being dragged, the shade is one flat burgundy sheet.**
+
+The first build let the real panel show through the peek. What that actually put on screen was
+the bottom of the panel: its NEW RECIPE footer, then the grab bar, then the strip under the home
+indicator. Two burgundy bars with a cream seam and a hairline between them, and a button you
+could read but not reach. It looked like two things arriving, not one shade coming down.
+
+So the panel has two faces. **Being pulled**, it is a single `accent/primary` fill with nothing
+on it but the chevron-and-label lockup at its leading edge — no footer, no rule, no seam. **Open**,
+it is itself. The crossfade is written inside the same `withAnimation` as the commit, so it rides
+the open spring rather than snapping the instant a finger lifts, and a *cancelled* pull stays
+blank all the way back up, while a *dismissal* keeps its contents the whole way out.
+
+That split is why `SousGrabBar.Lockup` exists: the sheet and the real bar draw the same chevron
+and label from the same place, so the label cannot shift by a pixel at the moment one becomes the
+other. The bar itself is unchanged — same four variants, same tokens, no new ones.
+
+Figma: **Grab Bar** (4 variants — Direction × Edge, with a Label text property), plus a **Shade**
+screen below Sidebar, assembled only from Wordmark, Icon Button, Recent Recipe Row, Button and
+Grab Bar. The Figma component is the resting bar; the drag sheet is a runtime state of the shade,
+not a variant.
+
+---
+
 ## Still open
 
 **No destructive color token.** The "Delete Timer" button uses SwiftUI's system red at 80%

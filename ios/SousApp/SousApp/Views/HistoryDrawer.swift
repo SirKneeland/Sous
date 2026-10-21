@@ -25,8 +25,10 @@ struct HistoryDrawer: View {
     var onNewRecipe: () -> Void = {}
     var onSettings: () -> Void = {}
     var isHamburgerVisible: Bool = false
+    /// False while the window shade is on screen: the two panels show the same
+    /// content, so the drawer must not be reachable from underneath it.
+    var isEdgeSwipeEnabled: Bool = true
 
-    @State private var newRecipePressed = false
     @State private var progress: CGFloat = 0
     @State private var gestureActive = false
     /// Cached from GeometryReader so snap() can compute the target canvasOffset.
@@ -45,53 +47,18 @@ struct HistoryDrawer: View {
                         .padding(.leading, dw * progress)
                         .allowsHitTesting(progress > 0.001)
 
-                    VStack(spacing: 0) {
-                        // MARK: Header
-                        ZStack(alignment: .center) {
-                            Text("SOUS")
-                                .font(.sousLogotype)
-                                .kerning(SousType.wordmarkTracking)
-                                .foregroundStyle(Color.sousText)
-                                .frame(maxWidth: .infinity)
-                            HStack(spacing: 0) {
-                                Spacer()
-                                Button {
-                                    onSettings()
-                                    snap(open: false)
-                                } label: {
-                                    Image(systemName: "gearshape.fill")
-                                        .font(.sousIcon(.large, weight: .medium))
-                                        .foregroundStyle(.white)
-                                        .frame(width: 44, height: 44)
-                                        .background(Color.sousSurfaceInverse)
-                                }
-                                .buttonStyle(.plain)
-                                .padding(.trailing, 16)
-                            }
-                        }
-                        .padding(.top, 16)
-                        .padding(.bottom, 16)
-                        .background(Color.sousBackground)
-
-                        SousRule()
-
-                        // MARK: Body
-                        RecentRecipesView(store: store, onDismiss: { snap(open: false) })
-
-                        // MARK: Footer
-                        SousRule()
-                        Button {
+                    DrawerContent(
+                        store: store,
+                        isPresented: store.showRecentRecipes,
+                        onSettings: {
+                            onSettings()
+                            snap(open: false)
+                        },
+                        onNewRecipe: {
                             snap(open: false) { onNewRecipe() }
-                        } label: {
-                            SousButtonLabel(title: "NEW RECIPE", style: .primary,
-                                            icon: "plus.square.fill",
-                                            isPressed: newRecipePressed)
-                        }
-                        .buttonStyle(PressReportingStyle(isPressed: $newRecipePressed))
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 12)
-                        .background(Color.sousBackground.ignoresSafeArea(edges: .bottom))
-                    }
+                        },
+                        onDismiss: { snap(open: false) }
+                    )
                     .frame(width: dw)
                     .frame(maxHeight: .infinity, alignment: .top)
                     .background(Color.sousBackground.ignoresSafeArea(edges: .top))
@@ -141,6 +108,7 @@ struct HistoryDrawer: View {
                     .frame(width: 20)
                     .frame(maxHeight: .infinity)
                     .contentShape(Rectangle())
+                    .allowsHitTesting(isEdgeSwipeEnabled)
                     .gesture(
                         DragGesture(minimumDistance: 10)
                             .onChanged { value in
