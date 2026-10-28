@@ -18,7 +18,7 @@ import UIKit
 struct ShadeView: View {
     @ObservedObject var store: AppStore
     var presentation: ShadePresentation
-    var tuning: ShadeTuningValues
+    var tuning: ShadeGesture
     var onSettings: () -> Void
     var onNewRecipe: () -> Void
 
@@ -46,12 +46,8 @@ struct ShadeView: View {
         .accessibilityAction(named: Text("Close")) {
             presentation.close()
         }
-        .onAppear { syncAnimations() }
-        .onChange(of: tuning.openResponse) { _, _ in syncAnimations() }
-        .onChange(of: tuning.openDamping) { _, _ in syncAnimations() }
-        .onChange(of: tuning.closeResponse) { _, _ in syncAnimations() }
-        .onChange(of: tuning.closeDamping) { _, _ in syncAnimations() }
-        .onChange(of: reduceMotion) { _, _ in syncAnimations() }
+        .onAppear { presentation.reduceMotion = reduceMotion }
+        .onChange(of: reduceMotion) { _, newValue in presentation.reduceMotion = newValue }
     }
 
     // MARK: - Panel
@@ -147,11 +143,4 @@ struct ShadeView: View {
         )
     }
 
-    // MARK: - Plumbing
-
-    private func syncAnimations() {
-        presentation.openAnimation = tuning.openAnimation
-        presentation.closeAnimation = tuning.closeAnimation
-        presentation.reduceMotion = reduceMotion
-    }
 }

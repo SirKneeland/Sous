@@ -60,7 +60,7 @@ final class StepTimerManager {
     func startTimer(stepId: UUID, stepIndex: Int, stepText: String, duration: TimeInterval) async {
         guard !isTimerActive(for: stepId) else { return }
         guard activeSessions.count < Self.maxConcurrent else {
-            UINotificationFeedbackGenerator().notificationOccurred(.error)
+            SousHaptics.play(.blocked)
             return
         }
         let summary = await TimerSummarizer.summarize(stepText)

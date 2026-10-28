@@ -909,6 +909,175 @@ not a variant.
 
 ---
 
+### 27. Haptics become a named scale, and 52 becomes a token (2026-10-20)
+
+Two gaps the window shade exposed, and they are the same gap: a value decided per call
+site rather than once.
+
+**Haptics had no design system at all.** Twenty-two call sites, each picking an intensity
+by hand. One `.medium` covered a button press, a gesture committing, a long press firing
+and the memory toast arriving — four unrelated events that happened to feel identical,
+with nothing anywhere recording whether that was intended. `.light` covered both a detent
+falling back and the shade landing. This is precisely where the palette was before the
+migration.
+
+So the scale is named for the **event**, not the intensity:
+
+| Role | Style | What it marks |
+|---|---|---|
+| `selection` | light | a small choice registering — a duration tapped in a step, ACCEPT |
+| `activation` | medium | a control firing — the bottom bar pressed, a long press completing |
+| `commit` | medium | a gesture reaching its end and being honoured |
+| `land` | light | something settling into place after it was let go |
+| `reveal` | soft | an affordance appearing under the finger mid-gesture |
+| `detentEngage` / `detentRelease` | rigid / light | crossing a threshold, and falling back below it |
+| `notice` | medium | something arriving unprompted — the memory toast |
+| `confirm` / `blocked` | success / error | work succeeded; the action was refused |
+
+Several roles resolve to the same UIKit style, exactly as several semantic colours resolve
+to the same primitive. That is the point: two things that *should* feel alike are now
+written as the same role, and two things that merely happened to share a style are not.
+**Every value in that table is the style those call sites already used**, so nothing about
+how the app feels changed — the scale records the decisions rather than making new ones.
+
+The intensities are `fileprivate` to `SousHaptics.swift`, so the compiler — not a
+convention — is what stops a view reaching past the scale and picking a strength. The one
+thing deliberately left as raw intensity is `SousHapticRamp`'s 30/60/90 ladder: it is a
+single event ("a drag is building") whose rungs are a curve, and naming each rung would
+invent three roles that mean nothing on their own.
+
+**And `52` is now `size.controlHeight`.** It was written out eight times — every Sous
+button, the bottom bar, the shade's grab bar, and the four hairline dividers cut to sit
+beside them in the split action bars. `semantic.size` already held `checkbox`, `iconButton`
+and `touchTarget`; the most repeated dimension in the app was the one missing from it.
+
+**Both are enforced**, which is the part that makes them stick. `check-tokens.py` gained
+two rules: a feedback generator built anywhere but `SousHaptics.swift` fails the check, and
+any size token carrying a `$swift` key must match its `SousSize` constant. That second rule
+is deliberately opt-in — the older size tokens have no Swift home yet and are skipped, so
+adding `$swift` is how a dimension graduates from written-down to enforced.
+
+Not in `tokens.json`: the haptic scale. Figma cannot express a tap, and tokens.json is
+defined as what Figma imports. The scale lives in Swift and in this entry, and the check
+script is what holds it.
+
+---
+
+### 28. The hamburger is deleted, and so is the space every neighbour saved for it (2026-10-20)
+
+The window shade replaced the hamburger in cook mode first, and the explore screen's grab
+bar finished the job the same day. There is now no hamburger anywhere in Sous, and
+**Icon Button is down to three schemes** — the burgundy `Accent` square is gone with it.
+
+Explore mode could not simply lose the button: it was the only visible route to Recent
+Recipes and Settings, and deleting it would have left the left-edge swipe as the sole way
+in. So it got the shade too — a `SousGrabBar(direction: .down, edge: .top)` across the top
+of the screen that pulls the same panel down, or opens it on tap. Three entry points now
+share one `ShadePresentation`, which is the split earning its keep for the third time.
+
+What *also* had to go was everything built to make room for the button:
+
+- **Recipe Title carried 76pt of side padding** — 16pt inset plus a 44pt button plus a
+  16pt margin — for the sole purpose of keeping a long title clear of the hamburger. It
+  now takes the ordinary gutter on both sides. This is the part that mattered: a
+  component, not just a drawing, and the one place the drift would have survived a visual
+  review because the screen it broke still *looked* fine.
+- **Three screens drew a hamburger cook mode does not have** — Recipe Canvas, Voice Mode
+  and Change Suggestion. Removed. Recipe Canvas now asserts the *absence*, so the drift
+  cannot come back quietly.
+- **Change Suggestion's revision line was inset 76pt** for the same reason, and is now at
+  the gutter.
+- **Zero State** swapped its hamburger for the grab bar, and now asserts the absence of
+  one. **Sidebar** and the **Import** screen's background layer simply lost theirs: the
+  drawer survives as the left-edge swipe, which no screen depicts.
+
+**One decision this reopens rather than settles.** Change Suggestion has no recipe title
+"by decision (2026-09-24): the hamburger clips it, and the revision line is the part that
+matters." Half of that reason has expired. The second half still stands on its own, so the
+title stays out for now — but it is now a choice rather than a consequence, and worth
+revisiting when the patch review screen is next touched.
+
+**The debug toggle went with it.** `Shade navigation` off used to restore the hamburger.
+With no hamburger to restore, off would have removed the shade and all three entry points
+and left the left-edge swipe as the only way in — a trapdoor rather than a safety net. So
+the switch is gone and the shade is simply how Sous navigates. The eleven motion sliders
+stay in the DEBUG section, unconditional, until those values become tokens. A stale
+`debugShadeNavigation = false` left in anyone's UserDefaults is now inert.
+
+The lesson is the one the palette migration kept teaching: the expensive drift is never
+the component you removed, it is the negative space every neighbour reserved for it.
+
+---
+
+### 29. Motion tokens begin, and the shade's sliders come out (2026-10-27)
+
+The window shade shipped with eleven of its numbers as live sliders in the Settings DEBUG
+section, on the explicit condition that nothing be written down until they had been felt
+on a device rather than guessed in a simulator. Three weeks later the answer came back:
+**the defaults were right.** So the sliders are gone and the values stand as written.
+
+What that unlocked was not the shade's numbers — it was the audit they justified. Counting
+every animation in the app:
+
+**Seven distinct springs across eleven call sites**, and the clustering is the palette
+problem again, exactly:
+
+| Spring | Uses | What |
+|---|---|---|
+| 0.35 / 0.85 | 3 | drawer open, drawer close, timer done banner |
+| **0.3 / 0.7** | **3** | spring-back after a cancelled drag — *already unanimous* |
+| 0.42 / 0.86 | 1 | shade opening |
+| 0.4 / 0.88 | 1 | chat overlay opening |
+| 0.34 / 0.90 | 1 | shade closing |
+| 0.5 / 0.9 | 1 | import progress |
+| 0.12 / 0.55 | 1 | the chat commit bounce |
+
+Three of those — 0.42/0.86, 0.4/0.88, 0.35/0.85 — are the same spring invented three times
+by three people who could not see each other's work. And **eleven distinct easing
+durations across thirty-five call sites**, clustered at 0.2 (×13), 0.3 (×7), 0.25 (×7) and
+0.15 (×3), with 0.28 and 0.5 as strays.
+
+**Three tokens, not seven.** `motion.panelArrive`, `motion.panelLeave` and
+`motion.gestureSpringBack`. The first two are the shade's, now named for what they do
+rather than which screen uses them; arriving is slower and looser than leaving, because a
+panel coming over what you were looking at may take its time while one going away should
+not ask for attention. The third was free — three call sites were already writing
+0.3 / 0.7 identically, so naming it changed nothing and settled it.
+
+**What was deliberately left alone.** The drawer's 0.35/0.85 and the chat sheet's 0.4/0.88
+are convergence *candidates*, not converged. Retuning surfaces nobody asked about is how a
+migration loses the trust it needs, and the difference between 0.40 and 0.42 is not
+something a design system should spend that trust on. They are written down here so
+Milestone 32 inherits a brief rather than a hunt. The same goes for the durations: naming
+them is easy, migrating thirty-five call sites is the milestone's work.
+
+**Leaving the rest inconsistent is itself the decision** (confirmed 2026-10-27). Not "we ran
+out of time" — the values were measured, the candidates named, and converging them was
+declined for now because it changes how existing screens feel and nothing has asked for
+that. The backlog, with verdicts per value, is written into Milestone 32 so the next person
+inherits an audit rather than a hunt. If you are reading this and the app's motion looks
+scattered: it is, knowingly, and the ledger is there.
+
+**Enforcement is half-built on purpose.** `check-tokens.py` verifies a motion token with a
+`$swift` key against its `SousMotion` constant — the same opt-in contract `semantic.size`
+uses. It does **not** yet fail on a hand-written `.spring(response:)` in a view, because
+five of them legitimately remain; adding that rule today would mean either exempting all
+five (a lie) or retuning them (not asked). That rule lands when they converge.
+
+**Motion is in `tokens.json` but not in Figma**, which needs saying since it breaks the
+file's own stated purpose. There is precedent: `semantic.size` has lived there unimported
+since it was added, because the plugin only emits colour, type, icon sizes, spacing and
+border. A SwiftUI spring is a response/damping pair, not a Figma easing curve, so there is
+nothing faithful to import. Haptics stayed out entirely for a different reason — a style
+name is not a value, and `tokens.json` is a value store.
+
+**And the gesture numbers are not motion.** `ShadeGesture` keeps the commit distances,
+velocities, resistance and zone height as plain Swift. A commit velocity in points per
+second is this gesture's calibration, not a value another platform or another surface
+would ever share.
+
+---
+
 ## Still open
 
 **No destructive color token.** The "Delete Timer" button uses SwiftUI's system red at 80%
@@ -928,5 +1097,10 @@ deletion needs a second one.
 3. A view writes `.system(size:)` instead of using a type or icon token.
 4. The `SousIconSize` scale no longer matches `tokens.json`.
 5. A type role in `tokens.json` has no matching token in the theme.
+6. A view builds a `UIFeedbackGenerator` instead of playing a `SousHaptic` role.
+7. A size token declaring a `$swift` key no longer matches its `SousSize` constant.
+8. A motion token declaring a `$swift` key no longer matches its `SousMotion` spring.
 
-Spacing is **not** in that list, by the decision above.
+Spacing is **not** in that list, by the decision above. Motion is only half in it: the three
+springs that exist are verified, but a hand-written `.spring(...)` in a view is not yet
+caught, because five of them legitimately remain. See decision 29.

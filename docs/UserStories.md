@@ -569,12 +569,18 @@
 - Then the shade retracts first and the action follows — the same order the
   history drawer has always used
 
-### US-74: The Hamburger Is Gone From Cook Mode
-- Given the recipe canvas in cook mode
-- Then the hamburger button is not drawn, and the recipe title uses the full
-  width instead of reserving room for it
-- And in explore mode, where there is no canvas yet, the hamburger is unchanged
-- And the left-edge swipe drawer is unchanged everywhere
+### US-74: The Hamburger Is Gone Everywhere
+- Given any screen in Sous
+- Then there is no hamburger button, and the recipe title uses the full width
+  instead of reserving room for one
+- And the left-edge swipe drawer is unchanged
+
+### US-74a: Explore Mode Pulls the Shade From a Grab Bar
+- Given explore mode, before any recipe exists
+- Then a burgundy grab bar reading RECIPES sits across the top of the screen
+- When the user pulls it down, the same shade comes down over the explore screen
+- And tapping it opens the shade too
+- And that is how Recent Recipes, NEW RECIPE and Settings are reached there
 
 ### US-75: Shade Accessibility
 - Given VoiceOver is running on the recipe canvas

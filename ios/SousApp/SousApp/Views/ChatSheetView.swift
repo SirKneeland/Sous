@@ -28,7 +28,7 @@ struct ChatSheetView: View {
     /// The shared ThumbDrop haptic ladder (30 / 60 / 90 pt). The input bar's own
     /// gesture has no entry tick and keys its gates on absolute travel, so
     /// reversing direction mid-drag does not re-fire a band.
-    @State private var inputBarRamp = SousHapticRamp(entryStyle: nil, directional: false)
+    @State private var inputBarRamp = SousHapticRamp(playsEntryTick: false, directional: false)
     @FocusState private var isComposerFocused: Bool
     /// One-shot gate: set on sheet open, consumed by keyboardWillShowNotification to snap
     /// to bottom as the keyboard begins rising rather than after it lands.
@@ -156,7 +156,7 @@ struct ChatSheetView: View {
                 .padding(.horizontal, 20)
 
                 Button {
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    SousHaptics.play(.selection)
                 } label: {
                     VStack(spacing: 6) {
                         Text("OR CREATE ONE")
@@ -293,7 +293,7 @@ struct ChatSheetView: View {
                     // Reserves space equal to the generate button height so the last
                     // message is never hidden under the floating overlay button.
                     if !store.hasCanvas && store.canGenerateRecipe {
-                        Color.clear.frame(height: 52)
+                        Color.clear.frame(height: SousSize.control)
                     }
                     Color.clear.frame(height: 1).id("bottom")
                 }
@@ -605,7 +605,7 @@ struct ChatSheetView: View {
     /// Fires the ThumbDrop commit action: haptic, anticipation bounce, then dismiss.
     /// Called by both the input bar DragGesture and the root-level ThumbDropOverlay.
     private func thumbDropCommit() {
-        SousHaptics.impact(.medium)
+        SousHaptics.play(.commit)
         UIApplication.shared.sendAction(
             #selector(UIResponder.resignFirstResponder),
             to: nil, from: nil, for: nil
@@ -622,7 +622,7 @@ struct ChatSheetView: View {
     /// Springs the input bar back to rest. Called when a ThumbDrop gesture is
     /// cancelled or does not meet the commit threshold.
     private func thumbDropCancel() {
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+        withAnimation(SousMotion.gestureSpringBack.animation) {
             inputBarDragOffset = 0
             sheetBounceOffset = 0
         }
@@ -752,9 +752,6 @@ private struct MemoryProposalToast: View {
     private let ticker = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
     private let countdownDuration: TimeInterval = 6.0
 
-    /// Left inset that clears the hamburger: its 16pt leading padding, its 44pt width,
-    /// and 8pt of air. See the note on the toast's padding below.
-    private static let hamburgerClearance: CGFloat = 16 + 44 + 8
 
     init(text: String, onSave: @escaping (String, String?, MemorySaveTrigger) -> Void, onComplete: @escaping () -> Void, onDismiss: @escaping () -> Void, onNavigateToMemories: @escaping () -> Void) {
         self.text = text
@@ -903,13 +900,11 @@ private struct MemoryProposalToast: View {
         }
         .background(Color.sousTerracotta)
         .overlay(Rectangle().stroke(Color.sousTerracotta, lineWidth: 1))
-        // The hamburger is a 44pt burgundy square drawn in an outer overlay, so it sits
-        // *above* this toast. Same burgundy, so it does not look like an overlap — it
-        // silently paints over the first 44pt of every line ("REMEMBERING THIS" arrived
-        // as "EMBERING THIS"). Starting past it is the fix that keeps the menu tappable;
-        // covering it would work visually but steal the tap, since tapping the toast
-        // opens Memories.
-        .padding(.leading, Self.hamburgerClearance)
+        // This used to start 68pt in, to clear a 44pt hamburger drawn above it in an
+        // outer overlay — same burgundy, so it silently painted over the first 44pt of
+        // every line ("REMEMBERING THIS" arrived as "EMBERING THIS"). There is no
+        // hamburger any more, so the toast is symmetric (decision 28).
+        .padding(.leading, 16)
         .padding(.trailing, 16)
         .onTapGesture { onNavigateToMemories() }
         .gesture(DragGesture(minimumDistance: 20).onEnded { _ in

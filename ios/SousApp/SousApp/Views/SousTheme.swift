@@ -195,6 +195,53 @@ extension Font {
     }
 }
 
+// MARK: - Control Sizing
+
+/// Dimensions that more than one control shares, and that therefore have to be
+/// decided once. Anything in here carrying a `$swift` key in `tokens.json` is
+/// verified by `design/check-tokens.py`.
+enum SousSize {
+    /// The height of a full-width control. Eight places wrote `52` before this
+    /// existed: every Sous button, the bottom bar, the shade's grab bar, and the
+    /// hairline dividers cut to sit beside them in the split action bars.
+    static let control: CGFloat = 52
+}
+
+// MARK: - Motion
+
+/// The app's springs, named for what they are doing rather than where they are used.
+///
+/// The first motion tokens Sous has. They exist because the window shade's values
+/// were finally tuned on a device, and the audit that followed found the palette
+/// problem all over again: **seven distinct springs across eleven call sites**, three
+/// of them within a hair of each other and invented separately.
+///
+/// Only what is settled lives here. The chat sheet's 0.4/0.88 and the drawer's
+/// 0.35/0.85 are convergence candidates, not converged — retuning surfaces nobody
+/// asked about is how a migration loses trust. See decision 29.
+enum SousMotion {
+    /// A SwiftUI spring as its two numbers, so `design/check-tokens.py` can read it.
+    struct Spring {
+        let response: Double
+        let dampingFraction: Double
+
+        var animation: Animation {
+            .spring(response: response, dampingFraction: dampingFraction)
+        }
+    }
+
+    /// A panel coming over what you were looking at.
+    static let panelArrive = Spring(response: 0.42, dampingFraction: 0.86)
+
+    /// The same panel going away again — tighter and better damped, because leaving
+    /// should not draw attention the way arriving does.
+    static let panelLeave = Spring(response: 0.34, dampingFraction: 0.90)
+
+    /// Something returning to rest after a drag that did not commit. Loose on
+    /// purpose: the overshoot is what says nothing happened.
+    static let gestureSpringBack = Spring(response: 0.3, dampingFraction: 0.7)
+}
+
 // MARK: - Square Checkbox
 
 /// Square bordered checkbox. Unchecked: 1pt border. Checked: burgundy fill + white checkmark.

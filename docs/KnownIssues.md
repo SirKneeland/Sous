@@ -44,6 +44,24 @@ deterministic wait, which would retire both entries at once.
 
 ---
 
+## ChatRetryTests: two tests are flaky under a loaded simulator
+
+- **Area:** `ios/SousApp/SousAppTests/ChatRetryTests.swift`
+- **Type:** Flaky test
+- **Flagged:** 2026-10-27
+
+`test_capReached_isAWallWithNoRetry` and `test_retry_removesFailureBubbleAndResendsSameText`
+fail intermittently in full-suite runs and pass on re-run with no code change — observed
+failing together, then separately, then not at all across three consecutive runs of the same
+binary. Same family as the two `AppStoreTests` flakes above: a timing-sensitive drain rather
+than a logic fault, and it shows up after a long session when the simulator is loaded.
+
+Not investigated beyond confirming it is not deterministic. If it starts failing *reliably*,
+that is a real regression and not this. Same candidate fix as the others: replace the yield-count
+drain with a deterministic wait.
+
+---
+
 ## Unused UIStateMachine transition: recipeOnly + patchReceived → patchProposed
 
 - **Area:** `ios/SousApp/SousApp/UIStateMachine/UIStateMachine.swift`

@@ -16,7 +16,7 @@ struct HapticOnPressStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .onChange(of: configuration.isPressed) { _, pressed in
-                if pressed { UIImpactFeedbackGenerator(style: .medium).impactOccurred() }
+                if pressed { SousHaptics.play(.activation) }
                 isPressed?.wrappedValue = pressed
             }
     }
@@ -44,7 +44,7 @@ struct SousBottomBar: View {
     /// than as a square button stuck on the end. Not an Icon Button — that component is
     /// 44pt or 32pt square, and neither is this.
     private static let micWidth: CGFloat = 60
-    private static let height: CGFloat = 52
+    private static let height: CGFloat = SousSize.control
 
     @State private var talkPressed = false
 

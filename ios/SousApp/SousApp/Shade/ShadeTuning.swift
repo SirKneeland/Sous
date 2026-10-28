@@ -3,7 +3,7 @@ import UIKit
 
 // MARK: - ShadeMetrics
 
-/// Fixed geometry the shade depends on, as opposed to the tunable feel.
+/// Fixed geometry the shade depends on, as opposed to the feel of the gesture.
 enum ShadeMetrics {
     /// The shade covers the whole screen, safe areas included, so neither it nor
     /// the gesture driving it can read the insets from a `GeometryReader` that
@@ -27,74 +27,65 @@ enum ShadeMetrics {
     }
 }
 
-// MARK: - ShadeTuningValues
+// MARK: - ShadeGesture
 
-/// Every number the window shade's feel depends on, in one struct.
+/// The distances and velocities that decide how the window shade responds to a
+/// finger. **Gesture, not motion** — the springs live in `SousMotion`.
 ///
-/// These are **motion**, and Sous's design system has no motion tokens yet
-/// (Milestone 32). They deliberately do not live in `design/tokens.json` and are
-/// not a numbered decision: they are debug tunables until they have been felt on
-/// a real device, at which point whichever survive become motion tokens.
-struct ShadeTuningValues {
-    // MARK: The pull that opens it
+/// These were eleven live sliders in the Settings DEBUG section for three weeks,
+/// which is how they were arrived at: tuned on a device, by thumb, rather than
+/// guessed in a simulator. The sliders are gone and the values they settled on are
+/// the defaults below. See decision 29.
+///
+/// They are deliberately *not* in `tokens.json`. A commit velocity in points per
+/// second is not a design token in any sense Figma or another platform would
+/// recognise; it is this gesture's calibration, and it belongs with the gesture.
+struct ShadeGesture {
+    // MARK: The pull that opens it, from the canvas
 
     /// Points of downward pull past which releasing commits.
-    var pullCommitDistance: CGFloat = Defaults.pullCommitDistance
+    var pullCommitDistance: CGFloat = 160
     /// Peak downward velocity (pt/s) that commits regardless of distance. Higher
     /// than ThumbDrop's 400 on purpose — a quick flick at the top of the list is
     /// how people bounce it, and that must not open the shade.
-    var pullCommitVelocity: CGFloat = Defaults.pullCommitVelocity
+    var pullCommitVelocity: CGFloat = 1000
     /// Fraction of further finger travel the shade follows once the peek is out.
-    var pullResistance: CGFloat = Defaults.pullResistance
+    var pullResistance: CGFloat = 0.55
     /// Points of pull over which the peek eases fully into view. The soft tick
     /// fires here, and nothing is shown or felt before it.
-    var peekAppearDistance: CGFloat = Defaults.peekAppearDistance
+    var peekAppearDistance: CGFloat = 90
 
-    // MARK: The pull that opens it from the bottom bar
+    // MARK: The pull that opens it, from a grab bar
 
-    // The bar sits about 90pt from the bottom of the glass, so a thumb starting on
-    // it simply cannot travel the canvas pull's distance — it runs out of screen.
-    // Hence its own, shorter set. Resistance, springs and the peek curve are shared.
+    // A thumb on the Talk to Sous bar has about 90pt of glass beneath it, so it
+    // simply cannot travel the canvas pull's distance — it runs out of screen.
+    // Hence its own, shorter set, shared with the explore screen's grab bar.
+    // Resistance, the springs and the peek curve are shared.
     //
-    // The peek therefore comes out faster here than it does from the canvas: the
-    // same ~145pt of shade travel, over 35pt of thumb instead of 90. It reads as the
-    // hem snapping out rather than being drawn out, which is the right trade when
-    // the whole gesture has to finish inside 60pt.
+    // The peek therefore comes out faster here: the same ~145pt of shade travel
+    // over 35pt of thumb instead of 90. It reads as the hem snapping out rather
+    // than being drawn out, which is the right trade when the whole gesture has to
+    // finish inside 60pt.
 
-    var barPullCommitDistance: CGFloat = Defaults.barPullCommitDistance
-    var barPullCommitVelocity: CGFloat = Defaults.barPullCommitVelocity
-    var barPeekAppearDistance: CGFloat = Defaults.barPeekAppearDistance
+    var barPullCommitDistance: CGFloat = 60
+    var barPullCommitVelocity: CGFloat = 400
+    var barPeekAppearDistance: CGFloat = 35
 
-    /// This same tuning with the bar's three distances swapped in, so the gesture
-    /// itself needs no idea which entry point it is serving.
-    var forBarPull: ShadeTuningValues {
+    // MARK: The swipe that dismisses it
+
+    /// Height of the ThumbDrop zone at the bottom of the open shade.
+    var dismissZoneHeight: CGFloat = 96
+    var dismissCommitDistance: CGFloat = 60
+    var dismissCommitVelocity: CGFloat = 500
+
+    /// This same calibration with the bar's three distances swapped in, so the
+    /// gesture itself needs no idea which entry point it is serving.
+    var forBarPull: ShadeGesture {
         var copy = self
         copy.pullCommitDistance = barPullCommitDistance
         copy.pullCommitVelocity = barPullCommitVelocity
         copy.peekAppearDistance = barPeekAppearDistance
         return copy
-    }
-
-    // MARK: The springs
-
-    var openResponse: Double = Defaults.openResponse
-    var openDamping: Double = Defaults.openDamping
-    var closeResponse: Double = Defaults.closeResponse
-    var closeDamping: Double = Defaults.closeDamping
-
-    // MARK: The swipe that dismisses it
-
-    /// Height of the ThumbDrop zone at the bottom of the open shade.
-    var dismissZoneHeight: CGFloat = Defaults.dismissZoneHeight
-    var dismissCommitDistance: CGFloat = Defaults.dismissCommitDistance
-    var dismissCommitVelocity: CGFloat = Defaults.dismissCommitVelocity
-
-    var openAnimation: Animation {
-        .spring(response: openResponse, dampingFraction: openDamping)
-    }
-
-    var closeAnimation: Animation {
-        .spring(response: closeResponse, dampingFraction: closeDamping)
     }
 
     /// How far the shade has travelled for a given raw downward pull.
@@ -114,103 +105,5 @@ struct ShadeTuningValues {
         let t = min(1, raw / max(1, peekAppearDistance))
         let eased = t * t * (3 - 2 * t)
         return peekTravel * eased + max(0, raw - peekAppearDistance) * pullResistance
-    }
-
-    // MARK: Defaults
-
-    enum Defaults {
-        static let pullCommitDistance: CGFloat = 160
-        static let pullCommitVelocity: CGFloat = 1000
-        static let pullResistance: CGFloat = 0.55
-        static let peekAppearDistance: CGFloat = 90
-        // ThumbDrop's own numbers, which this gesture used to carry when it opened
-        // chat from the same bar — the sensitivity was already right, only the
-        // destination changed. The peek has to be fully out well before the commit,
-        // so it lands at a little over half the distance.
-        static let barPullCommitDistance: CGFloat = 60
-        static let barPullCommitVelocity: CGFloat = 400
-        static let barPeekAppearDistance: CGFloat = 35
-        static let openResponse: Double = 0.42
-        static let openDamping: Double = 0.86
-        static let closeResponse: Double = 0.34
-        static let closeDamping: Double = 0.90
-        static let dismissZoneHeight: CGFloat = 96
-        static let dismissCommitDistance: CGFloat = 60
-        static let dismissCommitVelocity: CGFloat = 500
-    }
-}
-
-// MARK: - ShadeTuning
-
-/// The `@AppStorage` keys behind `ShadeTuningValues`, and the ranges the debug
-/// sliders offer. TEMP — this whole type goes when motion tokens land.
-enum ShadeTuning {
-    /// The feature switch. Off restores the hamburger everywhere and removes the
-    /// pull-down entirely.
-    static let enabledKey = "debugShadeNavigation"
-
-    static let pullCommitDistanceKey = "debugShadePullCommitDistance"
-    static let pullCommitVelocityKey = "debugShadePullCommitVelocity"
-    static let pullResistanceKey = "debugShadePullResistance"
-    static let peekAppearDistanceKey = "debugShadePeekAppearDistance"
-    static let barPullCommitDistanceKey = "debugShadeBarPullCommitDistance"
-    static let barPullCommitVelocityKey = "debugShadeBarPullCommitVelocity"
-    static let barPeekAppearDistanceKey = "debugShadeBarPeekAppearDistance"
-    static let openResponseKey = "debugShadeOpenResponse"
-    static let openDampingKey = "debugShadeOpenDamping"
-    static let closeResponseKey = "debugShadeCloseResponse"
-    static let closeDampingKey = "debugShadeCloseDamping"
-    static let dismissZoneHeightKey = "debugShadeDismissZoneHeight"
-    static let dismissCommitDistanceKey = "debugShadeDismissCommitDistance"
-    static let dismissCommitVelocityKey = "debugShadeDismissCommitVelocity"
-
-    /// Key, label, default, and slider range — the Settings section is generated
-    /// from this so a new tunable is one line.
-    struct Slider: Identifiable {
-        let key: String
-        let label: String
-        let value: Double
-        let range: ClosedRange<Double>
-        let unit: String
-        var id: String { key }
-    }
-
-    static let sliders: [Slider] = [
-        .init(key: pullCommitDistanceKey, label: "Pull commit distance",
-              value: Double(ShadeTuningValues.Defaults.pullCommitDistance), range: 60...360, unit: "pt"),
-        .init(key: pullCommitVelocityKey, label: "Pull commit velocity",
-              value: Double(ShadeTuningValues.Defaults.pullCommitVelocity), range: 200...2500, unit: "pt/s"),
-        .init(key: pullResistanceKey, label: "Pull resistance",
-              value: Double(ShadeTuningValues.Defaults.pullResistance), range: 0.15...1, unit: "×"),
-        .init(key: peekAppearDistanceKey, label: "Peek label appear distance",
-              value: Double(ShadeTuningValues.Defaults.peekAppearDistance), range: 16...200, unit: "pt"),
-        .init(key: barPullCommitDistanceKey, label: "Bar pull commit distance",
-              value: Double(ShadeTuningValues.Defaults.barPullCommitDistance), range: 25...160, unit: "pt"),
-        .init(key: barPullCommitVelocityKey, label: "Bar pull commit velocity",
-              value: Double(ShadeTuningValues.Defaults.barPullCommitVelocity), range: 150...1500, unit: "pt/s"),
-        .init(key: barPeekAppearDistanceKey, label: "Bar peek appear distance",
-              value: Double(ShadeTuningValues.Defaults.barPeekAppearDistance), range: 10...120, unit: "pt"),
-        .init(key: openResponseKey, label: "Open spring response",
-              value: ShadeTuningValues.Defaults.openResponse, range: 0.1...1, unit: "s"),
-        .init(key: openDampingKey, label: "Open spring damping",
-              value: ShadeTuningValues.Defaults.openDamping, range: 0.4...1, unit: ""),
-        .init(key: closeResponseKey, label: "Close spring response",
-              value: ShadeTuningValues.Defaults.closeResponse, range: 0.1...1, unit: "s"),
-        .init(key: closeDampingKey, label: "Close spring damping",
-              value: ShadeTuningValues.Defaults.closeDamping, range: 0.4...1, unit: ""),
-        .init(key: dismissZoneHeightKey, label: "Dismiss zone height",
-              value: Double(ShadeTuningValues.Defaults.dismissZoneHeight), range: 40...240, unit: "pt"),
-        .init(key: dismissCommitDistanceKey, label: "Dismiss commit distance",
-              value: Double(ShadeTuningValues.Defaults.dismissCommitDistance), range: 20...200, unit: "pt"),
-        .init(key: dismissCommitVelocityKey, label: "Dismiss commit velocity",
-              value: Double(ShadeTuningValues.Defaults.dismissCommitVelocity), range: 150...1500, unit: "pt/s"),
-    ]
-
-    /// Clears every stored tunable so `@AppStorage` falls back to its declared
-    /// default. Does not touch the feature switch.
-    static func resetToDefaults() {
-        for slider in sliders {
-            UserDefaults.standard.removeObject(forKey: slider.key)
-        }
     }
 }

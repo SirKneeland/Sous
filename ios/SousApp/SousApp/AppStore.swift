@@ -442,7 +442,7 @@ final class AppStore: ObservableObject {
     /// Sets the pending memory proposal shown in the toast. Replaces any existing proposal.
     func proposeMemory(text: String) {
         pendingMemoryProposal = text
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        SousHaptics.play(.notice)
     }
 
 #if DEBUG
@@ -501,7 +501,7 @@ final class AppStore: ObservableObject {
         resolveMemoryDecision(.saved(trigger: .tappedSave, savedText: text))
 #endif
         pendingMemoryProposal = nil
-        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        SousHaptics.play(.confirm)
     }
 
     /// Saves the proposed memory without dismissing the toast. The toast remains visible
@@ -518,7 +518,7 @@ final class AppStore: ObservableObject {
 #if DEBUG
         resolveMemoryDecision(.saved(trigger: trigger, savedText: text))
 #endif
-        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        SousHaptics.play(.confirm)
     }
 
     /// Discards the pending memory proposal without saving.

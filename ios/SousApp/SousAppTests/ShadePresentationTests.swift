@@ -185,7 +185,7 @@ final class ShadePresentationTests: XCTestCase {
     /// Two segments: the peek eases fully out over `peekAppearDistance`, then
     /// further pull is followed at `pullResistance`.
     @MainActor func test_peekIsFullyOutAtTheAppearDistance() async {
-        let tuning = ShadeTuningValues()
+        let tuning = ShadeGesture()
         let peek: CGFloat = 145
 
         XCTAssertEqual(tuning.travel(forPull: 0, peekTravel: peek), 0, accuracy: 0.001)
@@ -196,7 +196,7 @@ final class ShadePresentationTests: XCTestCase {
     }
 
     @MainActor func test_pullBeyondThePeekIsResisted() async {
-        let tuning = ShadeTuningValues()
+        let tuning = ShadeGesture()
         let peek: CGFloat = 145
         let extra: CGFloat = 100
 
@@ -206,12 +206,12 @@ final class ShadePresentationTests: XCTestCase {
 
     /// An upward drag must never push the shade above its rest position.
     @MainActor func test_upwardPullProducesNoTravel() async {
-        let tuning = ShadeTuningValues()
+        let tuning = ShadeGesture()
         XCTAssertEqual(tuning.travel(forPull: -200, peekTravel: 145), 0, accuracy: 0.001)
     }
 
     @MainActor func test_travelIsMonotonic() async {
-        let tuning = ShadeTuningValues()
+        let tuning = ShadeGesture()
         var previous: CGFloat = -1
         for pull in stride(from: CGFloat(0), through: 400, by: 5) {
             let travel = tuning.travel(forPull: pull, peekTravel: 145)
@@ -223,10 +223,11 @@ final class ShadePresentationTests: XCTestCase {
     // MARK: - The bar pull's own distances
 
     /// The bottom bar's pull swaps in three shorter distances and nothing else —
-    /// resistance, both springs and the dismiss values stay shared. If this drifts,
+    /// resistance and the dismiss values stay shared (the springs are tokens now and
+    /// never varied per entry point). If this drifts,
     /// the two entry points quietly stop feeling like the same gesture.
     @MainActor func test_forBarPullSwapsTheThreeDistancesAndLeavesTheRestAlone() async {
-        let canvas = ShadeTuningValues()
+        let canvas = ShadeGesture()
         let bar = canvas.forBarPull
 
         XCTAssertEqual(bar.pullCommitDistance, canvas.barPullCommitDistance)
@@ -234,10 +235,6 @@ final class ShadePresentationTests: XCTestCase {
         XCTAssertEqual(bar.peekAppearDistance, canvas.barPeekAppearDistance)
 
         XCTAssertEqual(bar.pullResistance, canvas.pullResistance)
-        XCTAssertEqual(bar.openResponse, canvas.openResponse)
-        XCTAssertEqual(bar.openDamping, canvas.openDamping)
-        XCTAssertEqual(bar.closeResponse, canvas.closeResponse)
-        XCTAssertEqual(bar.closeDamping, canvas.closeDamping)
         XCTAssertEqual(bar.dismissZoneHeight, canvas.dismissZoneHeight)
         XCTAssertEqual(bar.dismissCommitDistance, canvas.dismissCommitDistance)
         XCTAssertEqual(bar.dismissCommitVelocity, canvas.dismissCommitVelocity)
@@ -246,7 +243,7 @@ final class ShadePresentationTests: XCTestCase {
     /// A thumb starting on the bar has roughly 90pt of glass beneath it, so the
     /// gesture has to finish inside that. The canvas pull's distance does not.
     @MainActor func test_theBarPullFitsInTheRoomAThumbActuallyHas() async {
-        let bar = ShadeTuningValues().forBarPull
+        let bar = ShadeGesture().forBarPull
         let roomBeneathTheBar: CGFloat = 90
 
         XCTAssertLessThan(bar.pullCommitDistance, roomBeneathTheBar)
@@ -257,7 +254,7 @@ final class ShadePresentationTests: XCTestCase {
     /// The peek is fully out at the appear distance for the bar too, however much
     /// faster it has to get there.
     @MainActor func test_theBarPeekIsFullyOutBeforeTheCommit() async {
-        let bar = ShadeTuningValues().forBarPull
+        let bar = ShadeGesture().forBarPull
         let peek: CGFloat = 145
 
         XCTAssertEqual(bar.travel(forPull: bar.peekAppearDistance, peekTravel: peek),
@@ -265,26 +262,31 @@ final class ShadePresentationTests: XCTestCase {
         XCTAssertGreaterThan(bar.travel(forPull: bar.pullCommitDistance, peekTravel: peek), peek)
     }
 
-    // MARK: - Tunables
+    // MARK: - Motion tokens
 
-    @MainActor func test_resetRestoresEveryDefault() async {
-        let defaults = UserDefaults.standard
-        for slider in ShadeTuning.sliders {
-            defaults.set(slider.range.upperBound, forKey: slider.key)
-        }
-        ShadeTuning.resetToDefaults()
-        for slider in ShadeTuning.sliders {
-            XCTAssertNil(defaults.object(forKey: slider.key),
-                         "\(slider.key) still has a stored value after reset")
-        }
+    /// The shade's springs are tokens now, so they can drift from `tokens.json`.
+    /// `check-tokens.py` is the real guard; this catches the other half — a view
+    /// quietly going back to a hand-written spring.
+    @MainActor func test_theShadeUsesTheMotionTokensRatherThanItsOwnSprings() async {
+        XCTAssertEqual(SousMotion.panelArrive.response, 0.42, accuracy: 0.0001)
+        XCTAssertEqual(SousMotion.panelArrive.dampingFraction, 0.86, accuracy: 0.0001)
+        XCTAssertEqual(SousMotion.panelLeave.response, 0.34, accuracy: 0.0001)
+        XCTAssertEqual(SousMotion.panelLeave.dampingFraction, 0.90, accuracy: 0.0001)
     }
 
-    /// Every default has to sit inside the range its slider offers, or the slider
-    /// silently clamps it the first time it is touched.
-    @MainActor func test_everyDefaultSitsInsideItsSliderRange() async {
-        for slider in ShadeTuning.sliders {
-            XCTAssertTrue(slider.range.contains(slider.value),
-                          "\(slider.key) default \(slider.value) is outside \(slider.range)")
-        }
+    /// Arriving and leaving are deliberately different: a panel coming over what you
+    /// were looking at may take its time, one going away should not draw attention.
+    @MainActor func test_leavingIsQuickerAndBetterDampedThanArriving() async {
+        XCTAssertLessThan(SousMotion.panelLeave.response, SousMotion.panelArrive.response)
+        XCTAssertGreaterThan(SousMotion.panelLeave.dampingFraction,
+                             SousMotion.panelArrive.dampingFraction)
     }
+
+    /// The spring-back after a cancelled drag is looser than either panel spring —
+    /// the overshoot is what says nothing happened.
+    @MainActor func test_theCancelledDragSpringIsTheLoosestOfThem() async {
+        XCTAssertLessThan(SousMotion.gestureSpringBack.dampingFraction,
+                          SousMotion.panelArrive.dampingFraction)
+    }
+
 }

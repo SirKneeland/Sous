@@ -32,7 +32,7 @@ struct ShadePullInstaller: UIViewRepresentable {
     /// the bottom bar's strip; the bar owns the strip itself. Disjoint on purpose —
     /// one touch must never be claimed by both.
     var startYRange: Range<CGFloat>
-    var tuning: ShadeTuningValues
+    var tuning: ShadeGesture
     /// Full travel of the shade — the screen height. Converts points into progress.
     var shadeHeight: CGFloat
     var onBegin: () -> Void
@@ -116,7 +116,7 @@ struct ShadePullInstaller: UIViewRepresentable {
                 if !pulling {
                     guard owner.isActive else { return }
                     pulling = true
-                    SousHaptics.prepare(.soft, .light, .medium, .rigid)
+                    SousHaptics.prepare(.reveal, .detentEngage, .detentRelease, .commit)
                     owner.onBegin()
                 }
 
@@ -127,7 +127,7 @@ struct ShadePullInstaller: UIViewRepresentable {
                 // never reaches, because an ordinary bounce stops short of here.
                 if !peekFired && dy >= owner.tuning.peekAppearDistance {
                     peekFired = true
-                    SousHaptics.impact(.soft)
+                    SousHaptics.play(.reveal)
                 }
 
                 // Detent at the commit distance — crisp going past it, lighter
@@ -135,7 +135,7 @@ struct ShadePullInstaller: UIViewRepresentable {
                 let past = dy >= owner.tuning.pullCommitDistance
                 if past != pastDetent {
                     pastDetent = past
-                    SousHaptics.impact(past ? .rigid : .light)
+                    SousHaptics.play(past ? .detentEngage : .detentRelease)
                 }
 
                 owner.onProgress(progress(forPull: dy), dy)

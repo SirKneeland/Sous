@@ -74,7 +74,7 @@ struct TimerAffordanceText: View {
     private func handleTimerTap() {
         guard let p = parsed else { return }
         onClearHighlight?()
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        SousHaptics.play(.selection)
         switch p.duration {
         case .exact(let seconds):
             startTimer(duration: seconds)

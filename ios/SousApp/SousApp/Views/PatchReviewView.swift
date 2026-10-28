@@ -138,7 +138,7 @@ struct PatchReviewView: View {
                     .frame(width: 1, height: 56)
 
                 Button {
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    SousHaptics.play(.selection)
                     withAnimation(.easeInOut(duration: 0.15)) {
                         store.send(.acceptPatch)
                     }

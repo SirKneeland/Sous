@@ -47,10 +47,6 @@ struct RecipeCanvasView: View {
     @Binding var miseEnPlaceExpanded: Bool
     @Binding var navBarVisible: Bool
     var bottomZoneHeight: CGFloat = 0
-    /// False where the window shade has replaced the hamburger: the title then
-    /// uses the ordinary gutter instead of reserving room for a button that is
-    /// no longer drawn.
-    var reservesHamburgerInset: Bool = true
     /// Mirrors whether the list is scrolled to its top, so the shade's pull-down
     /// knows where the rubberband starts.
     @Binding var isScrolledToTop: Bool
@@ -103,7 +99,6 @@ struct RecipeCanvasView: View {
         miseEnPlaceExpanded: Binding<Bool> = .constant(true),
         navBarVisible: Binding<Bool> = .constant(true),
         bottomZoneHeight: CGFloat = 0,
-        reservesHamburgerInset: Bool = true,
         isScrolledToTop: Binding<Bool> = .constant(true)
     ) {
         self.recipe = recipe
@@ -135,7 +130,6 @@ struct RecipeCanvasView: View {
         self._miseEnPlaceExpanded = miseEnPlaceExpanded
         self._navBarVisible = navBarVisible
         self.bottomZoneHeight = bottomZoneHeight
-        self.reservesHamburgerInset = reservesHamburgerInset
         self._isScrolledToTop = isScrolledToTop
     }
 
@@ -185,11 +179,11 @@ struct RecipeCanvasView: View {
                 // MARK: Header
                 // The row itself is full-width (listRowInsets zero) so the separator spans
                 // the full canvas width matching all other rows.
-                // titleInset pads only the title+revision content to clear the 44pt hamburger
-                // button (16pt safe-area offset + 44pt button + 16pt margin = 76pt).
-                // Where the window shade has taken the hamburger's place there is no
-                // button to clear, so the title gets the ordinary 20pt gutter back.
-                let titleInset: CGFloat = reservesHamburgerInset ? 76 : 20
+                // The ordinary gutter. This was 76pt for years — 16pt inset plus a
+                // 44pt hamburger plus a 16pt margin — purely to keep a long title
+                // clear of that button. The window shade replaced it, so the title
+                // sits in the middle of the screen rather than beside a hole.
+                let titleInset: CGFloat = 20
                 VStack(spacing: 0) {
                     VStack(alignment: .center, spacing: 4) {
                         if isEditingTitle {
@@ -352,7 +346,7 @@ struct RecipeCanvasView: View {
                                 .simultaneousGesture(
                                     LongPressGesture(minimumDuration: 0.5)
                                         .onEnded { _ in
-                                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                            SousHaptics.play(.activation)
                                             onAskSousAbout("mise en place", row.askSousText)
                                         }
                                 )
@@ -492,7 +486,7 @@ struct RecipeCanvasView: View {
                 // Reset Recipe button at bottom of canvas
                 Button {
                     resetButtonPressed = true
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    SousHaptics.play(.activation)
                     showingResetConfirmation = true
                 } label: {
                     // Pressed, it fills burgundy with a white label — which is Primary.
@@ -512,7 +506,7 @@ struct RecipeCanvasView: View {
                 // Restore Original Recipe button — only shown when original exists and recipe differs
                 if let original = originalRecipe, recipeContentDiffers(recipe, original) {
                     Button {
-                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        SousHaptics.play(.activation)
                         showingRestoreOriginalConfirmation = true
                     } label: {
                         SousButtonLabel(title: "RESTORE ORIGINAL RECIPE", style: .secondaryAccent,
@@ -992,7 +986,7 @@ struct RecipeCanvasView: View {
         .simultaneousGesture(
             LongPressGesture(minimumDuration: 0.5)
                 .onEnded { _ in
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    SousHaptics.play(.activation)
                     onAskSousAbout("step", step.text)
                 }
         )
@@ -1067,7 +1061,7 @@ struct RecipeCanvasView: View {
             .simultaneousGesture(
                 LongPressGesture(minimumDuration: 0.5)
                     .onEnded { _ in
-                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        SousHaptics.play(.activation)
                         onAskSousAbout("step", step.text)
                     }
             )
@@ -1217,7 +1211,7 @@ private struct IngredientRow: View {
         .simultaneousGesture(
             LongPressGesture(minimumDuration: 0.5)
                 .onEnded { _ in
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    SousHaptics.play(.activation)
                     onAskSous()
                 }
         )
@@ -1297,7 +1291,7 @@ private struct MiseEnPlaceConfirmationModal: View {
                 Rectangle()
                     .fill(Color.sousSeparator)
                     .frame(width: 1)
-                    .frame(height: 52)
+                    .frame(height: SousSize.control)
 
                 Button {
                     onConfirm()

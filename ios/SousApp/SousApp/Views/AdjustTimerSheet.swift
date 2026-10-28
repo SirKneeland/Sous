@@ -124,7 +124,7 @@ struct AdjustTimerSheet: View {
                 Rectangle()
                     .fill(Color.sousSeparator)
                     .frame(width: 1)
-                    .frame(height: 52)
+                    .frame(height: SousSize.control)
 
                 Button {
                     let duration = selectedDuration

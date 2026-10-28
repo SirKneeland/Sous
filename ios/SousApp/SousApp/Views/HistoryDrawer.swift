@@ -7,7 +7,11 @@ import UIKit
 ///
 /// Opened by:
 ///   - Dragging right from a 20pt transparent zone pinned to the left edge.
-///   - `store.showRecentRecipes = true` (e.g. nav bar History button)
+///   - `store.showRecentRecipes = true`
+///
+/// The hamburger that used to open it is gone — the window shade replaced recipe
+/// navigation on both the canvas and the explore screen (decision 28). This drawer
+/// survives as the left-edge swipe, unchanged.
 ///
 /// Dismissed by:
 ///   - Swiping left anywhere on the drawer panel (UIPanGestureRecognizer on the window,
@@ -24,7 +28,6 @@ struct HistoryDrawer: View {
     @Binding var canvasOffset: CGFloat
     var onNewRecipe: () -> Void = {}
     var onSettings: () -> Void = {}
-    var isHamburgerVisible: Bool = false
     /// False while the window shade is on screen: the two panels show the same
     /// content, so the drawer must not be reachable from underneath it.
     var isEdgeSwipeEnabled: Bool = true
@@ -126,22 +129,6 @@ struct HistoryDrawer: View {
                                 snap(open: p > 0.4 || value.velocity.width > 300)
                             }
                     )
-            }
-            .overlay(alignment: .topLeading) {
-                if isHamburgerVisible {
-                    Button {
-                        snap(open: !store.showRecentRecipes)
-                    } label: {
-                        Image(systemName: "line.3.horizontal")
-                            .font(.sousIcon(.large, weight: .medium))
-                            .foregroundStyle(.white)
-                            .frame(width: 44, height: 44)
-                            .background(Color.sousTerracotta)
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.leading, 16)
-                    .padding(.top, 16)
-                }
             }
             .onAppear { drawerWidth = dw }
             .onChange(of: geo.size.width) { _, w in drawerWidth = w * 0.80 }

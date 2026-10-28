@@ -67,13 +67,12 @@ final class ShadePresentation {
     /// instead of snapping the moment a finger lifts.
     private(set) var showsContent: Bool = true
 
-    /// Spring used when the shade travels down. Driven by the debug tunables.
-    var openAnimation: Animation = .spring(response: 0.42, dampingFraction: 0.86)
-    /// Spring used when the shade travels back up.
-    var closeAnimation: Animation = .spring(response: 0.34, dampingFraction: 0.90)
     /// When the system's Reduce Motion setting is on, both springs are replaced by
     /// a quick fade — the view stops translating the panel and crossfades it instead.
     var reduceMotion: Bool = false
+
+    private var openAnimation: Animation { SousMotion.panelArrive.animation }
+    private var closeAnimation: Animation { SousMotion.panelLeave.animation }
 
     // MARK: Derived state
 
@@ -157,18 +156,18 @@ final class ShadePresentation {
     // MARK: Transitions
 
     private func commitOpen() {
-        SousHaptics.impact(.medium)
+        SousHaptics.play(.commit)
         withAnimation(effective(openAnimation), completionCriteria: .logicallyComplete) {
             phase = .open
             showsContent = true
         } completion: {
             // The shade touching the bottom of the screen.
-            SousHaptics.impact(.light)
+            SousHaptics.play(.land)
         }
     }
 
     private func commitClose(completion: (() -> Void)? = nil) {
-        SousHaptics.impact(.medium)
+        SousHaptics.play(.commit)
         withAnimation(effective(closeAnimation), completionCriteria: .logicallyComplete) {
             phase = .closed
         } completion: {
@@ -182,7 +181,7 @@ final class ShadePresentation {
     }
 
     private func springOpen(haptics: Bool) {
-        if haptics { SousHaptics.impact(.light) }
+        if haptics { SousHaptics.play(.land) }
         withAnimation(effective(openAnimation)) { phase = .open }
     }
 

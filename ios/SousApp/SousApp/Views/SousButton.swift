@@ -153,7 +153,7 @@ struct SousButtonLabel: View {
     var isEnabled: Bool = true
     /// Fixed height — 52pt for the full-width CTAs. Pass nil to hug the label with
     /// `verticalPadding` instead, which is how the import sheet sizes its buttons.
-    var height: CGFloat? = 52
+    var height: CGFloat? = SousSize.control
     /// Used only when `height` is nil.
     var verticalPadding: CGFloat = 14
     /// Full-width by default. Compact buttons — SAVE KEY, the import sheet's inline
@@ -192,7 +192,7 @@ struct SousButton: View {
     let title: String
     var style: SousButtonStyle = .primary
     var isEnabled: Bool = true
-    var height: CGFloat? = 52
+    var height: CGFloat? = SousSize.control
     var verticalPadding: CGFloat = 14
     var fillsWidth: Bool = true
     var horizontalPadding: CGFloat = 16

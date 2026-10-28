@@ -127,12 +127,13 @@
   - `Preferences/UserPreferences.swift` — `UserPreferences` Codable struct (hardAvoids, servingSize, equipment, customInstructions) + `UserPreferencesPersistence` (UserDefaults-backed, injectable for tests)
   - `Preferences/MemoryItem.swift` — `MemoryItem` Codable struct (id, text, createdAt) + `MemoriesPersistence` (UserDefaults-backed, injectable for tests)
   - `Views/MemoriesView.swift` — List of saved memories with swipe-to-delete and tap-to-edit sheet
-  - `Haptics/SousHaptics.swift` — **The single entry point for every haptic.** `SousHaptics.impact(_:)` / `.notify(_:)` fire; `.prepare(_:)` warms the Taptic Engine before a latency-sensitive moment. Generators are cached per style rather than built per tap, so a prepared engine stays warm for the length of a gesture. Non-isolated by design — `ThumbDropOverlay`'s `@objc` gesture handler could not reach a `@MainActor` helper; every caller is already on the main thread. The same file holds `SousHapticRamp`, the reusable escalating ladder for drag gestures: an optional entry tick plus one-shot bands at 30 / 60 / 90 pt, with `entryStyle` and `directional` (separate gate sets per direction, or one keyed on absolute travel) as the two knobs. Used by `ThumbDropOverlay` and by `ChatSheetView`'s input-bar `DragGesture`. Other haptic call sites still construct generators inline and are untouched for now.
+  - `Haptics/SousHaptics.swift` — **The haptic scale, and the only place a tap is made.** `SousHaptic` names ten *events* — `selection`, `activation`, `commit`, `land`, `reveal`, `detentEngage` / `detentRelease`, `notice`, `confirm`, `blocked` — and `SousHaptics.play(_:)` fires one; `.prepare(_:)` warms the Taptic Engine ahead of a latency-sensitive moment. Several roles resolve to the same UIKit style on purpose, as several semantic colours resolve to one primitive. **The intensities are `fileprivate`**, so the compiler stops a view picking a strength, and `check-tokens.py` fails on a feedback generator built anywhere else. Generators are cached per style, so a prepared engine stays warm for a whole gesture. Non-isolated by design — `ThumbDropOverlay`'s `@objc` gesture handler could not reach a `@MainActor` helper; every caller is already on the main thread. The same file holds `SousHapticRamp`, the escalating ladder for drag gestures (one-shot bands at 30 / 60 / 90 pt with an optional entry tick), whose rungs stay raw intensities because a ramp is one event with a curve, not three roles. See decision 27.
   - `Shade/ShadePresentation.swift` — **(window shade)** `@Observable` state machine for the
     shade: `closed / opening(progress) / open / closing(progress)`. Deliberately knows nothing
     about *what* opens it — a gesture's whole contract is `beginOpening()`,
     `driveOpening(progress:)`, `finishOpening(commit:)` and the `close` mirror — so the explore
-    screen's grab bar is wiring, not surgery — the bottom bar's pull already proved it. Owns the presentation haptics (medium
+    screen's grab bar was wiring, not surgery — three entry points now share it: the canvas
+    pull, the Talk to Sous bar, and explore's grab bar. Owns the presentation haptics (medium
     on commit, light on landing), the two springs, and `showsContent` — blank sheet or real
     panel, which is deliberately *not* derived from `phase`, because `.closed` has to mean
     "blank" after a cancelled pull and "panel" after a dismissal. A Reduce Motion flag swaps
@@ -149,19 +150,30 @@
     `ThumbDropOverlay`), gated on the list already being scrolled to the top **and on the
     touch starting clear of `ThumbDropOverlay.defaultZoneTopY`** — the bottom bar owns that
     strip, and a shade that starts there unmounts the bar and so kills the ThumbDrop swipe
-    that was already in flight. **Mounted twice**, which is the shade's second entry point:
-    once on the canvas (`requiresCanvasAtTop: true`, the band above the bar) and once beside
-    the bottom bar (`requiresCanvasAtTop: false`, the band the bar occupies, with
-    `ShadeTuningValues.forBarPull`'s shorter distances — a thumb on the bar has about 90pt of
-    glass left beneath it). The two `startYRange`s are disjoint, so one touch is never claimed
-    by both. Owns the gesture's
+    that was already in flight. **Mounted three times**, one per entry point, all sharing one
+    `ShadePresentation`:
+    the canvas pull (`requiresCanvasAtTop: true`, the band above the bottom bar), the Talk to
+    Sous bar, and the explore screen's grab bar (both `requiresCanvasAtTop: false`, both using
+    `ShadeGesture.forBarPull`'s shorter distances — a thumb on a bar has about 90pt of glass
+    beneath it). The three `startYRange`s are disjoint, so one touch is never claimed by two.
+    Owns the gesture's
     own haptics — the soft tick when the peek is fully out, and the rigid/light detent at each
     crossing of the commit distance. A `.background` on the canvas, so it unmounts with it.
   - `Shade/ShadeTuning.swift` — `ShadeMetrics` (window safe-area insets, and `peekTravel`: how
-    far the shade must come down for its hem to clear the status bar) plus `ShadeTuningValues`,
-    the eleven numbers the shade's feel depends on, and the `@AppStorage` keys behind them.
-    **TEMP** — these are motion, which the design system has no tokens for yet (Milestone 32),
-    so they live only as debug sliders in Settings until they have been felt on a device.
+    far the shade must come down for its hem to clear the status bar) plus `ShadeGesture`, the
+    distances and velocities the shade's feel depends on. These were eleven live sliders in the
+    Settings DEBUG section until the values were settled on a device; the sliders are gone and
+    those values are the defaults. **Gesture, not motion** — the springs are tokens in
+    `SousMotion` (decision 29). There is no on/off switch for the shade: it is how Sous
+    navigates, and with the hamburger deleted an "off" state would strand the user.
+  - **There is no hamburger anywhere.** The window shade replaced it on the canvas and a
+    grab bar replaced it on the explore screen; `Icon Button` lost its `Accent` scheme and
+    `Recipe Title` lost the 76pt side padding that existed solely to clear it. The
+    left-edge swipe drawer is untouched. See decision 28.
+  - `Views/SousTheme.swift` — the palette, the type scale, `SousIconSize`, `SousSize`
+    (shared control dimensions — `control` is the 52pt height of every full-width control),
+    `SousMotion` (the app's first motion tokens: `panelArrive`, `panelLeave`,
+    `gestureSpringBack`) and the small shared components.
   - `Views/SousGrabBar.swift` — the shade's hem: a full-bleed burgundy bar with a directional
     chevron and an optional ALL CAPS label, 52pt like the Talk to Sous bar. Full-bleed is the
     point — see decision 26 in `design/TOKEN-DECISIONS.md`. Reused pointing down at the top of
@@ -261,14 +273,20 @@ so re-registered (previously-deleted) users can be stored without a trial.
 
 - **App target tests:** `SousAppTests`
   - Location: `ios/SousApp/SousAppTests/`
-  - Key files: AppStoreTests.swift, UIStateMachineTests.swift, OpenAIClientTests.swift, OpenAIKeyProviderTests.swift, PhotoSendStateTests.swift, PhotoSendCoordinatorTests.swift, ImageAcquisitionStateTests.swift, LLMDebugExportTests.swift, SessionPersistenceTests.swift, MarkdownParserTests.swift, UserPreferencesTests.swift, MemoriesTests.swift
+  - Key files: AppStoreTests.swift, UIStateMachineTests.swift, OpenAIClientTests.swift, OpenAIKeyProviderTests.swift, PhotoSendStateTests.swift, PhotoSendCoordinatorTests.swift, ImageAcquisitionStateTests.swift, LLMDebugExportTests.swift, SessionPersistenceTests.swift, MarkdownParserTests.swift, UserPreferencesTests.swift, MemoriesTests.swift, ShadePresentationTests.swift
+  - **Note:** every test method is annotated `@MainActor`. The app builds with
+    `-default-isolation=MainActor`, so an un-annotated async test hops off the actor and
+    cannot touch most app types; annotating the *class* instead takes the test host down at
+    launch if any method is non-async.
   - Run with: `xcodebuild test -scheme SousApp -destination 'platform=iOS Simulator,name=iPhone 17'`
 
 - **UI tests:** `SousAppUITests` — Minimal coverage, launch tests only
 
-- **Design token check:** verifies the design system has not drifted — `SousTheme.swift`
-  matches `design/tokens.json`, no view hardcodes a color or an inline font size, the
-  `SousIconSize` scale matches, and `figma/code.js` was generated from the current tokens
+- **Design token check:** verifies the design system has not drifted. Eight rules —
+  `SousTheme.swift` matches `design/tokens.json`; no view hardcodes a colour, an inline font
+  size, or a `UIFeedbackGenerator`; the `SousIconSize` scale matches; a size or motion token
+  carrying a `$swift` key matches its `SousSize` / `SousMotion` constant; and `figma/code.js`
+  was generated from the current tokens
   - Run with: `python3 design/check-tokens.py` (from the repo root)
   - Run it after any change to the palette, type scale or icon scale. No dependencies,
     no build required.
@@ -290,32 +308,15 @@ so re-registered (previously-deleted) users can be stored without a trial.
 
 ---
 
-## Current Milestone State (Milestone 21 — DONE; Milestone 22 next)
+## Current Milestone State
 
-**Milestone 21 — Recipe Import (DONE)**
+**`docs/Milestones.md` owns this** — its Project State block at the top is the single source
+of truth for what is current, done and next.
 
-What is built and wired up:
-- `RecipeOCRService` (`ios/SousApp/SousApp/Import/RecipeOCRService.swift`) — Static `recognizeText(in:)` using Apple Vision `VNRecognizeTextRequest` at `.accurate` level; returns extracted lines joined by `\n`, or `nil` if empty/unreadable
-- `RecipeImportSheet` (`ios/SousApp/SousApp/Import/RecipeImportSheet.swift`) — Full-screen import sheet with internal Mode enum (chooser | camera | library | paste | loading | error); camera path resolves permission inline via `resolveCameraPermission()`; success auto-dismisses; error state shows "TRY AGAIN" / "CANCEL"
-- `LLMRequest.isImportExtraction: Bool` — new field; routes orchestrator to a faithful-extraction system prompt (extract verbatim, flag uncertain lines with `[??]`, no editorializing)
-- `OpenAILLMOrchestrator.systemPrompt(hasCanvas:isImportExtraction:personalityMode:)` — new first branch when `isImportExtraction == true`; all call sites updated including `buildDebugPromptStrings`
-- `AppStore.isShowingImportSheet: Bool` + `AppStore.importError: String?` — `@Published`; control import sheet presentation and error signaling (mirrors `showRecentRecipes` pattern)
-- `AppStore.sendImportRequest(text:)` / `sendImportRequest(image:)` — public entry points; image path runs OCR first, then both paths call `runImportLLM`
-- `AppStore.runImportLLM(userText:generation:)` — shared body: builds `LLMRequest` with `isImportExtraction: true`, calls orchestrator, on `.valid` applies PatchSet directly via `PatchApplier.apply()` (bypasses patch review), sets `hasCanvas = true`, primes `chatTranscript`, sets `isShowingImportSheet = false`
-- `ChatSheetView` blank state — "TALK TO A RECIPE" primary CTA + "OR CREATE ONE" secondary text button added above the composer bar
-- `ContentView` — wired `onOpenImport` closure and import sheet presentation
-- 5 new tests in `AppStoreTests.swift` (m21-a through m21-e) using `DynamicImportOrchestrator` mock that generates matching PatchSets from incoming request's recipeId/recipeVersion
+This section used to carry its own copy, pinned at "Milestone 21 — DONE; Milestone 22 next",
+and was eleven milestones out of date by the time anyone noticed. Two places tracking the same
+thing is how that happens, so the copy is gone rather than refreshed.
 
-**Next up: Milestone 22 — Step Timers (PLANNED)**
-- Inline time detection in step text; up to 3 concurrent countdown timers; persistent across background/relaunch; local notification on expiry; step completion blocked while timer is running
-
-Previously completed (Milestone 20 — TestFlight Alpha — DONE):
-- TestFlight distribution, basic instrumentation, error logging
-
-Previously completed (Milestone 19 — Personality Modes — DONE):
-- `personalityMode` field on `UserPreferences`; tone setting in Preferences screen; distinct system prompt behaviors for Minimal/Normal/Playful
-
----
 
 ## Conventions
 
@@ -358,7 +359,9 @@ Previously completed (Milestone 19 — Personality Modes — DONE):
 - **Multimodal wiring is complete (M9):** `OpenAILLMOrchestrator` now has `run(MultimodalLLMRequest)` which attaches the image to the client request and uses `gpt-4o`. The `LLMOrchestrator` protocol carries a default extension that falls back to `run(request.base)` so test mocks require no changes.
 - **No external Swift dependencies** — pure stdlib + Foundation + SousCore SPM. Adding a dependency requires operator approval per CLAUDE.md.
 - **Backend sync (Project 2)** — `AppStore` holds an optional `backend: any SousSyncBackend` (attached at launch via `attachBackend(SousAPIClient.shared)`; nil in unit tests unless a mock is injected). Preferences and memories sync to the backend on every local save, fire-and-forget and silent on failure. `hydrateFromBackend()` runs once after a fresh sign-in: server wins on the preference fields it owns (voice/unit-system are device-local and preserved), and memories are merged by id (server wins on conflict; local-only items are kept and pushed up). `clearAllLocalData()` wipes preferences, memories, and all recipe sessions on account deletion. The BYOK-vs-proxy routing fork for Project 3 is commented in `sendWithLLM`.
-- **`xcodebuild test` requires a simulator to be available.** If CI doesn't have one, tests may fail at launch, not in logic.
+- **`xcodebuild test` requires a simulator to be available.** If CI doesn't have one, tests may fail at launch, not in logic. The same applies locally after a long session: repeated install/launch cycles can leave the simulator refusing to launch the test runner, which reads as a test failure but is not one. `xcrun simctl shutdown <udid> && xcrun simctl boot <udid>` clears it. **Do not reach for `simctl erase`** — it wipes the device's data, including the signed-in account and saved recipes.
+- **The design system enforces more than colour now.** `design/check-tokens.py` also fails on a hand-built `UIFeedbackGenerator` outside `SousHaptics.swift`, and on a size or motion token whose `$swift` key no longer matches its Swift constant. Haptics are chosen from the `SousHaptic` role scale, never by picking an intensity at the call site; the UIKit styles are `fileprivate` so the compiler enforces that too. See decisions 26–29 in `design/TOKEN-DECISIONS.md`.
+- **Motion is deliberately half-converged.** Three springs are tokens (`SousMotion`); six call sites still hand-write their own, and ~35 sites hand-write easing durations. That is a recorded decision, not neglect — the audit and the per-value verdicts live in Milestone 32's "convergence backlog".
 
 ---
 

@@ -570,10 +570,9 @@ function expect(label, condition, detail) {
     const collapsed = sh.children.find((c) => c.name === "State=Collapsed").findOne((x) => x.name === "chevron");
     expect("Collapsed chevron turned -90°", collapsed.rotation === -90, String(collapsed.rotation));
 
-    // Icon Button gained a fourth scheme, On Accent, with the timer banner: the
-    // 32pt square on burgundy rather than on cream.
+    // Three schemes since the window shade: the Accent hamburger went with it.
     expect("report lists the chrome components",
-      /Icon Button \(4 variants\)/.test(report) && /Recipe Title \(2 variants\)/.test(report), report);
+      /Icon Button \(3 variants\)/.test(report) && /Recipe Title \(2 variants\)/.test(report), report);
 
     // Sign In / Paywall — the billing-and-onboarding pair, added 2026-09-24.
     expect("report lists the sign-in and paywall pieces",
@@ -824,13 +823,17 @@ function expect(label, condition, detail) {
       capNote && capMsg ? Math.round(capNote.y + capNote.height) + " vs " + Math.round(capMsg.y) : "missing");
     const ib = figma.root.children.find((p) => p.name === "Icon Button").children
       .find((n) => n.type === "COMPONENT_SET");
-    const accent = ib.children.find((c) => c.name === "Style=Accent");
-    expect("hamburger is a 44pt burgundy square with a glyph",
-      accent.width === 44 && accent.height === 44 &&
-      state.variables.find((v) => v.id === accent.fills[0].boundVariables.color.id).name === "accent/primary" &&
+    // The Accent hamburger is gone: nothing in the app draws one any more, on the
+    // canvas or on the explore screen. A grab bar pulls the window shade instead.
+    expect("Icon Button has no hamburger scheme left",
+      !ib.children.find((c) => c.name === "Style=Accent"),
+      ib.children.map((c) => c.name).join(", "));
+    const inverse = ib.children.find((c) => c.name === "Style=Inverse");
+    expect("the 44pt inverse square survives, with a glyph",
+      inverse.width === 44 && inverse.height === 44 &&
       // SF Symbol glyphs sit above U+FFFF, so JS counts each as two code units.
-      Array.from(accent.findOne((x) => x.name === "icon").characters).length === 1,
-      accent.width + "x" + accent.height);
+      Array.from(inverse.findOne((x) => x.name === "icon").characters).length === 1,
+      inverse.width + "x" + inverse.height);
     expect("bordered icon button is 32pt with no fill",
       ib.children.find((c) => c.name === "Style=Bordered").width === 32 &&
       ib.children.find((c) => c.name === "Style=Bordered").fills.length === 0);
@@ -841,9 +844,9 @@ function expect(label, condition, detail) {
     expect("servings row only on the Servings=Yes variant",
       withServings.findOne((x) => x.name === "servings-row").visible === true &&
       without.findOne((x) => x.name === "servings-row").visible === false);
-    expect("title is centred, capitals, and clears the hamburger",
+    expect("title is centred, capitals, and uses the ordinary gutter",
       withServings.findOne((x) => x.name === "title").textAlignHorizontal === "CENTER" &&
-      withServings.findOne((x) => x.name === "title-block").paddingLeft === 76);
+      withServings.findOne((x) => x.name === "title-block").paddingLeft === 20);
 
     expect("report lists the assembled screen", /Recipe Canvas screen/.test(report), report);
     const screen = figma.root.children.find((p) => p.name === "Screens").children
@@ -856,10 +859,11 @@ function expect(label, condition, detail) {
     const tally = insts.reduce((acc, i) => {
       const k = setOf(i); acc[k] = (acc[k] || 0) + 1; return acc;
     }, {});
-    expect("screen is built only from components — 8 rows, 2 headers, title, menu, bottom bar",
+    // No Icon Button: cook mode lost its hamburger to the window shade.
+    expect("screen is built only from components — 8 rows, 2 headers, title, bottom bar",
       insts.every((i) => !!i.mainComponent) && tally["List Row"] === 8 &&
       tally["Section Header"] === 2 && tally["Recipe Title"] === 1 &&
-      tally["Icon Button"] === 1 && tally["Bottom Bar"] === 1 && tally["Checkbox"] === 8,
+      tally["Icon Button"] === undefined && tally["Bottom Bar"] === 1 && tally["Checkbox"] === 8,
       JSON.stringify(tally));
     const rowTexts = screen.findAll((n) => n.type === "TEXT" && n.name === "text");
     const doneRow = rowTexts.find((t) => t.characters.indexOf("Pat the thighs") === 0);
@@ -1010,8 +1014,8 @@ function expect(label, condition, detail) {
     const after = await run(null, { figma, state });
     expect("an orphaned instance does not block the rebuild",
       !/Icon Button was not rebuilt/.test(after.report), after.report);
-    expect("Icon Button rebuilds with all four schemes",
-      /Icon Button \(4 variants\)/.test(after.report), after.report);
+    expect("Icon Button rebuilds with all three schemes",
+      /Icon Button \(3 variants\)/.test(after.report), after.report);
     expect("and Timer Banner builds off the back of it",
       /Timer Banner \(2 variants\)/.test(after.report), after.report);
     expect("the report no longer says 'unknown page'",

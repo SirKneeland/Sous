@@ -14,8 +14,6 @@ struct SettingsView: View {
     // TEMP: remove once texture intensity is finalized
     @AppStorage("debugTextureIntensity") private var textureIntensity: Double = 0.6
     @State private var showingTexturePreview = false
-    // TEMP: remove once the shade's motion becomes motion tokens (Milestone 32)
-    @AppStorage(ShadeTuning.enabledKey) private var shadeNavigationEnabled: Bool = true
 
     // Account section state
     @State private var displayNameDraft: String = ""
@@ -220,25 +218,6 @@ struct SettingsView: View {
                         TexturePreviewView()
                     }
 
-                    // TEMP: remove once the shade ships and its motion is tokenised
-                    Toggle(isOn: $shadeNavigationEnabled) {
-                        Text("Shade navigation")
-                            .font(.sousBody)
-                            .foregroundStyle(Color.sousText)
-                    }
-                    .tint(Color.sousTerracotta)
-
-                    if shadeNavigationEnabled {
-                        ForEach(ShadeTuning.sliders) { spec in
-                            ShadeTunableSlider(spec: spec)
-                        }
-
-                        Button("Reset shade values") {
-                            ShadeTuning.resetToDefaults()
-                        }
-                        .font(.sousBody)
-                        .foregroundStyle(Color.sousTerracotta)
-                    }
                 } header: {
                     Text("DEBUG")
                         .font(.sousSectionHeader)
@@ -534,46 +513,5 @@ struct SettingsView: View {
         } catch {
             deleteError = "Something went wrong. Please check your connection and try again."
         }
-    }
-}
-
-// MARK: - ShadeTunableSlider
-
-/// One live-adjustable shade value, generated from `ShadeTuning.sliders`.
-///
-/// TEMP, like the texture intensity slider above it: the shade's gesture
-/// thresholds and springs are motion, and Sous has no motion tokens yet. These
-/// write straight to `UserDefaults`, which every reader observes, so a change
-/// applies to the next gesture without a relaunch.
-private struct ShadeTunableSlider: View {
-    let spec: ShadeTuning.Slider
-    @AppStorage private var value: Double
-
-    init(spec: ShadeTuning.Slider) {
-        self.spec = spec
-        _value = AppStorage(wrappedValue: spec.value, spec.key)
-    }
-
-    /// Fractions want decimals; point and velocity values do not.
-    private var formatted: String {
-        let digits = spec.range.upperBound <= 2 ? 2 : 0
-        return String(format: "%.\(digits)f", value) + (spec.unit.isEmpty ? "" : " " + spec.unit)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(spec.label)
-                    .font(.sousBody)
-                    .foregroundStyle(Color.sousText)
-                Spacer()
-                Text(formatted)
-                    .font(.sousCaption)
-                    .foregroundStyle(Color.sousMuted)
-            }
-            Slider(value: $value, in: spec.range)
-                .tint(Color.sousTerracotta)
-        }
-        .padding(.vertical, 4)
     }
 }

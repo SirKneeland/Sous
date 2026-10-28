@@ -1118,14 +1118,11 @@ async function buildIngredientGroupHeader() {
 
 // ------------------------------------------------------------- Icon Button
 //
-// Source: the hamburger that opens the history drawer (HistoryDrawer.swift:170,
-// 44pt burgundy square, white line.3.horizontal), the drawer's settings button
+// Source: the drawer's settings button
 // (:56, same size on the ink fill), and SousIconButton (SousTheme.swift, 32pt
 // bordered, used in the chat sheet header).
 
 const ICON_BUTTON_STYLES = [
-  { style: "Accent", size: 44, fill: "accent/primary", stroke: null, icon: "text/onInverse",
-    symbol: "line.3.horizontal", weight: "Medium", iconSize: "icon/large" },
   { style: "Inverse", size: 44, fill: "background/surfaceInverse", stroke: null, icon: "text/onInverse",
     symbol: "gearshape.fill", weight: "Medium", iconSize: "icon/large" },
   { style: "Bordered", size: 32, fill: null, stroke: "border/strong", icon: "text/primary",
@@ -1193,11 +1190,11 @@ async function buildIconButton() {
   const set = figma.combineAsVariants(comps, page);
   set.name = "Icon Button";
   set.description =
-    "Square icon button. Accent = the 44pt burgundy hamburger that opens the history drawer. " +
+    "Square icon button. " +
     "Inverse = the drawer's settings button, same size on the ink fill. Bordered = the 32pt " +
     "outlined button used in the chat sheet header. On Accent = the same 32pt square sitting " +
     "on burgundy — the pencil on a running timer banner — bordered in white at 50%.\n\n" +
-    "Swift: HistoryDrawer hamburger and settings buttons; SousIconButton(systemName:action:). " +
+    "Swift: the drawer's settings button; SousIconButton(systemName:action:). " +
     "To change the symbol, edit the icon layer's text — glyphs come from design/sf-symbols.json.";
 
   const PAD = 32, GAP = 32, cell = { w: 44, h: 44 };
@@ -1256,8 +1253,9 @@ async function verifyIconButton() {
 // -------------------------------------------------------- Recipe Title block
 //
 // Source: RecipeCanvasView header. The title is UPPERCASED by the view
-// (recipe.title.uppercased()), centred, New York 28. Side padding is 76pt so the
-// title clears the 44pt hamburger. The servings chip sits lower-right in burgundy,
+// (recipe.title.uppercased()), centred, New York 28. Side padding is the ordinary
+// 20pt gutter — it was 76pt until the hamburger it cleared was deleted. The
+// servings chip sits lower-right in burgundy,
 // and a divider closes the block.
 
 const TITLE_SPECS = [
@@ -1285,8 +1283,9 @@ async function buildRecipeTitle() {
 
     const titleWrap = autoLayout("VERTICAL");
     titleWrap.name = "title-block";
-    titleWrap.paddingLeft = 76;   // clears the 44pt hamburger at 16pt inset
-    titleWrap.paddingRight = 76;
+    // Was 76 to clear the 44pt hamburger. The shade took the hamburger away, so the
+    // title gets the ordinary gutter back on both sides — decision 28.
+    bindPadding(titleWrap, v, { left: "space/gutter", right: "space/gutter" });
     titleWrap.paddingTop = 20;
     titleWrap.paddingBottom = spec.servings ? 10 : 16;
     c.appendChild(titleWrap);
@@ -1337,8 +1336,8 @@ async function buildRecipeTitle() {
   set.name = "Recipe Title";
   set.description =
     "The head of the recipe canvas: the title in New York, centred and ALL CAPS, with the " +
-    "servings chip lower-right and a divider beneath. Side padding is 76pt so the title clears " +
-    "the hamburger button.\n\n" +
+    "servings chip lower-right and a divider beneath. Side padding is the ordinary 20pt " +
+    "gutter: it was 76pt for years to clear the hamburger, which no longer exists.\n\n" +
     "Swift: RecipeCanvasView header — the view uppercases recipe.title itself. Tapping the " +
     "title edits it; tapping the chip opens the servings picker.";
   const titleKey = set.addComponentProperty("Title", "TEXT", "SEARED CHICKEN THIGHS WITH LEMON");
@@ -1355,10 +1354,10 @@ async function buildRecipeTitle() {
       "The top of every recipe. The title is set in New York and centred, in capitals — the view uppercases whatever the recipe is called. The servings chip sits lower-right in burgundy and opens the servings picker; recipes without a serving count simply omit it.",
       "text/primary", "description"],
     ["Sous/Body",
-      "The 76pt side padding is not decorative: it keeps a long title clear of the hamburger button in the corner. The divider below belongs to this block, not to the first ingredient row.",
+      "It used to carry 76pt of side padding to keep a long title clear of the hamburger. The window shade replaced the hamburger, so the title has the ordinary gutter back and sits in the middle of the screen rather than beside a hole. The divider below belongs to this block, not to the first ingredient row.",
       "text/primary", "usage"],
     ["Sous/Body",
-      "Design spec note: the spec described a burgundy navigation bar with three icons across the top. The app has no such bar — it has the hamburger button and this title block. The spec has been corrected.",
+      "Design spec note: the spec described a burgundy navigation bar with three icons across the top. The app has no such bar, and since the window shade it has no hamburger either — just this title block, with navigation pulled down from the top edge.",
       "text/muted", "code-debt"],
   ]);
   set.x = doc.x + doc.width + 80;
@@ -1385,7 +1384,9 @@ async function verifyRecipeTitle() {
     check(t + " title is centred and capitals",
       title.textAlignHorizontal === "CENTER" && title.characters === title.characters.toUpperCase(),
       title.textAlignHorizontal + " / " + title.characters);
-    check(t + " clears the hamburger", c.findOne((x) => x.name === "title-block").paddingLeft === 76);
+    check(t + " uses the ordinary gutter, not the old hamburger clearance",
+      c.findOne((x) => x.name === "title-block").paddingLeft === 20,
+      String(c.findOne((x) => x.name === "title-block").paddingLeft));
     const chipRow = c.findOne((x) => x.name === "servings-row");
     check(t + " servings row shown only when it has servings", chipRow.visible === spec.servings);
     const label = c.findOne((x) => x.name === "servings-label");
@@ -2405,13 +2406,17 @@ async function buildZeroStateScreen() {
   screen.x = 40 + 600 + 120 + (CANVAS_W + 80) * 2;
   screen.y = 40;
 
-  // The hamburger is app-wide, not canvas-only: it opens the history drawer from
-  // the zero state too.
-  const burger = (await getVariant("Icon Button", "Icon Button", "Style=Accent")).createInstance();
+  // Explore mode's route to the recipe list. Pull it down, or tap it, and the same
+  // window shade comes over this screen — which is what replaced the hamburger here.
+  const grabSet = (await getVariant("Grab Bar", "Grab Bar", "Direction=Down, Edge=Top")).parent;
   await figma.setCurrentPageAsync(page);
-  burger.name = "menu";
-  screen.appendChild(burger);
-  burger.x = 16; burger.y = SAFE_TOP + 16;
+  const grab = (await getVariant("Grab Bar", "Grab Bar", "Direction=Down, Edge=Top")).createInstance();
+  await figma.setCurrentPageAsync(page);
+  grab.name = "grab-bar";
+  screen.appendChild(grab);
+  grab.resize(CANVAS_W, grab.height);
+  grab.x = 0; grab.y = SAFE_TOP;
+  grab.setProperties({ [propKey(grabSet, "Label")]: "RECIPES" });
 
   const wordmark = (await getVariant("Wordmark", "Wordmark", "Tagline=Yes")).createInstance();
   await figma.setCurrentPageAsync(page);
@@ -2494,19 +2499,22 @@ async function verifyZeroStateScreen() {
     names.push(m ? (m.parent && m.parent.type === "COMPONENT_SET" ? m.parent.name : m.name) : "detached");
   }
   check("Zero State is built from components", !names.includes("detached"), names.join(", "));
-  check("Zero State has the wordmark, hamburger, import button and composer",
+  check("Zero State has the wordmark, grab bar, import button and composer",
     names.filter((n) => n === "Wordmark").length === 1 &&
     names.filter((n) => n === "Button").length === 1 &&
-    names.filter((n) => n === "Icon Button").length === 1 &&
+    names.filter((n) => n === "Grab Bar").length === 1 &&
     names.filter((n) => n === "Composer Bar").length === 1, names.join(", "));
   const cta = screen.findOne((x) => x.name === "import");
   const main = cta && (await cta.getMainComponentAsync());
   check("the import button is the Inverse style", !!main && main.name === "Style=Inverse, State=Default",
     main ? main.name : "missing");
   check("OR CREATE ONE sits under it", !!screen.findOne((x) => x.name === "create-label"));
-  const menu = screen.children.find((x) => x.name === "menu");
-  check("the hamburger is on the zero state too", !!menu && menu.y >= SAFE_TOP,
-    menu ? String(menu.y) : "missing");
+  const grab = screen.children.find((x) => x.name === "grab-bar");
+  check("the grab bar spans the top, below the status bar",
+    !!grab && grab.y === SAFE_TOP && grab.width === CANVAS_W,
+    grab ? grab.y + " / " + grab.width : "missing");
+  check("explore mode has no hamburger — the grab bar replaced it",
+    !screen.children.find((x) => x.name === "menu"));
   const composer = screen.children.find((x) => x.name === "composer");
   check("composer clears the home indicator",
     !!composer && Math.round(composer.y + composer.height) === CANVAS_H - SAFE_BOTTOM);
@@ -2698,13 +2706,9 @@ async function buildSidebarScreen() {
   headerWrap.appendChild(gear);
   gear.x = DRAWER_W - 44 - 16;
   gear.y = mark.y + Math.round((mark.height - gear.height) / 2);
-  // The hamburger stays visible over the drawer — it is how you close it.
-  const burger = (await getVariant("Icon Button", "Icon Button", "Style=Accent")).createInstance();
-  await figma.setCurrentPageAsync(page);
-  burger.name = "menu";
-  headerWrap.appendChild(burger);
-  burger.x = 16;
-  burger.y = gear.y;
+  // No hamburger: there is none anywhere in the app now. This drawer is reached by
+  // the left-edge swipe and dismissed by swiping it back or tapping the strip of
+  // app still showing beside it.
   headerWrap.resize(DRAWER_W, mark.y + mark.height + 16);
 
   const headerRule = hairlineRow(v, "header-rule");
@@ -2804,9 +2808,9 @@ async function verifySidebarScreen() {
     names.push(m ? (m.parent && m.parent.type === "COMPONENT_SET" ? m.parent.name : m.name) : "detached");
   }
   check("sidebar is built from components", !names.includes("detached"), names.join(", "));
-  check("sidebar has the wordmark, hamburger, settings, 5 recents and NEW RECIPE",
+  check("sidebar has the wordmark, settings, 5 recents and NEW RECIPE",
     names.filter((n) => n === "Wordmark").length === 1 &&
-    names.filter((n) => n === "Icon Button").length === 2 &&
+    names.filter((n) => n === "Icon Button").length === 1 &&
     names.filter((n) => n === "Recent Recipe Row").length === 5 &&
     names.filter((n) => n === "Button").length === 1, names.join(", "));
   const behindFrame = screen.children.find((x) => x.name === "app (pushed aside)");
@@ -3760,11 +3764,13 @@ async function buildChangeSuggestionScreen() {
   column.resize(CANVAS_W, column.height);
   column.x = 0; column.y = SAFE_TOP;
 
-  // No recipe title here, by decision (2026-09-24): the hamburger clips it, and
-  // the revision line is the part that matters while reviewing a change.
+  // No recipe title here, by decision (2026-09-24). Half of that reason has since
+  // expired: the hamburger that clipped it is gone. What still stands is that the
+  // revision line is the part that matters while reviewing a change. Whether the
+  // title comes back is open — see decision 28.
   const revWrap = autoLayout("VERTICAL");
   revWrap.name = "revision";
-  bindPadding(revWrap, v, { left: 76, right: "space/gutter", top: "space/gutter", bottom: "space/md" });
+  bindPadding(revWrap, v, { left: "space/gutter", right: "space/gutter", top: "space/gutter", bottom: "space/md" });
   revWrap.fills = [];
   column.appendChild(revWrap);
   revWrap.layoutSizingHorizontal = "FILL";
@@ -3869,12 +3875,6 @@ async function buildChangeSuggestionScreen() {
   bar.y = CANVAS_H - bar.height;   // bleeds to the very bottom of the screen
   says.x = 0;
   says.y = bar.y - says.height;
-
-  const burger = (await getVariant("Icon Button", "Icon Button", "Style=Accent")).createInstance();
-  await figma.setCurrentPageAsync(page);
-  burger.name = "menu";
-  screen.appendChild(burger);
-  burger.x = 16; burger.y = SAFE_TOP + 16;
 
   await safeAreaGuides(screen, v);
   COMPONENT_LOG.push("Change Suggestion screen");
@@ -4193,12 +4193,6 @@ async function buildVoiceModeScreen() {
   bar.x = 0;
   bar.y = CANVAS_H - SAFE_BOTTOM - bar.height;
 
-  const burger = (await getVariant("Icon Button", "Icon Button", "Style=Accent")).createInstance();
-  await figma.setCurrentPageAsync(page);
-  burger.name = "menu";
-  screen.appendChild(burger);
-  burger.x = 16; burger.y = SAFE_TOP + 16;
-
   await safeAreaGuides(screen, v);
   COMPONENT_LOG.push("Voice Mode screen");
 }
@@ -4353,12 +4347,6 @@ async function buildImportScreen() {
   behindMark.resize(CANVAS_W, behindMark.height);
   behindMark.x = 0;
   behindMark.y = Math.round((CANVAS_H - behindMark.height) / 2) - 120;
-  const behindMenu = (await getVariant("Icon Button", "Icon Button", "Style=Accent")).createInstance();
-  await figma.setCurrentPageAsync(page);
-  behindMenu.name = "behind-menu";
-  screen.appendChild(behindMenu);
-  behindMenu.x = 16; behindMenu.y = SAFE_TOP + 16;
-
   const dim = figma.createRectangle();
   dim.name = "dimmed app";
   dim.resize(CANVAS_W, CANVAS_H);
@@ -5069,12 +5057,6 @@ async function buildRecipeCanvas() {
   }
 
   // Hamburger, floating over the title, inside the safe area
-  const burger = (await getVariant("Icon Button", "Icon Button", "Style=Accent")).createInstance();
-  await figma.setCurrentPageAsync(page);
-  burger.name = "menu";
-  screen.appendChild(burger);
-  burger.x = 16; burger.y = SAFE_TOP + 16;
-
   // The bottom bar sits above the home indicator, as the app does
   const bar = (await getVariant("Bottom Bar", "Bottom Bar", "Voice=Yes")).createInstance();
   await figma.setCurrentPageAsync(page);
@@ -5086,7 +5068,7 @@ async function buildRecipeCanvas() {
 
   const doc = await docPanel(page, v, "Recipe Canvas", [
     ["Sous/Body",
-      "The cook-mode screen at iPhone 15/16 size, 393 × 852, assembled only from library components: the hamburger, the recipe title, two section headers, eight list rows and the bottom bar. Nothing here is drawn by hand — if a screen cannot be built from the components, the components are wrong.",
+      "The cook-mode screen at iPhone 15/16 size, 393 × 852, assembled only from library components: the recipe title, two section headers, eight list rows and the bottom bar. No hamburger — the window shade replaced it, and the title took back the inset it used to reserve. Nothing here is drawn by hand — if a screen cannot be built from the components, the components are wrong.",
       "text/primary", "description"],
     ["Sous/Body",
       "It shows the states together, which is the point: a ticked ingredient stays readable, a done step is struck through, the current step is bold with its burgundy timer, and upcoming steps are plain. Content is clipped at the frame edge the way a scrolled screen is.",
@@ -5119,8 +5101,8 @@ async function verifyRecipeCanvas() {
   const count = (name) => mains.filter((m) => m === name).length;
   check("screen has 8 list rows", count("List Row") === 8, String(count("List Row")));
   check("screen has 2 section headers", count("Section Header") === 2, String(count("Section Header")));
-  check("screen has the title, menu and bottom bar",
-    count("Recipe Title") === 1 && count("Icon Button") === 1 && count("Bottom Bar") === 1,
+  check("screen has the title and the bottom bar, and no icon button",
+    count("Recipe Title") === 1 && count("Icon Button") === 0 && count("Bottom Bar") === 1,
     mains.join(", "));
   for (const [name, y, h] of [["safe-area/top", 0, SAFE_TOP],
                               ["safe-area/bottom", CANVAS_H - SAFE_BOTTOM, SAFE_BOTTOM]]) {
@@ -5136,8 +5118,8 @@ async function verifyRecipeCanvas() {
   check("bottom bar clears the home indicator",
     !!bar && Math.round(bar.y + bar.height) === CANVAS_H - SAFE_BOTTOM,
     bar ? String(bar.y + bar.height) : "missing");
-  const menu = screen.children.find((x) => x.name === "menu");
-  check("menu button sits below the status bar", !!menu && menu.y >= SAFE_TOP, menu ? String(menu.y) : "missing");
+  check("cook mode has no hamburger — the window shade replaced it",
+    !screen.children.find((x) => x.name === "menu"));
   const content = screen.children.find((x) => x.name === "content");
   check("content starts below the status bar", !!content && content.y === SAFE_TOP,
     content ? String(content.y) : "missing");
@@ -7050,10 +7032,11 @@ async function verifyPickerSheet() {
 // depleting measure rather than a progress fill, and why SKIP sits alongside SAVE
 // rather than being the quiet way out.
 
-// 393 - 68 leading - 16 trailing. The leading inset clears the hamburger, which is a
+// 393 - 16 leading - 16 trailing. It used to start 68pt in to clear the hamburger, a
 // 44pt burgundy square drawn above this toast in an outer overlay — same burgundy, so it
-// silently painted over the first 44pt of every line until 2026-09-25.
-const TOAST_W = 309;
+// silently painted over the first 44pt of every line until 2026-09-25. The window shade
+// took the hamburger away, so the toast is symmetric again (decision 28).
+const TOAST_W = 361;
 const TOAST_SPECS = [
   { name: "State=Proposed", actions: ["SAVE", "EDIT", "SKIP"] },
   { name: "State=Editing", actions: ["SAVE", "CANCEL"] },
@@ -7219,7 +7202,7 @@ async function buildMemoryToast() {
     "SKIP sits beside SAVE as an equal rather than being the quiet way out, and why every " +
     "label is white: on burgundy that does not invert, a label that did would go near-black " +
     "in dark mode.\n\n" +
-    "It starts 68pt from the left, not 16pt, to clear the hamburger — which is the same " +
+    "It is 16pt from each edge. It used to start 68pt from the left to clear the hamburger — the same " +
     "burgundy and is drawn above it, so an overlap reads as nothing at all while quietly " +
     "eating the text.\n\n" +
     "Swift: ChatSheetView.MemoryProposalToast.";
@@ -7235,7 +7218,7 @@ async function buildMemoryToast() {
       "Letting the countdown run out saves the memory. Worth knowing when reading the three actions: they are not save / maybe / cancel, they are save now / correct it first / no.",
       "text/muted", "usage"],
     ["Sous/Body",
-      "Narrower than the screen on the left because the hamburger lives there. Covering it instead would have looked fine and stolen the tap — tapping this toast opens Memories.",
+      "Covering the hamburger instead of dodging it would have looked fine and stolen the tap, since tapping this toast opens Memories. That is moot now the hamburger is gone, and the toast sits evenly between the gutters.",
       "text/muted", "layout"],
     ["Sous/Body",
       "Both states share three columns, so SAVE does not shift when you tap EDIT — it holds its place and CANCEL inherits SKIP's. Only the vertical moves, because the field is taller than the two lines it replaces.",

@@ -113,12 +113,12 @@ struct BottomZoneView: View {
                 onOffsetChanged: { dragOffset = $0 },
                 onCommit: {},
                 onCancel: {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    withAnimation(SousMotion.gestureSpringBack.animation) {
                         dragOffset = 0
                     }
                 },
                 onUpwardCommit: {
-                    SousHaptics.impact(.medium)
+                    SousHaptics.play(.commit)
                     onOpenChat()
                 }
             )

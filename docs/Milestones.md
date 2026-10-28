@@ -716,14 +716,49 @@ The design system settled colour, type and iconography. Motion was never part of
 transition in the app is either a SwiftUI default or a one-off, which is exactly the state the
 palette was in before the migration.
 
-Core capabilities:
-- A small set of named motion tokens — durations and easing curves — living alongside the colour
-  and type tokens, so a transition is chosen from a scale rather than invented per screen
+**Started, 2026-10-27.** Three springs landed with the window shade — `panelArrive`,
+`panelLeave`, `gestureSpringBack` (decision 29). Everything below is the rest, and the
+audit is already done: **nobody picking this up needs to re-measure anything.**
+
+### The convergence backlog
+
+Leaving the remaining motion inconsistent is a deliberate call, not an oversight. The
+values were measured, the candidates were named, and converging them was deferred because
+it changes how existing screens feel and no one has asked for that yet. Revisit when a
+screen is being touched anyway, or when a fifth panel needs a spring and there is no
+obvious one to inherit.
+
+**Springs — 6 hand-written sites remain, 4 distinct values:**
+
+| Value | Sites | Where | Verdict |
+|---|---|---|---|
+| 0.35 / 0.85 | 3 | drawer open, drawer close, timer done banner | **converge** — drawer open is a panel arriving, 70ms quicker than `panelArrive` for no recorded reason |
+| 0.40 / 0.88 | 1 | chat sheet opening | **converge** — 20ms from `panelArrive`, which nobody can perceive and nobody chose |
+| 0.50 / 0.90 | 1 | import progress bar | **keep** — a progress indicator, not a panel |
+| 0.12 / 0.55 | 1 | chat commit bounce | **keep** — a deliberate anticipation kick, fast and loose on purpose |
+
+**Durations — 35 sites, 6 distinct values across 3 curves (11 combinations):**
+
+| Duration | Sites | Verdict |
+|---|---|---|
+| 0.2s | 14 | the de-facto default |
+| 0.3s | 9 | the de-facto slow step |
+| 0.25s | 7 | sits between the two above; likely absorbed by one of them |
+| 0.15s | 3 | the de-facto fast step |
+| 0.28s | 1 | stray — almost certainly meant 0.3 |
+| 0.5s | 1 | stray |
+
+Four named steps would absorb 33 of the 35. The two strays are the only interesting
+conversation in the list.
+
 - Applied to the transitions users meet most: the chat sheet, the history drawer, the patch
   review screen, the timer banners arriving and leaving, and the memory toast
 - Motion respects **Reduce Motion**; the system's accessibility setting is honoured everywhere
-- Extend `design/check-tokens.py` to catch hand-written durations, the same way it catches
-  hand-written colours today
+- Extend `design/check-tokens.py` to catch hand-written durations **and springs**, the same way
+  it catches hand-written colours today. Half of this is built: a motion token is already
+  verified against its `SousMotion` constant (rule 8). The rule that fails a raw
+  `.spring(...)` in a view is the natural last step of the convergence above — it cannot land
+  before then without either exempting the six remaining sites or retuning them
 - Document the decisions in `design/TOKEN-DECISIONS.md` as the next numbered entries
 
 Explicit non-goals:
@@ -758,12 +793,15 @@ up when you are done with it. The recipe never leaves.
   tap target
 - The grab bar as a real design-system component, logged as decision 26 and drawn in Figma
 - The hamburger hidden wherever the shade is available, and the title inset it reserved reclaimed
-- Debug toggle and eleven live tunables in Settings, because the motion has no tokens yet
+- Eleven live motion tunables in Settings while the values were being found. Both they and
+  the feature toggle beside them have since been removed — the values were settled on a
+  device and are now the defaults, and three of them became Sous's first motion tokens
+  (decision 29)
+
+- The grab bar at the top of the explore screen — the third entry point, and the one that
+  let the hamburger be deleted outright rather than merely hidden
 
 **Still to build:**
-- The grab bar at the top of the explore screen, which pulls the same shade down (the third
-  entry point; the bottom bar was the second and cost almost nothing, which is the
-  `ShadePresentation` split doing its job)
 - The one-time discoverability hint for the pull-down
 
 Explicit non-goals:

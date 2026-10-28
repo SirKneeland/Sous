@@ -46,7 +46,7 @@ struct SousGrabBar: View {
     let action: () -> Void
 
     /// Matches the Talk to Sous bar, so the two read as the same furniture.
-    static let height: CGFloat = 52
+    static let height: CGFloat = SousSize.control
 
     // MARK: - Lockup
 
