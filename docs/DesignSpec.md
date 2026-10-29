@@ -134,7 +134,7 @@ Cream, ink, and neutral values invert in dark mode as above. The key principle: 
 
 | Name | Hex | Usage |
 |---|---|---|
-| Bar background | burgundy primary | Voice mode bar background — the same burgundy as the nav bar, and it follows light/dark mode |
+| Bar background | burgundy primary | Voice mode bar background — the same burgundy as the grab bar and primary buttons, and it follows light/dark mode |
 | Listening bar color | `#FAECE7` | Reactive waveform bars in Listening state (cream) |
 | Speaking bar color | `#F5C4B3` | Reactive waveform bars in Speaking state (salmon) |
 | State label warm | `#F0997B` | "○ ready", "○ thinking", secondary text (warm salmon) |
@@ -163,7 +163,7 @@ Cream, ink, and neutral values invert in dark mode as above. The key principle: 
 - Dividers between sections: 1pt line, `#D0CBC3`
 - List items: row separation via 1pt dividers, not cards
 - Vertical rhythm is consistent — do not mix tight and loose spacing arbitrarily
-- Safe area insets must be respected; content does not bleed under the nav bar or tab bar
+- Safe area insets must be respected; content does not bleed under the status bar or the home indicator
 
 ### Spacing Scale (advisory)
 
@@ -184,23 +184,27 @@ New views should use the scale from the start.
 
 ## Canvas Chrome (there is no navigation bar)
 
-The app has **no top navigation bar**. Earlier versions of this spec described a burgundy bar
-with three icons across the top; that bar does not exist in the app. What exists is:
+The app has **no top navigation bar**, and since decision 28 **no hamburger button either**.
+Two earlier versions of this spec are now wrong: the burgundy bar with three icons across the
+top never shipped, and the hamburger that hid and revealed on scroll has been deleted along
+with the scroll-reveal rule that drove it. What exists is:
 
-- **Hamburger button** — 44×44pt burgundy square at the top-left of the recipe canvas
-  (16pt from both edges), white `line.3.horizontal` icon. Opens the history drawer.
-- **History drawer** — holds the SOUS wordmark, the settings button (44×44pt, white
-  `gearshape.fill` on the ink fill) and a full-width burgundy NEW RECIPE button.
-- **Recipe title block** — the title is centred and **uppercased by the view**, with 76pt side
-  padding so a long title clears the hamburger, the burgundy servings chip lower-right, and a
-  divider beneath.
-
-### Hamburger Hide/Reveal (Recipe Canvas only)
-
-- Hidden: scrolling down more than 10pt
-- Revealed: scrolling up, when more than 40pt from the bottom (guards against rubber-banding);
-  also whenever the scroll position is within 60pt of the top
-- The scroll handler sets the flag; the animation belongs to the button view
+- **The window shade** — pulling the recipe canvas down from its top edge drops the
+  navigation panel over it (decision 26). Two other gestures reach the same panel: a
+  ThumbDrop-down on the Talk to Sous bar, and the explore screen's grab bar, which also
+  opens it on tap. All three drive one `ShadePresentation`.
+- **Navigation panel** — the SOUS wordmark, the settings button (44×44pt `gearshape.fill`,
+  an Inverse chip that flips with the mode: ink square with a cream glyph in light, cream
+  square with an ink glyph in dark — decision 30), the Recent Recipes list, and a full-width
+  burgundy NEW RECIPE button. One `DrawerContent` serves both the shade and the left-edge
+  drawer; neither copy knows which surface it is in.
+- **Grab bar** — burgundy, full-bleed, `SousSize.control` tall. It sits at the bottom of the
+  shade pointing up ("CLOSE") and across the top of the explore screen pointing down
+  ("RECIPES"). It is both a tap target and a ThumbDrop dismiss zone.
+- **Recipe title block** — centred and **uppercased by the view**, at the ordinary 20pt
+  gutter on both sides. It carried 76pt of side padding for years to keep a long title clear
+  of the hamburger; with the button gone, so is the hole it reserved. The burgundy servings
+  chip sits lower-right, with a divider beneath.
 
 ---
 
@@ -209,7 +213,7 @@ with three icons across the top; that bar does not exist in the app. What exists
 ### Recipe Canvas (Cook Mode)
 
 - Background: cream (`#F2EFE9`)
-- Nav bar: burgundy, scroll-reveal
+- No nav bar — the canvas runs to the top edge, and pulling it down opens the shade
 - Recipe title: New York, ~28pt, semibold, title case, ink color
 - Thin horizontal divider below title block
 - Section headers (INGREDIENTS, PROCEDURE, MISE EN PLACE): SF Pro, 11pt, ALL CAPS, burgundy primary, letter-spaced 1.2
@@ -251,7 +255,7 @@ with three icons across the top; that bar does not exist in the app. What exists
 
 Overlays the bottom of the screen. Does not replace or push the recipe canvas.
 
-- Background: burgundy primary (`#8B2E3F` light / `#C45068` dark) — same token as the nav bar
+- Background: burgundy primary (`#8B2E3F` light / `#C45068` dark) — `accent/primary`, the same token the grab bar uses
 - Height: sufficient to accommodate state label above + 28pt animation canvas below
 - Top section: centered state label (SF Pro ~13pt, lowercase) + X exit button pinned top-right (28×28pt, `rgba(255,255,255,0.2)` border, `#F5C4B3` icon, SF Symbol "xmark")
 - Bottom edge: full-width animation strip (28pt tall, flush to bar bottom)
@@ -274,18 +278,24 @@ In Patch Pending state: full Patch Review Mode diff renders on the recipe canvas
 ### Zero / Blank State
 
 - Background: cream
-- Burgundy nav bar always visible (no collapse logic)
+- Burgundy grab bar pinned across the top ("RECIPES"), always visible — tap or pull it down for the navigation panel
 - "Sous" wordmark: New York, large
 - "Talk to a recipe" primary CTA: filled burgundy button
 - "OR CREATE ONE" secondary text button: SF Pro, ink or muted
 
-### History / Recent Recipes Drawer
+### Navigation Panel (the shade, and the left-edge drawer)
+
+One `DrawerContent`, reached either by pulling the shade down or by swiping in from the left
+edge. See **Canvas Chrome** above for the three shade gestures.
 
 - Background: cream
-- Header: "HISTORY" SF Pro ALL CAPS centered
-- List: bordered cards or thin-divider rows
+- Header: the SOUS wordmark (New York, tracking 2) centred, with the Settings gear at the
+  trailing edge — not the "HISTORY" label earlier drafts of this spec described
+- List: thin-divider rows, not cards
 - Each entry: recipe title (New York) left, timestamp (SF Pro caption, muted) right
 - Swipe-left to delete
+- Footer: full-width burgundy NEW RECIPE button. In the shade the grab bar sits below it; in
+  the drawer the footer runs to the bottom of the screen instead
 
 ### Settings
 

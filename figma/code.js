@@ -2,7 +2,7 @@
 //
 // GENERATED FILE. Do not edit by hand.
 // Regenerate with:  python3 design/build-figma-plugin.py
-// tokens.json digest: 121cea8d6a6c6604
+// tokens.json digest: eed19c20b9756b7f
 //
 // Running this creates (or updates) the Sous variable collections and text
 // styles in the current Figma file. It is safe to run repeatedly — variables are
@@ -213,21 +213,6 @@ const TOKENS = {
       ]
     },
     {
-      "name": "background/surfaceInverse",
-      "swift": "Color.sousSurfaceInverse",
-      "light": {
-        "alias": "ink/900"
-      },
-      "dark": {
-        "alias": "ink/900"
-      },
-      "description": "Ink fill that stays dark in BOTH modes — the history drawer's settings button. Not for Inverse buttons: those flip with the mode; use background/inverse.",
-      "scopes": [
-        "FRAME_FILL",
-        "SHAPE_FILL"
-      ]
-    },
-    {
       "name": "background/highlight",
       "swift": "Color.sousHighlightBackground",
       "light": {
@@ -266,7 +251,7 @@ const TOKENS = {
       "dark": {
         "alias": "cream/100"
       },
-      "description": "Mode-flipping inverse fill — ink in light, cream in dark. Inverse buttons: ACCEPT, OK, TALK TO A RECIPE.",
+      "description": "Mode-flipping inverse fill — ink in light, cream in dark. Inverse buttons: ACCEPT, OK, TALK TO A RECIPE, and the navigation panel's Settings gear.",
       "scopes": [
         "FRAME_FILL",
         "SHAPE_FILL"
@@ -1222,7 +1207,7 @@ function modeIdNamed(collection, name) {
 function buildReport(result) {
   const lines = [];
   lines.push("SOUS DESIGN TOKENS — import report");
-  lines.push("tokens.json digest: 121cea8d6a6c6604");
+  lines.push("tokens.json digest: eed19c20b9756b7f");
   lines.push("");
   lines.push("Created: " + log.join(", ") + ".");
   lines.push("Components: " + (COMPONENT_LOG.length ? COMPONENT_LOG.join(", ") : "none rebuilt") + ".");
@@ -2413,12 +2398,12 @@ async function buildIngredientGroupHeader() {
 
 // ------------------------------------------------------------- Icon Button
 //
-// Source: the drawer's settings button
-// (:56, same size on the ink fill), and SousIconButton (SousTheme.swift, 32pt
+// Source: the navigation panel's settings button (DrawerContent.swift, 44pt on
+// the mode-flipping inverse fill), and SousIconButton (SousTheme.swift, 32pt
 // bordered, used in the chat sheet header).
 
 const ICON_BUTTON_STYLES = [
-  { style: "Inverse", size: 44, fill: "background/surfaceInverse", stroke: null, icon: "text/onInverse",
+  { style: "Inverse", size: 44, fill: "background/inverse", stroke: null, icon: "text/inverse",
     symbol: "gearshape.fill", weight: "Medium", iconSize: "icon/large" },
   { style: "Bordered", size: 32, fill: null, stroke: "border/strong", icon: "text/primary",
     symbol: "gearshape", weight: "Regular", iconSize: "icon/medium" },

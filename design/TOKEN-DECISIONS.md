@@ -1076,6 +1076,39 @@ velocities, resistance and zone height as plain Swift. A commit velocity in poin
 second is this gesture's calibration, not a value another platform or another surface
 would ever share.
 
+### 30. The Settings gear joins the Inverse family, and `surfaceInverse` is retired (2026-10-28)
+
+The gear beside the SOUS wordmark was invisible in dark mode. Not dim — invisible. Its chip
+was `background/surfaceInverse`, a token that existed to hold ink **in both modes**, and ink
+in dark mode is `#1A1A1A`, which is exactly the canvas. The square measured **1.00:1**
+against what it sat on. A white gear floated in the corner with nothing behind it.
+
+The original reasoning was that a dark chip is what the gear *is*, so it should not flip.
+That reasoning never survived contact with a dark canvas: the palette has no shade darker
+than ink.900, so "a dark chip on a dark canvas" is not a thing the palette can draw.
+
+**The fix was to delete the special case, not to patch it.** The gear is a filled control
+with a glyph on it, which is the definition of Inverse — the same shape as ACCEPT, OK and
+TALK TO A RECIPE, all of which flip. So it now uses `background/inverse` with
+`text/inverse`: ink square with a cream glyph in light, cream square with an ink glyph in
+dark. `background/surfaceInverse` had exactly one caller and is gone, along with
+`Color.sousSurfaceInverse`.
+
+What changed visibly in light mode: the glyph moved from pure white to cream.100, a shift of
+glyph contrast from 17.4:1 to 15.2:1 that nobody will see, and which brings the gear in line
+with every other inverse label in the app. The chip itself went from **1.00:1 to 15.2:1** in
+dark mode, and is unchanged at 15.2:1 in light.
+
+This supersedes the Part 2 audit row that pointed `HistoryDrawer.swift:64` at
+`background.surfaceInverse`. That row is left as written, because it records what was decided
+in September, and the file it names has since become `DrawerContent.swift`.
+
+The token count in `check-tokens.py` drops from 36 to 35. That is the right direction. A token
+whose whole purpose is one control, and which that control turned out not to want, was never
+a token — it was a hardcoded colour with a name.
+
+---
+
 ---
 
 ## Still open

@@ -1118,12 +1118,12 @@ async function buildIngredientGroupHeader() {
 
 // ------------------------------------------------------------- Icon Button
 //
-// Source: the drawer's settings button
-// (:56, same size on the ink fill), and SousIconButton (SousTheme.swift, 32pt
+// Source: the navigation panel's settings button (DrawerContent.swift, 44pt on
+// the mode-flipping inverse fill), and SousIconButton (SousTheme.swift, 32pt
 // bordered, used in the chat sheet header).
 
 const ICON_BUTTON_STYLES = [
-  { style: "Inverse", size: 44, fill: "background/surfaceInverse", stroke: null, icon: "text/onInverse",
+  { style: "Inverse", size: 44, fill: "background/inverse", stroke: null, icon: "text/inverse",
     symbol: "gearshape.fill", weight: "Medium", iconSize: "icon/large" },
   { style: "Bordered", size: 32, fill: null, stroke: "border/strong", icon: "text/primary",
     symbol: "gearshape", weight: "Regular", iconSize: "icon/medium" },

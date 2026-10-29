@@ -43,11 +43,17 @@ struct DrawerContent: View {
                 HStack(spacing: 0) {
                     Spacer()
                     Button(action: onSettings) {
+                        // The gear is an Inverse control, so its chip flips with
+                        // the mode like every other one: ink square with a cream
+                        // glyph in light, cream square with an ink glyph in dark.
+                        // It used to hold a fill that stayed ink in both — which in
+                        // dark mode was the canvas colour exactly, so the square
+                        // vanished and left a bare white gear (decision 30).
                         Image(systemName: "gearshape.fill")
                             .font(.sousIcon(.large, weight: .medium))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(Color.sousBackground)
                             .frame(width: 44, height: 44)
-                            .background(Color.sousSurfaceInverse)
+                            .background(Color.sousText)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Settings")

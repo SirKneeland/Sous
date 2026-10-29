@@ -50,9 +50,6 @@ extension UIColor {
     /// White (light) / dark surface (dark) — chat sheet, input fields
     static let sousSurfaceUI = sousDynamic(light: 0xFFFFFF, dark: 0x222222)
 
-    /// Ink fill that stays dark in both modes — history settings button
-    static let sousSurfaceInverseUI = sousDynamic(light: 0x1A1A1A, dark: 0x1A1A1A)
-
     /// Backdrop behind the photo acquisition sheet
     static let sousScrimUI = sousDynamic(light: 0x757471, dark: 0x757471)
 
@@ -92,7 +89,6 @@ extension Color {
     static let sousHighlightBackground = Color(UIColor.sousHighlightBackgroundUI)
     static let sousMuted = Color(UIColor.sousMutedUI)
     static let sousSurface = Color(UIColor.sousSurfaceUI)
-    static let sousSurfaceInverse = Color(UIColor.sousSurfaceInverseUI)
     static let sousScrim = Color(UIColor.sousScrimUI)
     static let sousGreen = Color(UIColor.sousGreenUI)
     static let sousSeparator = Color(UIColor.sousSeparatorUI)
