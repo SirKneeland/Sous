@@ -1107,6 +1107,33 @@ The token count in `check-tokens.py` drops from 36 to 35. That is the right dire
 whose whole purpose is one control, and which that control turned out not to want, was never
 a token — it was a hardcoded colour with a name.
 
+**Addendum, same day: the plugin learned to let go.** Retiring the first token exposed that it
+never could. Variables are matched by name and updated in place — the property that makes the
+plugin safe to run repeatedly — so a token that *leaves* `tokens.json` is simply never written
+again and lingers in Figma forever, bound to nothing and still offered in every picker. The
+first run after this decision left `background/surfaceInverse` sitting in `Sous Color`, and the
+report said `VERIFIED` because nothing was looking.
+
+The plugin now deletes departed variables, with `clearOwned`'s caution rather than its own:
+**find out who still binds the thing, and refuse rather than detach.** Figma does not take the
+bindings away with the variable — each layer keeps whatever colour it last resolved to and
+quietly stops tracking anything, which looks like nothing happened until the palette next
+moves. So the run scans every page, every text range, every style and every variable alias
+first; anything still bound is left in place and named in the report with the page it is on.
+
+Two scoping rules keep it from becoming a rout:
+
+- **Only collections this run actually wrote.** Recorded at the single choke point every
+  variable passes through. The case this protects is a plan upgrade: light and dark merge into
+  modes, `Sous Color Dark` stops being written, and all 22 of its variables become "departed"
+  at once. The plugin did not write that collection, so it has no opinion about it.
+- **A departed token aliasing another does not keep it alive.** Otherwise a retired semantic
+  would pin a retired primitive in place forever.
+
+Verification covers it now, so a silent failure is no longer possible: anything left in a
+written collection that the run neither wrote nor deliberately spared is a failed check. Each
+of the five behaviours was proved by breaking it on purpose and watching the right test fail.
+
 ---
 
 ---

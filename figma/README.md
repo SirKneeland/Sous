@@ -106,6 +106,25 @@ read the Notes section, not just the last line. Delete the sketch page (or detac
 before re-running.
 
 
+**Retired tokens are deleted for you.** A variable whose token has left `tokens.json` stops
+being written and would otherwise sit in the file forever, bound to nothing and still offered in
+every picker. The plugin now removes it, and names each one in the report:
+
+> retired 1 departed token (Sous Color / background/surfaceInverse)
+
+It checks first. Figma does **not** take the bindings away with the variable — every layer bound
+to it keeps whatever colour it last resolved to and quietly stops tracking anything, which looks
+like nothing happened until the palette next moves. So if anything in the file still binds a
+departed token — a page, a word inside a text layer, a style, another variable — it is left
+alone and the Notes say where:
+
+> background/surfaceInverse has left tokens.json but is still bound by Nav ideas — left in
+> place. Rebind or delete those, then run again.
+
+Only collections that run actually wrote are considered. A collection it left alone is not its
+to empty — which is what keeps a `Sous Color Dark` stranded by a plan upgrade from being wiped.
+
+
 **Light and dark.** Two modes in one collection is the right structure, but modes are a paid
 Figma feature. On the Starter plan the plugin falls back to two collections — `Sous Color`
 (light) and `Sous Color Dark`. If you ever move to a paid plan, just run the plugin again: it

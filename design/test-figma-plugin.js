@@ -171,6 +171,20 @@ class Node {
     const r = this._ranges.find((x) => x.start <= start && x.end >= end);
     return r ? r.fills : this._fills;
   }
+  // Real Figma returns contiguous segments covering the whole string, so the
+  // characters no range touches come back carrying the node's own fills. Modelled
+  // that way because the consumer scan reads text colours through here — a node
+  // with one burgundy duration in it reports figma.mixed for `fills` and would
+  // otherwise look like it binds nothing at all.
+  getStyledTextSegments(_fields) {
+    if (this.type !== "TEXT") throw new Error("getStyledTextSegments on non-text");
+    const chars = this.characters || "";
+    const base = { start: 0, end: chars.length, characters: chars, fills: this._fills };
+    if (!this._ranges.length) return chars.length ? [base] : [];
+    return [base].concat(this._ranges.map((r) => ({
+      start: r.start, end: r.end, characters: chars.slice(r.start, r.end), fills: r.fills,
+    })));
+  }
   _cloneInto(target) {
     // Figma instances carry a copy of the component's layers; the builders reach
     // into them by layer name, so the stub has to copy them too.
@@ -258,9 +272,13 @@ function variantPropsOf(node) {
 
 function makeFigma({ allowModes, fonts }) {
   let seq = 0;
+  // Mutable so a test can upgrade the plan between runs on one file, which is the
+  // only way to reach the "Sous Color Dark is suddenly stranded" case.
+  const plan = { modes: allowModes };
   const collections = [];
   const variables = [];
   const textStyles = [];
+  const paintStyles = [];
 
   const makeCollection = (name) => {
     const c = {
@@ -268,7 +286,7 @@ function makeFigma({ allowModes, fonts }) {
       name,
       modes: [{ modeId: "m" + ++seq, name: "Mode 1" }],
       addMode(modeName) {
-        if (!allowModes) throw new Error("Limited to 1 mode in this plan.");
+        if (!plan.modes) throw new Error("Limited to 1 mode in this plan.");
         const mode = { modeId: "m" + ++seq, name: modeName };
         this.modes.push(mode);
         return mode.modeId;
@@ -321,6 +339,15 @@ function makeFigma({ allowModes, fonts }) {
             }
             this.valuesByMode[modeId] = value;
           },
+          // Figma does NOT carry the bindings away with the variable: every layer
+          // bound to it keeps the colour it last resolved to and quietly stops
+          // tracking anything. That is the whole reason retireDeparted() checks
+          // for consumers first, so the stub must not be gentler than the API.
+          remove() {
+            const at = variables.indexOf(this);
+            if (at !== -1) variables.splice(at, 1);
+            this.removed = true;
+          },
         };
         variables.push(v);
         return v;
@@ -346,6 +373,9 @@ function makeFigma({ allowModes, fonts }) {
       return s;
     },
     getLocalTextStylesAsync: async () => textStyles.slice(),
+    // Sous defines no paint styles, but the consumer scan asks the file rather
+    // than assuming, so the method has to exist for the scan to be exercised.
+    getLocalPaintStylesAsync: async () => paintStyles.slice(),
     async loadFontAsync({ family, style }) {
       const available = fonts[family];
       if (!available || !available.includes(style)) {
@@ -354,6 +384,7 @@ function makeFigma({ allowModes, fonts }) {
     },
     root: null,
     currentPage: null,
+    _plan: plan,
     _instances: [],
     _textProps: {},
     _textStyles: textStyles,
@@ -378,7 +409,7 @@ function makeFigma({ allowModes, fonts }) {
   };
   figma.root = new Node("DOCUMENT", figma);
   figma.createPage().name = "Cover";
-  return { figma, state: { collections, variables, textStyles } };
+  return { figma, state: { collections, variables, textStyles, paintStyles } };
 }
 
 async function run(options, existing, mutateCode) {
@@ -1104,6 +1135,122 @@ function expect(label, condition, detail) {
     const kept = await run(null, { figma, state });
     expect("in-use old page is kept", figma.root.children.some((x) => x.name === "Step Row"));
     expect("report explains why", /still has components in use/.test(kept.report), kept.report);
+  }
+
+  console.log("\n8. Retiring tokens that have left tokens.json");
+  {
+    // A departed token is one sitting in a collection this run wrote, under a name
+    // the run did not write. `background/surfaceInverse` was the first real one.
+    const { figma, state } = await run({ allowModes: false, fonts: MAC });
+    const colour = state.collections.find((c) => c.name === "Sous Color");
+    const stray = figma.variables.createVariable("background/surfaceInverse", colour, "COLOR");
+    stray.setValueForMode(colour.modes[0].modeId, { r: 0.1, g: 0.1, b: 0.1, a: 1 });
+    const before = state.variables.length;
+
+    const { report } = await run(null, { figma, state });
+    expect("the departed token is gone",
+      !state.variables.some((v) => v.name === "background/surfaceInverse"),
+      state.variables.filter((v) => v.name.indexOf("surfaceInverse") !== -1).map((v) => v.name).join(", "));
+    expect("and nothing else went with it", state.variables.length === before - 1,
+      `was ${before}, now ${state.variables.length}`);
+    expect("the report names what it retired",
+      /retired 1 departed token \(Sous Color \/ background\/surfaceInverse\)/.test(report), report);
+    expect("and still verifies", /^VERIFIED/m.test(report), report);
+  }
+
+  console.log("\n8a. A departed token something still binds is kept, and says where");
+  {
+    const { figma, state } = await run({ allowModes: false, fonts: MAC });
+    const colour = state.collections.find((c) => c.name === "Sous Color");
+    const stray = figma.variables.createVariable("background/surfaceInverse", colour, "COLOR");
+    stray.setValueForMode(colour.modes[0].modeId, { r: 0.1, g: 0.1, b: 0.1, a: 1 });
+
+    // The operator's own scratch page — exactly the case CLAUDE.md warns about for
+    // component instances, now for variables.
+    const sketch = figma.createPage();
+    sketch.name = "Nav ideas";
+    await sketch.loadAsync();
+    const square = figma.createRectangle();
+    square.fills = [{ type: "SOLID", color: { r: 0, g: 0, b: 0 },
+                      boundVariables: { color: { type: "VARIABLE_ALIAS", id: stray.id } } }];
+    sketch.appendChild(square);
+
+    const { report } = await run(null, { figma, state });
+    expect("it is left in place rather than silently detached",
+      state.variables.some((v) => v.name === "background/surfaceInverse"));
+    expect("the report says which page still binds it",
+      /background\/surfaceInverse has left tokens\.json but is still bound by Nav ideas/.test(report),
+      report);
+    expect("a refusal is not a failure", /^VERIFIED/m.test(report), report);
+  }
+
+  console.log("\n8b. A text node's per-character colour counts as a consumer");
+  {
+    // This is the one a naive scan misses: a node with one burgundy duration in it
+    // reports figma.mixed for `fills`, so reading node.fills alone finds nothing.
+    const { figma, state } = await run({ allowModes: false, fonts: MAC });
+    const colour = state.collections.find((c) => c.name === "Sous Color");
+    const stray = figma.variables.createVariable("text/retired", colour, "COLOR");
+    stray.setValueForMode(colour.modes[0].modeId, { r: 0.5, g: 0.1, b: 0.2, a: 1 });
+
+    const sketch = figma.createPage();
+    sketch.name = "Timer sketch";
+    await sketch.loadAsync();
+    const t = figma.createText();
+    t.characters = "bake for 10 minutes";
+    t.fills = [{ type: "SOLID", color: { r: 0, g: 0, b: 0 } }];
+    t.setRangeFills(9, 19, [{ type: "SOLID", color: { r: 0, g: 0, b: 0 },
+                              boundVariables: { color: { type: "VARIABLE_ALIAS", id: stray.id } } }]);
+    sketch.appendChild(t);
+
+    const { report } = await run(null, { figma, state });
+    expect("the range-bound colour keeps it alive",
+      state.variables.some((v) => v.name === "text/retired"), report);
+    expect("named with the page it is on",
+      /text\/retired has left tokens\.json but is still bound by Timer sketch/.test(report), report);
+  }
+
+  console.log("\n8c. One departed token must not keep another alive");
+  {
+    const { figma, state } = await run({ allowModes: false, fonts: MAC });
+    const prims = state.collections.find((c) => c.name === "Sous Primitives");
+    const colour = state.collections.find((c) => c.name === "Sous Color");
+    const deadPrimitive = figma.variables.createVariable("ink/750", prims, "COLOR");
+    deadPrimitive.setValueForMode(prims.modes[0].modeId, { r: 0.2, g: 0.2, b: 0.2, a: 1 });
+    const deadSemantic = figma.variables.createVariable("background/ghost", colour, "COLOR");
+    deadSemantic.setValueForMode(colour.modes[0].modeId,
+      { type: "VARIABLE_ALIAS", id: deadPrimitive.id });
+
+    const { report } = await run(null, { figma, state });
+    expect("both go, not just the one on top",
+      !state.variables.some((v) => v.name === "ink/750" || v.name === "background/ghost"),
+      state.variables.filter((v) => /ink\/750|background\/ghost/.test(v.name)).map((v) => v.name).join(", "));
+    expect("the report names both", /retired 2 departed tokens/.test(report), report);
+  }
+
+  console.log("\n8d. A collection this run never wrote is not this plugin's to empty");
+  {
+    // What a plan upgrade strands: light and dark merge into modes, "Sous Color
+    // Dark" stops being written, and every variable in it is suddenly "departed".
+    // Deleting them all would be a rout, not a cleanup.
+    const { figma, state } = await run({ allowModes: false, fonts: MAC });
+    const darkCount = state.variables.filter((v) => {
+      const c = state.collections.find((x) => x.id === v.variableCollectionId);
+      return c && c.name === "Sous Color Dark";
+    }).length;
+    expect("the starter run really did populate a second collection", darkCount === 22, String(darkCount));
+
+    // Now the same file on a paid plan: buildSemantic takes the modes path and
+    // never touches Sous Color Dark again.
+    figma._plan.modes = true;
+    const { report } = await run(null, { figma, state });
+    const after = state.variables.filter((v) => {
+      const c = state.collections.find((x) => x.id === v.variableCollectionId);
+      return c && c.name === "Sous Color Dark";
+    }).length;
+    expect("the stranded collection is left entirely alone", after === darkCount,
+      `was ${darkCount}, now ${after}`);
+    expect("and the run still verifies", /^VERIFIED/m.test(report), report);
   }
 
   console.log("\n7. The self-check catches a bad component");

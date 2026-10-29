@@ -6,7 +6,9 @@
 //
 // Running this creates (or updates) the Sous variable collections and text
 // styles in the current Figma file. It is safe to run repeatedly — variables are
-// matched by name and updated in place, never duplicated.
+// matched by name and updated in place, never duplicated. A variable whose token
+// has left tokens.json is deleted, unless something in the file still binds it,
+// in which case the report says what and leaves it alone.
 
 const TOKENS = __TOKENS__;
 
@@ -21,7 +23,15 @@ async function collectionNamed(name) {
   return found || figma.variables.createVariableCollection(name);
 }
 
+// Every variable this run wrote, by collection id. This is the one choke point
+// all six families pass through, so recording here is what lets retireDeparted()
+// tell a token that left tokens.json from one this run simply did not reach.
+const WRITTEN = new Map();
+
 async function variableNamed(name, collection, type) {
+  if (!WRITTEN.has(collection.id)) WRITTEN.set(collection.id, new Set());
+  WRITTEN.get(collection.id).add(name);
+
   const all = await figma.variables.getLocalVariablesAsync();
   const found = all.find(
     (v) => v.name === name && v.variableCollectionId === collection.id
@@ -202,6 +212,142 @@ async function buildTextStyles() {
   }
 }
 
+// ----------------------------------------------------------------- retirement
+
+// Variables are matched by name and updated in place, which is what makes this
+// plugin safe to run repeatedly — and also means a token that LEAVES tokens.json
+// is never written again and simply lingers in Figma forever, bound to nothing
+// and still offered in every picker. `background/surfaceInverse` was the first
+// to go, retired by decision 30 when the Settings gear stopped wanting a fill
+// that did not flip with the mode.
+//
+// Deleting out of someone's file earns the same caution clearOwned uses for
+// components: find out who still consumes the thing, and refuse rather than
+// detach. A deleted variable does not take its bindings with it — Figma drops
+// them and leaves each layer holding whatever colour it last resolved to, which
+// looks like nothing happened until the palette next moves.
+
+// Departed tokens left in place because something still binds them. Verification
+// reads this so a refusal is a documented outcome rather than a silent survivor.
+const HELD = new Set();
+
+function idsFromBound(bound, into) {
+  if (!bound) return;
+  for (const key of Object.keys(bound)) {
+    const entry = bound[key];
+    if (!entry) continue;
+    if (Array.isArray(entry)) {
+      for (const e of entry) if (e && e.id) into.add(e.id);
+    } else if (entry.id) {
+      into.add(entry.id);
+    }
+  }
+}
+
+function idsFromPaints(paints, into) {
+  if (!Array.isArray(paints)) return;   // figma.mixed is not an array
+  for (const p of paints) if (p) idsFromBound(p.boundVariables, into);
+}
+
+function idsFromNode(node, into) {
+  idsFromBound(node.boundVariables, into);
+  idsFromPaints(node.strokes, into);
+  // A text node whose characters carry their own colours reports figma.mixed for
+  // `fills`, so the ranges have to be read separately — otherwise every inline
+  // burgundy duration in the file looks like it binds nothing.
+  if (node.type === "TEXT" && typeof node.getStyledTextSegments === "function") {
+    for (const seg of node.getStyledTextSegments(["fills"])) idsFromPaints(seg.fills, into);
+  } else {
+    idsFromPaints(node.fills, into);
+  }
+}
+
+// variable id -> the set of places still binding it, named well enough to go and
+// look. `ignoreSources` holds the departed variables themselves: one dying token
+// aliasing another must not keep that other one alive.
+async function consumersOfVariables(ignoreSources) {
+  const where = new Map();
+  const note = (ids, place) => {
+    for (const id of ids) {
+      if (!where.has(id)) where.set(id, new Set());
+      where.get(id).add(place);
+    }
+  };
+
+  for (const page of figma.root.children) {
+    await page.loadAsync();
+    const ids = new Set();
+    for (const node of page.findAll(() => true)) idsFromNode(node, ids);
+    note(ids, page.name);
+  }
+
+  for (const style of await figma.getLocalPaintStylesAsync()) {
+    const ids = new Set();
+    idsFromBound(style.boundVariables, ids);
+    note(ids, "paint style " + style.name);
+  }
+  for (const style of await figma.getLocalTextStylesAsync()) {
+    const ids = new Set();
+    idsFromBound(style.boundVariables, ids);
+    note(ids, "text style " + style.name);
+  }
+
+  for (const v of await figma.variables.getLocalVariablesAsync()) {
+    if (ignoreSources.has(v.id)) continue;
+    const ids = new Set();
+    for (const modeId of Object.keys(v.valuesByMode || {})) {
+      const value = v.valuesByMode[modeId];
+      if (value && value.type === "VARIABLE_ALIAS" && value.id) ids.add(value.id);
+    }
+    note(ids, "variable " + v.name);
+  }
+
+  return where;
+}
+
+async function retireDeparted() {
+  const all = await figma.variables.getLocalVariablesAsync();
+  const collections = await figma.variables.getLocalVariableCollectionsAsync();
+  const collectionName = {};
+  for (const c of collections) collectionName[c.id] = c.name;
+
+  // Only collections this run actually wrote. One it left alone is not this
+  // plugin's to empty — the stale "Sous Color Dark" that a plan upgrade strands
+  // when light and dark merge into modes is the case that matters, and deleting
+  // every variable in it because nothing was written there would be a rout, not
+  // a cleanup.
+  const departed = all.filter((v) => {
+    const written = WRITTEN.get(v.variableCollectionId);
+    return written && !written.has(v.name);
+  });
+  if (!departed.length) return;
+
+  const where = await consumersOfVariables(new Set(departed.map((v) => v.id)));
+  const retired = [];
+  for (const v of departed) {
+    const places = where.get(v.id);
+    const label = collectionName[v.variableCollectionId] + " / " + v.name;
+    if (places && places.size) {
+      HELD.add(v.id);
+      warn.push(
+        label + " has left tokens.json but is still bound by " +
+        Array.from(places).sort().join(", ") +
+        " — left in place. Rebind or delete those, then run again."
+      );
+    } else {
+      retired.push(label);
+      v.remove();
+    }
+  }
+
+  if (retired.length) {
+    log.push(
+      "retired " + retired.length + " departed token" + (retired.length === 1 ? "" : "s") +
+      " (" + retired.sort().join(", ") + ")"
+    );
+  }
+}
+
 // ---------------------------------------------------------------- verification
 
 // Everything above writes. Everything below reads it back and checks it, so the
@@ -351,6 +497,18 @@ async function verify() {
     fontsUsed[style.fontName.family] = (fontsUsed[style.fontName.family] || 0) + 1;
   }
 
+  // --- retirement
+  // Nothing may survive in a collection this run wrote unless the run wrote it,
+  // or retireDeparted() deliberately spared it because something still binds it.
+  // Without this the whole feature is invisible when it silently stops working.
+  for (const v of variables) {
+    const written = WRITTEN.get(v.variableCollectionId);
+    if (!written || written.has(v.name) || HELD.has(v.id)) continue;
+    const home = collections.find((c) => c.id === v.variableCollectionId);
+    check("departed token " + v.name + " retired", false,
+      "still in " + (home ? home.name : "an unknown collection"));
+  }
+
   return { merged: merged, fonts: fontsUsed };
 }
 
@@ -412,6 +570,11 @@ function buildReport(result) {
     await buildNumbers("Sous Border", TOKENS.border, null);
     await buildComponents();
     await orderPages();
+    // After the components, never before: they are rebuilt from the current
+    // tokens every run, so anything still binding a departed one at this point
+    // is either a component the rebuild skipped or the operator's own drawing —
+    // which is exactly the distinction worth refusing on.
+    await retireDeparted();
 
     const result = await verify();
     await verifyComponents();

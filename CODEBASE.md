@@ -295,8 +295,10 @@ so re-registered (previously-deleted) users can be stored without a trial.
 - **Figma plugin tests:** runs `figma/code.js` against a stub of the Figma plugin API
   - Location: `design/test-figma-plugin.js`
   - Covers: paid vs Starter plan shapes, Mac vs browser fonts, idempotent re-runs, that
-    the plugin's own self-verification catches a bad write, and each component's variants,
-    token bindings, safe rebuild and in-use guard
+    the plugin's own self-verification catches a bad write, each component's variants,
+    token bindings, safe rebuild and in-use guard, and **token retirement** — a variable
+    whose token has left `tokens.json` is deleted, unless a page, text range, style or
+    another variable still binds it, in which case the report names where and leaves it
   - Run with: `node design/test-figma-plugin.js` (from the repo root)
 
 - **Backend tests:** Node.js built-in test runner (`node:test`) via `tsx`
