@@ -167,6 +167,16 @@ extension Font {
     static let sousVoiceButton: Font = .system(size: 13, weight: .semibold, design: .monospaced)
 }
 
+// MARK: - Typography, UIKit side
+
+/// UIKit twins of the type scale, for the few places that must hand a `UIFont` to a
+/// `UITextView` rather than a `Font` to a SwiftUI view. Same sizes, declared here so the
+/// numbers still live in one file.
+extension UIFont {
+    /// Twin of `Font.sousBody`.
+    static let sousBodyUI = UIFont.systemFont(ofSize: 16, weight: .regular)
+}
+
 // MARK: - Icon Sizing
 
 /// The five permitted SF Symbol sizes. Icons are sized from this scale, never

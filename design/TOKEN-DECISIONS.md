@@ -1138,6 +1138,28 @@ of the five behaviours was proved by breaking it on purpose and watching the rig
 
 ---
 
+### 31. The body size gets a UIKit twin rather than a second copy (2026-10-28)
+
+The import sheet's paste screen stopped being a `TextEditor`. SwiftUI's editor only offers
+Paste when the clipboard holds text, so a copied screenshot could be imported with the
+PASTE FROM CLIPBOARD button but not through the long-press menu — the place most people
+reach for it. The replacement is a `UITextView` subclass, and a `UITextView` wants a
+`UIFont`, not a `Font`.
+
+Two ways to give it one. Write `UIFont.systemFont(ofSize: 16)` at the call site, which is
+what `TimerAffordanceText.swift` already does and which `check-tokens.py` does not catch —
+its font rule only looks for SwiftUI's `.system(size:)`. Or declare the twin in the theme.
+
+The twin, as `UIFont.sousBodyUI`, next to the colours' `*UI` pairs, which already work this
+way for exactly the same reason. The checker's blind spot is not permission: the point of
+the rule is that 16 is decided once, and a second 16 in a view is a second decision whether
+or not a script notices it. No new value entered the system, so `tokens.json` is unchanged —
+this is the same `type.body` wearing UIKit's clothes.
+
+Only `sousBody` has a twin today. The next view that needs a `UIFont` adds its own line here
+rather than inventing a size, and `TimerAffordanceText.swift` should migrate to these when it
+is next touched.
+
 ## Still open
 
 **No destructive color token.** The "Delete Timer" button uses SwiftUI's system red at 80%

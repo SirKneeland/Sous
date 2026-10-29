@@ -5,7 +5,10 @@ import UIKit
 
 // MARK: - RecipeImportSheet
 
-/// Full-screen sheet for importing an existing recipe from camera, photo library, or pasted text.
+/// Full-screen sheet for importing an existing recipe from camera, photo library, or the clipboard.
+///
+/// The clipboard path accepts text or an image: an image is handed to the same OCR pipeline the
+/// camera and photo library use, so a copied screenshot behaves exactly like a photographed page.
 ///
 /// Manages its own navigation state (chooser → picker / paste → loading → error).
 /// Success: AppStore sets `isShowingImportSheet = false`, which dismisses the sheet via the
@@ -19,7 +22,7 @@ struct RecipeImportSheet: View {
     @State private var pasteText: String = ""
     @State private var cameraAcquisitionState: CameraAcquisitionState = .idle
     @State private var selectedDetent: PresentationDetent = .fraction(0.4)
-    @State private var clipboardHasText: Bool = false
+    @State private var clipboardHasContent: Bool = false
     @State private var importProgress: Double = 0
 
     init(store: AppStore, onCancel: @escaping () -> Void) {
@@ -120,8 +123,8 @@ struct RecipeImportSheet: View {
 
                 importOption(
                     icon: "doc.on.clipboard",
-                    title: "PASTE TEXT",
-                    subtitle: "Paste raw recipe text directly"
+                    title: "PASTE",
+                    subtitle: "Paste recipe text or a copied screenshot"
                 ) { mode = .paste }
             }
             .padding(.top, 8)
@@ -221,15 +224,13 @@ struct RecipeImportSheet: View {
 
     private var pasteView: some View {
         VStack(spacing: 0) {
-            sheetHeader(title: "PASTE TEXT", showBack: true) { mode = .chooser }
+            sheetHeader(title: "PASTE", showBack: true) { mode = .chooser }
             SousRule()
 
             HStack {
                 Spacer()
                 Button {
-                    if let text = UIPasteboard.general.string {
-                        pasteText = text
-                    }
+                    pasteFromClipboard()
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "doc.on.clipboard")
@@ -238,10 +239,10 @@ struct RecipeImportSheet: View {
                             .font(.sousCaption)
                             .kerning(0.5)
                     }
-                    .foregroundStyle(clipboardHasText ? Color.sousText : Color.sousMuted)
+                    .foregroundStyle(clipboardHasContent ? Color.sousText : Color.sousMuted)
                 }
                 .buttonStyle(.plain)
-                .disabled(!clipboardHasText)
+                .disabled(!clipboardHasContent)
             }
             .padding(.horizontal, 20)
             .padding(.top, 12)
@@ -249,23 +250,17 @@ struct RecipeImportSheet: View {
 
             ZStack(alignment: .topLeading) {
                 if pasteText.isEmpty {
-                    Text("Paste your recipe here...")
+                    Text("Paste recipe text here, or paste a screenshot...")
                         .font(.sousBody)
                         .foregroundStyle(Color.sousMuted)
                         .padding(.horizontal, 20)
                         .padding(.top, 16)
                         .allowsHitTesting(false)
                 }
-                TextEditor(text: $pasteText)
-                    .font(.sousBody)
-                    .foregroundStyle(Color.sousText)
-                    .scrollContentBackground(.hidden)
-                    .background(Color.clear)
-                    .padding(.horizontal, 16)
-                    .padding(.top, 8)
+                PastingTextEditor(text: $pasteText) { handleImage($0) }
             }
             .frame(maxHeight: .infinity)
-            .onAppear { clipboardHasText = UIPasteboard.general.hasStrings }
+            .onAppear { clipboardHasContent = UIPasteboard.general.hasStrings || UIPasteboard.general.hasImages }
 
             SousRule()
 
@@ -438,6 +433,23 @@ struct RecipeImportSheet: View {
     }
 
     // MARK: - Image handoff
+
+    /// Reads the clipboard and sends it down whichever path fits what is on it. An image goes
+    /// straight to the OCR pipeline — there is nothing for the user to edit in a screenshot — while
+    /// text lands in the editor so they can trim it before importing.
+    private func pasteFromClipboard() {
+        let board = UIPasteboard.general
+        switch PastedContent.resolve(text: board.string, hasImage: board.hasImages) {
+        case .image:
+            if let image = board.image {
+                handleImage(image)
+            }
+        case .text(let text):
+            pasteText = text
+        case .empty:
+            break
+        }
+    }
 
     private func handleImage(_ image: UIImage) {
         mode = .loading
