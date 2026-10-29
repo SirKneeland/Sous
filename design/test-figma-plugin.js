@@ -1142,19 +1142,24 @@ function expect(label, condition, detail) {
     // A departed token is one sitting in a collection this run wrote, under a name
     // the run did not write. `background/surfaceInverse` was the first real one.
     const { figma, state } = await run({ allowModes: false, fonts: MAC });
-    const colour = state.collections.find((c) => c.name === "Sous Color");
-    const stray = figma.variables.createVariable("background/surfaceInverse", colour, "COLOR");
-    stray.setValueForMode(colour.modes[0].modeId, { r: 0.1, g: 0.1, b: 0.1, a: 1 });
+    // On the Starter plan a semantic colour lives in BOTH collections, so a
+    // retirement is always a pair. This is what the operator's file actually did.
+    for (const name of ["Sous Color", "Sous Color Dark"]) {
+      const c = state.collections.find((x) => x.name === name);
+      const stray = figma.variables.createVariable("background/surfaceInverse", c, "COLOR");
+      stray.setValueForMode(c.modes[0].modeId, { r: 0.1, g: 0.1, b: 0.1, a: 1 });
+    }
     const before = state.variables.length;
 
     const { report } = await run(null, { figma, state });
-    expect("the departed token is gone",
+    expect("the departed token is gone from both collections",
       !state.variables.some((v) => v.name === "background/surfaceInverse"),
       state.variables.filter((v) => v.name.indexOf("surfaceInverse") !== -1).map((v) => v.name).join(", "));
-    expect("and nothing else went with it", state.variables.length === before - 1,
+    expect("and nothing else went with it", state.variables.length === before - 2,
       `was ${before}, now ${state.variables.length}`);
-    expect("the report names what it retired",
-      /retired 1 departed token \(Sous Color \/ background\/surfaceInverse\)/.test(report), report);
+    expect("the report names both halves of the pair",
+      /retired 2 departed tokens \(Sous Color \/ background\/surfaceInverse, Sous Color Dark \/ background\/surfaceInverse\)/
+        .test(report), report);
     expect("and still verifies", /^VERIFIED/m.test(report), report);
   }
 
