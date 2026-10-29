@@ -834,6 +834,17 @@ function expect(label, condition, detail) {
       // SF Symbol glyphs sit above U+FFFF, so JS counts each as two code units.
       Array.from(inverse.findOne((x) => x.name === "icon").characters).length === 1,
       inverse.width + "x" + inverse.height);
+    // Decision 30. The chip used to bind background/surfaceInverse, a fill held at
+    // ink in BOTH modes — which in dark mode was the canvas colour exactly, so the
+    // square measured 1.00:1 and vanished. It is an ordinary Inverse control now and
+    // must flip, so both bindings are asserted by name rather than by looking right.
+    const chipFill = state.variables.find(
+      (v) => v.id === inverse.fills[0].boundVariables.color.id);
+    const chipGlyph = state.variables.find(
+      (v) => v.id === inverse.findOne((x) => x.name === "icon").fills[0].boundVariables.color.id);
+    expect("the inverse chip flips with the mode, fill and glyph both",
+      chipFill.name === "background/inverse" && chipGlyph.name === "text/inverse",
+      chipFill.name + " / " + chipGlyph.name);
     expect("bordered icon button is 32pt with no fill",
       ib.children.find((c) => c.name === "Style=Bordered").width === 32 &&
       ib.children.find((c) => c.name === "Style=Bordered").fills.length === 0);
